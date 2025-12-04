@@ -1,13 +1,53 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Calendar, Clock, MapPin, Users, Trophy, Music, Briefcase } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, MapPin, Users, Trophy, Music, Briefcase, FileText, Play, Eye, CheckCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/auth/AuthContext";
+import { getStudentData, getStudentTests, StudentTest } from "@/services/academic";
+import { toast } from "sonner";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import { format } from "date-fns";
 
 const Events = () => {
   const navigate = useNavigate();
+  const { profile, profileLoading } = useAuth();
+  const [internalAssessments, setInternalAssessments] = useState<StudentTest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInternalAssessments = async () => {
+      if (profileLoading) return;
+
+      if (!profile) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const studentData = await getStudentData(profile.id);
+        if (!studentData) {
+          setLoading(false);
+          return;
+        }
+
+        // Fetch all tests and filter only Internal Assessments (exam_type_id = 4)
+        const testsData = await getStudentTests(studentData.class_id, profile.id);
+        const assessments = testsData.filter(test => test.examTypeId === 4);
+        setInternalAssessments(assessments);
+      } catch (error: any) {
+        console.error("Error fetching internal assessments:", error);
+        toast.error("Failed to load assessments");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInternalAssessments();
+  }, [profile, profileLoading]);
 
   const upcomingEvents = [
     {
@@ -105,17 +145,160 @@ const Events = () => {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
           >
-            <h1 className="text-4xl font-bold neon-text">Events & Deadlines</h1>
-            <p className="text-muted-foreground">Stay updated with college activities</p>
+            <h1 className="text-4xl font-bold neon-text">Assignments & Deadlines</h1>
+            <p className="text-muted-foreground">Stay on track with your academics</p>
           </motion.div>
         </div>
 
-        <Tabs defaultValue="upcoming" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+        <Tabs defaultValue="assessments" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="assessments">Internal Assessments</TabsTrigger>
+            <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
             <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
             <TabsTrigger value="past">Past Events</TabsTrigger>
           </TabsList>
+
+          {/* Internal Assessments Tab */}
+          <TabsContent value="assessments" className="space-y-4 mt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <LoadingSpinner />
+              </div>
+            ) : internalAssessments.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">No internal assessments available.</p>
+              </div>
+            ) : (
+              <>
+                {/* Summary Card */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <Card className="glass-card p-6 mb-6">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div>
+                        <p className="text-3xl font-bold text-primary">{internalAssessments.length}</p>
+                        <p className="text-sm text-muted-foreground">Total</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-blue-500">
+                          {internalAssessments.filter(a => a.submissionStatus === "not_started").length}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Pending</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-yellow-500">
+                          {internalAssessments.filter(a => a.submissionStatus === "pending").length}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Submitted</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-green-500">
+                          {internalAssessments.filter(a => a.submissionStatus === "graded").length}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Graded</p>
+                      </div>
+                    </div>
+                  </Card>
+                </motion.div>
+
+                {/* Assessment Cards */}
+                {internalAssessments.map((assessment, index) => (
+                  <motion.div
+                    key={assessment.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 + index * 0.05 }}
+                  >
+                    <Card className="glass-card p-6 hover:neon-glow transition-all">
+                      <div className="flex flex-col md:flex-row gap-4">
+                        <div className="p-4 rounded-lg bg-primary/20 text-primary border-primary/30 flex-shrink-0">
+                          <FileText className="w-8 h-8" />
+                        </div>
+                        <div className="flex-grow">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className="text-xl font-semibold">{assessment.title}</h3>
+                              {assessment.subjectName && (
+                                <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary mt-1 inline-block">
+                                  {assessment.subjectName}
+                                </span>
+                              )}
+                            </div>
+                            <Badge 
+                              variant={
+                                assessment.submissionStatus === "graded" ? "default" :
+                                assessment.submissionStatus === "pending" ? "secondary" : "outline"
+                              }
+                              className={
+                                assessment.submissionStatus === "graded" ? "bg-green-500/20 text-green-500 border-green-500/50" :
+                                assessment.submissionStatus === "pending" ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/50" :
+                                "bg-blue-500/20 text-blue-500 border-blue-500/50"
+                              }
+                            >
+                              {assessment.submissionStatus === "graded" ? "Graded" :
+                               assessment.submissionStatus === "pending" ? "Submitted" : "Not Started"}
+                            </Badge>
+                          </div>
+                          <p className="text-muted-foreground mb-3">
+                            {assessment.description || "No description provided."}
+                          </p>
+                          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4" />
+                              {assessment.durationMinutes} mins
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4" />
+                              {assessment.questionCount} Questions
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Trophy className="w-4 h-4" />
+                              {assessment.totalMarks} Marks
+                            </div>
+                            {assessment.dueDate && (
+                              <div className="flex items-center gap-2 text-destructive">
+                                <Calendar className="w-4 h-4" />
+                                Due: {format(new Date(assessment.dueDate), "MMM dd, yyyy")}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Show score if graded */}
+                          {assessment.submissionStatus === "graded" && assessment.marksObtained !== undefined && (
+                            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 mb-4">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Your Score</span>
+                                <span className="text-xl font-bold text-green-500">
+                                  {assessment.marksObtained} / {assessment.totalMarks}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Action Button */}
+                          {assessment.submissionStatus === "not_started" && (
+                            <Button onClick={() => navigate(`/student/tests/take/${assessment.id}`)}>
+                              <Play className="w-4 h-4 mr-2" /> Start Assessment
+                            </Button>
+                          )}
+                          {assessment.submissionStatus === "pending" && (
+                            <Button variant="secondary" disabled>
+                              <CheckCircle className="w-4 h-4 mr-2" /> Awaiting Results
+                            </Button>
+                          )}
+                          {assessment.submissionStatus === "graded" && (
+                            <Button variant="outline" onClick={() => navigate(`/student/tests/take/${assessment.id}`)}>
+                              <Eye className="w-4 h-4 mr-2" /> View Results
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
+              </>
+            )}
+          </TabsContent>
 
           <TabsContent value="upcoming" className="space-y-4 mt-6">
             <motion.div

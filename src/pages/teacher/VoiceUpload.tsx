@@ -10,6 +10,7 @@ import {
   Trash2,
   Clock,
   FileAudio,
+  Download,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -445,7 +446,26 @@ const VoiceUpload = () => {
     }
   };
 
-  const handlePlay = (voiceNote: TeacherVoiceNote) => {
+  const handleDownloadVoiceNote = async (voiceNote: TeacherVoiceNote) => {
+    try {
+      const response = await fetch(voiceNote.storageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${voiceNote.title}.webm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success("Voice note downloaded successfully");
+    } catch (error) {
+      console.error("Error downloading voice note:", error);
+      toast.error("Failed to download voice note.");
+    }
+  };
+
+  const handlePlay = async (voiceNote: TeacherVoiceNote) => {
     if (audioRef.current) {
       if (playingVoiceNoteId === voiceNote.id && !audioRef.current.paused) {
         // Pause if same voice note is playing
@@ -453,15 +473,21 @@ const VoiceUpload = () => {
         setIsPlaying(false);
         setPlayingVoiceNoteId(null);
       } else {
-        // Play the selected voice note
-        audioRef.current.src = voiceNote.storageUrl;
-        audioRef.current.play();
-        setIsPlaying(true);
-        setPlayingVoiceNoteId(voiceNote.id);
-        audioRef.current.onended = () => {
+        try {
+          // Reset and load new source
+          audioRef.current.pause();
+          audioRef.current.src = voiceNote.storageUrl;
+          audioRef.current.load();
+
+          await audioRef.current.play();
+          setIsPlaying(true);
+          setPlayingVoiceNoteId(voiceNote.id);
+        } catch (error) {
+          console.error("Playback error:", error);
+          toast.error("Cannot play this audio format. Please download it instead.");
           setIsPlaying(false);
           setPlayingVoiceNoteId(null);
-        };
+        }
       }
     }
   };
@@ -754,7 +780,14 @@ const VoiceUpload = () => {
               </div>
 
               {/* Hidden audio element for playback */}
-              <audio ref={audioRef} className="hidden" />
+              <audio 
+                ref={audioRef} 
+                className="hidden"
+                onEnded={() => {
+                  setIsPlaying(false);
+                  setPlayingVoiceNoteId(null);
+                }}
+              />
             </Card>
           </motion.div>
 
@@ -839,6 +872,14 @@ const VoiceUpload = () => {
                             ) : (
                               <Play className="w-5 h-5" />
                             )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="hover:text-neon-cyan"
+                            onClick={() => handleDownloadVoiceNote(rec)}
+                          >
+                            <Download className="w-5 h-5" />
                           </Button>
                           <Button
                             size="icon"

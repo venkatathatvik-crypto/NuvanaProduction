@@ -105,7 +105,7 @@ const StudentProfile = () => {
                                     </span>
                                 )}
                                 {studentData.class_name && (
-                                    <span className="px-3 py-1 rounded-full bg-accent/10 text-accent text-sm border border-accent/20">
+                                    <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm border border-primary/20">
                                         {studentData.class_name}
                                     </span>
                                 )}

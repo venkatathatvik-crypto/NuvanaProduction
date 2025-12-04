@@ -5,9 +5,16 @@ import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { getClasses, getExamTypes, getSubjects } from "@/services/academic";
+import { useTheme } from "next-themes";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { setTheme } = useTheme();
+
+  useEffect(() => {
+    // Force dark mode on index page
+    setTheme("dark");
+  }, [setTheme]);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -106,7 +113,7 @@ const Index = () => {
           <img
             src="/PBNL.png"
             alt="NuvanaLabs"
-            className="h-10 w-auto ml-1 inline-block"
+            className="h-12 w-auto ml-1 inline-block"
 
           />
         </p>

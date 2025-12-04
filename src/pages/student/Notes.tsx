@@ -105,15 +105,20 @@ const Notes = () => {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
-  const handlePlayPause = (note: VoiceNoteWithPlayState) => {
+  const handlePlayPause = async (note: VoiceNoteWithPlayState) => {
     if (currentPlayingId === note.id) {
       // Pause current
       if (audioRef.current) {
         if (audioRef.current.paused) {
-          audioRef.current.play();
-          setVoiceNotes((prev) =>
-            prev.map((n) => (n.id === note.id ? { ...n, isPlaying: true } : n))
-          );
+          try {
+            await audioRef.current.play();
+            setVoiceNotes((prev) =>
+              prev.map((n) => (n.id === note.id ? { ...n, isPlaying: true } : n))
+            );
+          } catch (error) {
+            console.error("Resume error:", error);
+            toast.error("Playback failed.");
+          }
         } else {
           audioRef.current.pause();
           setVoiceNotes((prev) =>
@@ -124,28 +129,45 @@ const Notes = () => {
     } else {
       // Play new note
       if (audioRef.current) {
-        audioRef.current.src = note.storageUrl;
-        audioRef.current.play();
-        setCurrentPlayingId(note.id);
-        setVoiceNotes((prev) =>
-          prev.map((n) =>
-            n.id === note.id
-              ? { ...n, isPlaying: true }
-              : { ...n, isPlaying: false }
-          )
-        );
+        try {
+          audioRef.current.pause();
+          audioRef.current.src = note.storageUrl;
+          audioRef.current.load();
+          await audioRef.current.play();
+          
+          setCurrentPlayingId(note.id);
+          setVoiceNotes((prev) =>
+            prev.map((n) =>
+              n.id === note.id
+                ? { ...n, isPlaying: true }
+                : { ...n, isPlaying: false }
+            )
+          );
+        } catch (error) {
+          console.error("Playback error:", error);
+          toast.error("Cannot play this audio format. Please download it instead.");
+          setCurrentPlayingId(null);
+          setVoiceNotes((prev) =>
+            prev.map((n) => ({ ...n, isPlaying: false }))
+          );
+        }
       }
     }
   };
 
-  const handleDownload = (note: VoiceNoteWithPlayState) => {
+  const handleDownload = async (note: VoiceNoteWithPlayState) => {
     try {
-      const link = document.createElement("a");
-      link.href = note.storageUrl;
+      // Force download the file
+      const response = await fetch(note.storageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
       link.download = `${note.title}.mp3`;
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
       toast.success("Voice note downloaded successfully");
     } catch (error) {
       console.error("Error downloading voice note:", error);
@@ -177,11 +199,13 @@ const Notes = () => {
 
         <audio
           ref={audioRef}
-          onEnded={() => setCurrentPlayingId(null)}
-          crossOrigin="anonymous"
-        >
-          <track kind="captions" />
-        </audio>
+          onEnded={() => {
+            setCurrentPlayingId(null);
+            setVoiceNotes((prev) =>
+              prev.map((n) => ({ ...n, isPlaying: false }))
+            );
+          }}
+        />
 
         {loadingNotes ? (
           <div className="flex items-center justify-center min-h-[400px]">
@@ -213,13 +237,13 @@ const Notes = () => {
                     <p className="text-sm text-muted-foreground">Subjects</p>
                   </div>
                   <div>
-                    <p className="text-3xl font-bold text-secondary">
+                    <p className="text-3xl font-bold text-primary">
                       {voiceNotes.length}
                     </p>
                     <p className="text-sm text-muted-foreground">Total Notes</p>
                   </div>
                   <div>
-                    <p className="text-3xl font-bold text-accent">MP3</p>
+                    <p className="text-3xl font-bold text-primary">MP3</p>
                     <p className="text-sm text-muted-foreground">Format</p>
                   </div>
                   <div>

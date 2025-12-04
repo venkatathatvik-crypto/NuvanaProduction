@@ -15,13 +15,13 @@ interface TeacherClassRow {
 interface GradeSubjectRow {
   id: string;
   subjects_master:
-    | {
-        name: string;
-      }
-    | {
-        name: string;
-      }[]
-    | null;
+  | {
+    name: string;
+  }
+  | {
+    name: string;
+  }[]
+  | null;
 }
 
 const FILES_BUCKET =
@@ -51,6 +51,7 @@ export interface TeacherFileItem {
   downloads: number;
   uploadDate: string;
   size?: string;
+  fileType: 'pdf' | 'video';
 }
 
 interface UploadTeacherFileParams {
@@ -60,6 +61,7 @@ interface UploadTeacherFileParams {
   classId: string;
   gradeSubjectId: string;
   teacherId: string;
+  fileType: 'pdf' | 'video';
 }
 
 interface NamedEntity {
@@ -77,16 +79,17 @@ interface TeacherFileRow {
   storage_url: string;
   download_count: number | null;
   created_at: string;
+  file_type?: string | null;
   file_categories: NamedEntity | NamedEntity[] | null;
   classes: NamedEntity | NamedEntity[] | null;
   grade_subjects:
-    | {
-        subjects_master: NamedEntity | NamedEntity[] | null;
-      }
-    | {
-        subjects_master: NamedEntity | NamedEntity[] | null;
-      }[]
-    | null;
+  | {
+    subjects_master: NamedEntity | NamedEntity[] | null;
+  }
+  | {
+    subjects_master: NamedEntity | NamedEntity[] | null;
+  }[]
+  | null;
 }
 
 interface StoragePathRow {
@@ -382,6 +385,7 @@ const mapFileRecordToItem = (record: TeacherFileRow): TeacherFileItem => {
     storagePath: record.storage_url,
     downloads: record.download_count ?? 0,
     uploadDate: record.created_at,
+    fileType: (record.file_type as 'pdf' | 'video') ?? 'pdf',
   };
 };
 
@@ -397,6 +401,7 @@ export const getTeacherFiles = async (
       storage_url,
       download_count,
       created_at,
+      file_type,
       class_id,
       grade_subject_id,
       category_id,
@@ -422,18 +427,40 @@ export const getTeacherFiles = async (
   return data.map((record) => mapFileRecordToItem(record as TeacherFileRow));
 };
 
+// Allowed MIME types for videos
+const VIDEO_MIME_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',
+  'video/x-msvideo',
+  'video/x-ms-wmv',
+];
+
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB for videos
+const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5MB for PDFs
+
 export const uploadTeacherFile = async (
   params: UploadTeacherFileParams
 ): Promise<TeacherFileItem> => {
-  const { file, teacherId, classId, gradeSubjectId, categoryId, title } =
+  const { file, teacherId, classId, gradeSubjectId, categoryId, title, fileType } =
     params;
 
-  if (file.type !== "application/pdf") {
-    throw new Error("Only PDF files are allowed.");
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error("File size must be 5MB or less.");
+  // Validate file type
+  if (fileType === 'pdf') {
+    if (file.type !== "application/pdf") {
+      throw new Error("Only PDF files are allowed for documents.");
+    }
+    if (file.size > MAX_PDF_SIZE) {
+      throw new Error("PDF file size must be 5MB or less.");
+    }
+  } else if (fileType === 'video') {
+    if (!VIDEO_MIME_TYPES.includes(file.type)) {
+      throw new Error("Only video files (MP4, WebM, OGG, MOV, AVI, WMV) are allowed.");
+    }
+    if (file.size > MAX_VIDEO_SIZE) {
+      throw new Error("Video file size must be 100MB or less.");
+    }
   }
 
   const filePath = `${teacherId}/${Date.now()}-${file.name}`;
@@ -442,7 +469,7 @@ export const uploadTeacherFile = async (
     .from(FILES_BUCKET)
     .upload(filePath, file, {
       cacheControl: "3600",
-      contentType: "application/pdf",
+      contentType: file.type,
       upsert: false,
     });
 
@@ -460,6 +487,7 @@ export const uploadTeacherFile = async (
       grade_subject_id: gradeSubjectId,
       storage_url: storageData.path,
       teacher_id: teacherId,
+      file_type: fileType,
     })
     .select(
       `
@@ -468,6 +496,7 @@ export const uploadTeacherFile = async (
       storage_url,
       download_count,
       created_at,
+      file_type,
       file_categories ( id, name ),
       classes ( id, name ),
       grade_subjects (
@@ -833,6 +862,7 @@ export const getStudentFiles = async (
       storage_url,
       download_count,
       created_at,
+      file_type,
       class_id,
       file_categories ( id, name ),
       classes ( id, name ),
@@ -904,10 +934,15 @@ export const getStudentVoiceNotes = async (
       ? record.grade_subjects.subjects_master[0]
       : record.grade_subjects?.subjects_master;
 
+    // Generate public URL from storage path
+    const { data: publicUrlData } = supabase.storage
+      .from(VOICE_NOTES_BUCKET)
+      .getPublicUrl(record.storage_url);
+
     return {
       id: record.id,
       title: record.title,
-      storageUrl: record.storage_url,
+      storageUrl: publicUrlData.publicUrl,
       duration: record.duration_seconds || 0,
       fileSize: record.file_size_bytes || 0,
       subject: subjectMaster?.name || "General",
@@ -1002,6 +1037,7 @@ export interface TeacherTest {
   examTypeName?: string;
   teacherId: string;
   createdAt: string;
+  dueDate?: string;
   questions: TestQuestion[];
 }
 
@@ -1016,15 +1052,16 @@ interface TestRow {
   exam_type_id: number;
   teacher_id: string;
   created_at: string;
+  due_date?: string | null;
   classes?: { name: string } | { name: string }[] | null;
   grade_subjects?:
-    | {
-        subjects_master: { name: string } | { name: string }[] | null;
-      }
-    | {
-        subjects_master: { name: string } | { name: string }[] | null;
-      }[]
-    | null;
+  | {
+    subjects_master: { name: string } | { name: string }[] | null;
+  }
+  | {
+    subjects_master: { name: string } | { name: string }[] | null;
+  }[]
+  | null;
   exam_types?: { name: string } | { name: string }[] | null;
 }
 
@@ -1040,6 +1077,7 @@ interface CreateTestParams {
   gradeSubjectId: string;
   examTypeId: number;
   teacherId: string;
+  dueDate?: string;
   questions: {
     text: string;
     questionType?: QuestionType;
@@ -1126,6 +1164,7 @@ export const createTeacherTest = async (
     gradeSubjectId,
     examTypeId,
     teacherId,
+    dueDate,
     questions,
   } = params;
 
@@ -1141,6 +1180,7 @@ export const createTeacherTest = async (
       grade_subject_id: gradeSubjectId,
       exam_type_id: examTypeId,
       teacher_id: teacherId,
+      due_date: dueDate || null,
     })
     .select("id, created_at")
     .single();
@@ -1225,6 +1265,7 @@ export const getTeacherTest = async (
       exam_type_id,
       teacher_id,
       created_at,
+      due_date,
       classes ( name ),
       grade_subjects (
         subjects_master ( name )
@@ -1317,6 +1358,7 @@ export const getTeacherTest = async (
     examTypeName,
     teacherId: test.teacher_id,
     createdAt: test.created_at,
+    dueDate: test.due_date || undefined,
     questions,
   };
 };
@@ -1339,6 +1381,7 @@ export const getTeacherTests = async (
       exam_type_id,
       teacher_id,
       created_at,
+      due_date,
       classes ( name ),
       grade_subjects (
         subjects_master ( name )
@@ -1403,6 +1446,7 @@ export const getTeacherTests = async (
         examTypeName,
         teacherId: test.teacher_id,
         createdAt: test.created_at,
+        dueDate: (test as any).due_date || undefined,
         questions: Array(questionCount)
           .fill(null)
           .map((_, i) => ({
@@ -1560,8 +1604,10 @@ export interface StudentTest {
   classId: string;
   className?: string;
   subjectName?: string;
+  examTypeId: number;
   examTypeName?: string;
   createdAt: string;
+  dueDate?: string;
   questionCount: number;
   totalMarks: number;
   // Submission status
@@ -1588,6 +1634,7 @@ export const getStudentTests = async (
       grade_subject_id,
       exam_type_id,
       created_at,
+      due_date,
       classes ( name ),
       grade_subjects (
         subjects_master ( name )
@@ -1667,8 +1714,10 @@ export const getStudentTests = async (
         classId: test.class_id,
         className,
         subjectName,
+        examTypeId: test.exam_type_id,
         examTypeName,
         createdAt: test.created_at,
+        dueDate: test.due_date || undefined,
         questionCount,
         totalMarks,
         submissionStatus,
@@ -1698,6 +1747,7 @@ export interface StudentTestWithQuestions {
   description?: string;
   durationMinutes: number;
   subjectName?: string;
+  examTypeId: number;
   questions: StudentTestQuestion[];
 }
 
@@ -1717,6 +1767,7 @@ export const getStudentTestForAttempt = async (
       duration_minutes,
       is_published,
       class_id,
+      exam_type_id,
       grade_subjects (
         subjects_master ( name )
       )
@@ -1801,6 +1852,7 @@ export const getStudentTestForAttempt = async (
     description: testData.description || undefined,
     durationMinutes: testData.duration_minutes,
     subjectName,
+    examTypeId: testData.exam_type_id,
     questions,
   };
 };
@@ -2510,13 +2562,13 @@ interface VoiceNoteRow {
   created_at: string;
   classes: NamedEntity | NamedEntity[] | null;
   grade_subjects:
-    | {
-        subjects_master: NamedEntity | NamedEntity[] | null;
-      }
-    | {
-        subjects_master: NamedEntity | NamedEntity[] | null;
-      }[]
-    | null;
+  | {
+    subjects_master: NamedEntity | NamedEntity[] | null;
+  }
+  | {
+    subjects_master: NamedEntity | NamedEntity[] | null;
+  }[]
+  | null;
 }
 
 interface UploadVoiceNoteParams {
@@ -2622,8 +2674,28 @@ export const uploadTeacherVoiceNote = async (
     throw new Error("File size must be 50MB or less.");
   }
 
-  const fileExtension =
-    file instanceof File ? file.name.split(".").pop() || "webm" : "webm";
+  // Determine file extension and content type
+  let fileExtension = "webm";
+  let contentType = "audio/webm";
+  
+  if (file instanceof File) {
+    fileExtension = file.name.split(".").pop() || "webm";
+    contentType = file.type || "audio/webm";
+  } else if (file instanceof Blob) {
+    // For recorded blobs, get the actual type
+    contentType = file.type || "audio/webm";
+    // Map MIME type to extension
+    if (contentType.includes("mp4")) {
+      fileExtension = "mp4";
+    } else if (contentType.includes("ogg")) {
+      fileExtension = "ogg";
+    } else if (contentType.includes("mpeg") || contentType.includes("mp3")) {
+      fileExtension = "mp3";
+    } else {
+      fileExtension = "webm";
+    }
+  }
+  
   const fileName = `voice-${Date.now()}.${fileExtension}`;
   const filePath = `${teacherId}/${fileName}`;
 
@@ -2631,7 +2703,7 @@ export const uploadTeacherVoiceNote = async (
     .from(VOICE_NOTES_BUCKET)
     .upload(filePath, file, {
       cacheControl: "3600",
-      contentType: file instanceof File ? file.type : "audio/webm",
+      contentType: contentType,
       upsert: false,
     });
 
@@ -2818,6 +2890,7 @@ export const getAttendanceForDate = async (
 
 // Save attendance records for a date
 export const saveAttendance = async (
+  classId: string,
   attendanceDate: string,
   students: StudentAttendance[],
   teacherId: string
@@ -3039,12 +3112,13 @@ export const getStudentPendingTestsCount = async (
       return 0;
     }
 
-    // Get all published tests for this class
+    // Get all published tests for this class (excluding Internal Assessments - exam_type_id = 4)
     const { data: testsData, error: testsError } = await supabase
       .from("tests")
       .select("id")
       .eq("class_id", studentData.class_id)
-      .eq("is_published", true);
+      .eq("is_published", true)
+      .neq("exam_type_id", 4);
 
     if (testsError || !testsData) {
       console.error("Error fetching tests:", testsError);
@@ -3072,6 +3146,61 @@ export const getStudentPendingTestsCount = async (
     return pendingCount;
   } catch (error) {
     console.error("Error in getStudentPendingTestsCount:", error);
+    return 0;
+  }
+};
+
+// Get count of pending Internal Assessments for a student (exam_type_id = 4)
+export const getStudentPendingAssessmentsCount = async (
+  studentId: string
+): Promise<number> => {
+  try {
+    // Get student's class_id
+    const { data: studentData, error: studentError } = await supabase
+      .from("students")
+      .select("class_id")
+      .eq("id", studentId)
+      .single();
+
+    if (studentError || !studentData) {
+      console.error("Error fetching student:", studentError);
+      return 0;
+    }
+
+    // Get all published Internal Assessments (exam_type_id = 4) for this class
+    const { data: testsData, error: testsError } = await supabase
+      .from("tests")
+      .select("id")
+      .eq("class_id", studentData.class_id)
+      .eq("is_published", true)
+      .eq("exam_type_id", 4);
+
+    if (testsError || !testsData) {
+      console.error("Error fetching assessments:", testsError);
+      return 0;
+    }
+
+    if (testsData.length === 0) {
+      return 0;
+    }
+
+    // Get assessments already submitted by this student
+    const { data: submissionsData, error: submissionsError } = await supabase
+      .from("test_submissions")
+      .select("test_id")
+      .eq("student_id", studentId);
+
+    if (submissionsError) {
+      console.error("Error fetching submissions:", submissionsError);
+      return 0;
+    }
+
+    const submittedTestIds = new Set((submissionsData || []).map(s => s.test_id));
+    const pendingCount = testsData.filter(t => !submittedTestIds.has(t.id)).length;
+
+    return pendingCount;
+  } catch (error) {
+    console.error("Error in getStudentPendingAssessmentsCount:", error);
     return 0;
   }
 };

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { TestForm } from "@/components/mcq/TestForm";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -9,6 +9,8 @@ import { createTeacherTest, getGradeSubjectIdBySubjectName, getExamTypeIdByName 
 
 const TestCreate = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const defaultType = searchParams.get("type");
     const { profile } = useAuth();
 
     const handleSubmit = async (data: any) => {
@@ -28,7 +30,7 @@ const TestCreate = () => {
             // Convert exam type name to exam_type_id
             const examTypeId = await getExamTypeIdByName(data.examType);
             if (!examTypeId) {
-                toast.error("Failed to find exam type. Please try again.");
+                toast.error(`Failed to find exam type '${data.examType}'. Please ensure it exists in the database.`);
                 return;
             }
 
@@ -58,6 +60,7 @@ const TestCreate = () => {
                 gradeSubjectId,
                 examTypeId,
                 teacherId: profile.id,
+                dueDate: data.dueDate || undefined,
                 questions,
             });
 
@@ -78,10 +81,14 @@ const TestCreate = () => {
                 <Button variant="ghost" onClick={() => navigate("/teacher/tests")} className="mb-4">
                     <ArrowLeft className="w-4 h-4 mr-2" /> Back to Tests
                 </Button>
-                <h1 className="text-4xl font-bold neon-text mb-2">Create New Test</h1>
-                <p className="text-muted-foreground mb-8">Design your assessment</p>
+                <h1 className="text-4xl font-bold neon-text mb-2">
+                    {defaultType === "Assignment" ? "Create New Assignment" : "Create New Test"}
+                </h1>
+                <p className="text-muted-foreground mb-8">
+                    {defaultType === "Assignment" ? "Design your assignment and set marks" : "Design your assessment"}
+                </p>
 
-                <TestForm onSubmit={handleSubmit} />
+                <TestForm onSubmit={handleSubmit} defaultExamType={defaultType || undefined} />
             </motion.div>
         </div>
     );

@@ -205,7 +205,7 @@ const AdminPanel = () => {
 
                             <Card className="glass-card p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                                    <BookOpen className="w-5 h-5 text-neon-pink" /> Manage Subjects
+                                    <BookOpen className="w-5 h-5 text-neon-cyan" /> Manage Subjects
                                 </h2>
                                 <div className="flex gap-2 mb-6">
                                     <Input

@@ -21,6 +21,7 @@ import {
   getOverallAttendancePercentage,
   getStudentAverageMarksPercentage,
   getStudentPendingTestsCount,
+  getStudentPendingAssessmentsCount,
 } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { formatDistanceToNow } from "date-fns";
@@ -39,6 +40,8 @@ const Dashboard = () => {
   const [loadingMarks, setLoadingMarks] = useState(true);
   const [pendingTests, setPendingTests] = useState<number>(0);
   const [loadingTests, setLoadingTests] = useState(true);
+  const [pendingAssessments, setPendingAssessments] = useState<number>(0);
+  const [loadingAssessments, setLoadingAssessments] = useState(true);
 
   const handleLogout = async () => {
     await logout();
@@ -54,6 +57,7 @@ const Dashboard = () => {
         setLoadingAttendance(false);
         setLoadingMarks(false);
         setLoadingTests(false);
+        setLoadingAssessments(false);
         return;
       }
 
@@ -66,9 +70,13 @@ const Dashboard = () => {
         const marks = await getStudentAverageMarksPercentage(profile.id);
         setAverageMarks(marks);
 
-        // Fetch pending tests count
+        // Fetch pending tests count (excluding Internal Assessments)
         const pending = await getStudentPendingTestsCount(profile.id);
         setPendingTests(pending);
+
+        // Fetch pending Internal Assessments count
+        const assessments = await getStudentPendingAssessmentsCount(profile.id);
+        setPendingAssessments(assessments);
 
         // Get student data to get class_id
         const studentData = await getStudentData(profile.id);
@@ -87,40 +95,34 @@ const Dashboard = () => {
         setLoadingAttendance(false);
         setLoadingMarks(false);
         setLoadingTests(false);
+        setLoadingAssessments(false);
       }
     };
 
     fetchStudentData();
   }, [profile, profileLoading]);
 
-  const quickStats = [
+  const quickActions = [
     {
       label: "Attendance",
       value: loadingAttendance ? "..." : `${attendancePercentage}%`,
       icon: Users,
-      color: "text-neon-cyan",
+      color: "text-neon-blue",
       path: "/student/attendance",
     },
     {
-      label: "Pending Tests",
-      value: loadingTests ? "..." : pendingTests.toString(),
-      icon: Calendar,
-      color: "text-neon-purple",
-      path: "/student/tests",
+      label: "Notes",
+      value: "Access",
+      icon: StickyNote,
+      color: "text-green-500",
+      path: "/student/notes"
     },
     {
-      label: "Assignments",
-      value: "5",
-      icon: FileText,
-      color: "text-neon-pink",
-      path: "/student/events",
-    },
-    {
-      label: "Average Marks",
-      value: loadingMarks ? "..." : `${averageMarks}%`,
-      icon: Award,
-      color: "text-blue-500",
-      path: "/student/marks",
+      label: "Books",
+      value: "Library",
+      icon: BookOpen,
+      color: "text-neon-blue",
+      path: "/student/books"
     },
     {
       label: "My Analytics",
@@ -128,6 +130,34 @@ const Dashboard = () => {
       icon: BarChart2,
       color: "text-green-500",
       path: "/student/analytics",
+    },
+    {
+      label: "My Tests",
+      value: loadingTests ? "..." : (pendingTests > 0 ? `${pendingTests} Pending` : "Take"),
+      icon: FileText,
+      color: "text-neon-purple",
+      path: "/student/tests",
+    },
+    {
+      label: "Timetable",
+      value: "View",
+      icon: Calendar,
+      color: "text-green-500",
+      path: "/student/timetable"
+    },
+    {
+      label: "Assignments",
+      value: loadingAssessments ? "..." : (pendingAssessments > 0 ? `${pendingAssessments} Pending` : "0"),
+      icon: FileText,
+      color: "text-neon-blue",
+      path: "/student/events",
+    },
+    {
+      label: "Average Marks",
+      value: loadingMarks ? "..." : `${averageMarks}%`,
+      icon: Award,
+      color: "text-green-500",
+      path: "/student/marks",
     },
   ];
 
@@ -152,7 +182,7 @@ const Dashboard = () => {
         >
           <div>
             <h1 className="text-4xl font-bold neon-text mb-2">
-              Welcome back, Student! 👋
+              Welcome back, {profile?.name || "Student"}! 👋
             </h1>
             <p className="text-muted-foreground">
               Here's what's happening today
@@ -178,32 +208,32 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {quickStats.map((stat, index) => (
+        {/* Quick Actions Grid - All actions at the top */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {quickActions.map((action, index) => (
             <motion.div
-              key={stat.label}
+              key={action.label}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Card
                 className="glass-card p-6 hover:neon-glow transition-all duration-300 cursor-pointer"
-                onClick={() => navigate(stat.path)}
+                onClick={() => navigate(action.path)}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">
-                      {stat.label}
-                    </p>
-                    <p className="text-3xl font-bold mt-2">{stat.value}</p>
+                    <p className="text-sm text-muted-foreground">{action.label}</p>
+                    <p className="text-2xl font-bold mt-2">{action.value}</p>
                   </div>
-                  <stat.icon className={`w-10 h-10 ${stat.color}`} />
+                  <action.icon className={`w-10 h-10 ${action.color}`} />
                 </div>
               </Card>
             </motion.div>
           ))}
         </div>
 
+        {/* Today's Classes and Announcements */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -239,7 +269,7 @@ const Dashboard = () => {
           >
             <Card className="glass-card p-6">
               <div className="flex items-center gap-2 mb-6">
-                <Bell className="w-6 h-6 text-accent" />
+                <Bell className="mr-2 h-6 text-yellow-500" />
                 <h2 className="text-2xl font-semibold">Announcements</h2>
               </div>
               {loadingAnnouncements ? (
@@ -255,11 +285,10 @@ const Dashboard = () => {
                   {announcements.map((announcement) => (
                     <div
                       key={announcement.id}
-                      className={`p-4 rounded-lg border transition-colors ${
-                        announcement.isUrgent
-                          ? "bg-destructive/10 border-destructive"
-                          : "bg-muted/50 border-border hover:border-primary"
-                      }`}
+                      className={`p-4 rounded-lg border transition-colors ${announcement.isUrgent
+                        ? "bg-destructive/10 border-destructive"
+                        : "bg-muted/50 border-border hover:border-primary"
+                        }`}
                     >
                       <h3 className="font-semibold">{announcement.title}</h3>
                       <p className="text-sm text-muted-foreground mt-2">
@@ -277,46 +306,6 @@ const Dashboard = () => {
             </Card>
           </motion.div>
         </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="grid grid-cols-2 md:grid-cols-3 gap-4"
-        >
-          <Button
-            className="h-24 text-lg bg-secondary/50 backdrop-blur-md border-white/10 hover:neon-glow"
-            variant="outline"
-            onClick={() => navigate("/student/timetable")}
-          >
-            <Calendar className="mr-2 w-6 h-6" />
-            Timetable
-          </Button>
-          <Button
-            className="h-24 text-lg bg-secondary/50 backdrop-blur-md border-white/10 hover:neon-glow"
-            variant="outline"
-            onClick={() => navigate("/student/notes")}
-          >
-            <StickyNote className="mr-2 w-6 h-6" />
-            Notes
-          </Button>
-          <Button
-            className="h-24 text-lg bg-secondary/50 backdrop-blur-md border-white/10 hover:neon-glow"
-            variant="outline"
-            onClick={() => navigate("/student/books")}
-          >
-            <BookOpen className="mr-2 w-6 h-6" />
-            Books
-          </Button>
-          <Button
-            className="h-24 text-lg glass hover:neon-glow"
-            variant="outline"
-            onClick={() => navigate("/student/tests")}
-          >
-            <FileText className="mr-2 w-6 h-6" />
-            My Tests
-          </Button>
-        </motion.div>
       </div>
     </div>
   );

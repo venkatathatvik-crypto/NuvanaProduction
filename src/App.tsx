@@ -60,10 +60,10 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <ThemeToggle />
           <InstallPWA />
 
           <BrowserRouter>
+            <ThemeToggle />
             <AppBackgroundLayout>
               <Routes>
                 {/* Public Routes */}

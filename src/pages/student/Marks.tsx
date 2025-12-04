@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Award, FileText } from "lucide-react";
+import { ArrowLeft, Award, FileText, TrendingUp, TrendingDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,6 +10,18 @@ import { useAuth } from "@/auth/AuthContext";
 import { getStudentGradedTests, StudentGradedTest } from "@/services/academic";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 const Marks = () => {
   const navigate = useNavigate();
@@ -63,6 +75,35 @@ const Marks = () => {
     return { average, totalMarks, maxMarks };
   }, [gradedTests]);
 
+  // Prepare chart data for subject-wise performance
+  const subjectChartData = useMemo(() => {
+    return Object.entries(testsBySubject).map(([subject, tests]) => {
+      const total = tests.reduce((sum, t) => sum + t.marksObtained, 0);
+      const max = tests.reduce((sum, t) => sum + t.totalMarks, 0);
+      const average = max > 0 ? Math.round((total / max) * 100) : 0;
+      return { subject, average };
+    });
+  }, [testsBySubject]);
+
+  // Prepare trend data (group by exam type)
+  const trendData = useMemo(() => {
+    const examTypes = Array.from(new Set(gradedTests.map(t => t.examTypeName || "Unknown")));
+    // Sort exam types if possible? For now, just use them as they appear or maybe alphabetical?
+    // Ideally we'd sort by date, but exam types group multiple tests.
+    // Let's just create data points.
+
+    return examTypes.map(type => {
+      const item: any = { name: type };
+      Object.keys(testsBySubject).forEach(subject => {
+        const test = testsBySubject[subject].find(t => t.examTypeName === type);
+        if (test) {
+          item[subject] = test.percentage;
+        }
+      });
+      return item;
+    });
+  }, [gradedTests, testsBySubject]);
+
   const getGradeFromPercentage = (percentage: number): string => {
     if (percentage >= 90) return "A+";
     if (percentage >= 80) return "A";
@@ -77,6 +118,9 @@ const Marks = () => {
     if (grade.startsWith("B")) return "text-neon-purple";
     return "text-neon-pink";
   };
+
+  // Colors for lines
+  const lineColors = ["#8884d8", "#82ca9d", "#ffc658", "#ff7c7c", "#a78bfa", "#2dd4bf"];
 
   if (loading || profileLoading) {
     return (
@@ -126,6 +170,60 @@ const Marks = () => {
           </Card>
         </motion.div>
 
+        {gradedTests.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          >
+            {/* Subject-wise Average Chart */}
+            <Card className="glass-card p-6">
+              <h3 className="text-xl font-semibold mb-4">Subject-wise Average Performance</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={subjectChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="subject" angle={-15} textAnchor="end" height={60} interval={0} />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '8px' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="average" fill="#8884d8" name="Average %" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Performance Trend Chart */}
+            <Card className="glass-card p-6">
+              <h3 className="text-xl font-semibold mb-4">Performance Trend Over Time</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '8px' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Legend />
+                  {Object.keys(testsBySubject).map((subject, index) => (
+                    <Line
+                      key={subject}
+                      type="monotone"
+                      dataKey={subject}
+                      stroke={lineColors[index % lineColors.length]}
+                      strokeWidth={2}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+          </motion.div>
+        )}
+
         {gradedTests.length === 0 ? (
           <Card className="glass-card p-12 text-center">
             <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -143,6 +241,13 @@ const Marks = () => {
               const subjectMax = tests.reduce((sum, t) => sum + t.totalMarks, 0);
               const subjectAverage = subjectMax > 0 ? Math.round((subjectTotal / subjectMax) * 100) : 0;
 
+              // Calculate trend
+              // Sort tests by date
+              const sortedTests = [...tests].sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+              const lastTest = sortedTests[sortedTests.length - 1];
+              const prevTest = sortedTests.length > 1 ? sortedTests[sortedTests.length - 2] : null;
+              const trend = prevTest ? (lastTest.percentage >= prevTest.percentage ? "up" : "down") : "up";
+
               return (
                 <motion.div
                   key={subjectName}
@@ -158,6 +263,11 @@ const Marks = () => {
                           <span className={`text-sm font-medium ${getGradeColor(getGradeFromPercentage(subjectAverage))}`}>
                             {getGradeFromPercentage(subjectAverage)}
                           </span>
+                          {trend === "up" ? (
+                            <TrendingUp className="w-5 h-5 text-neon-cyan" />
+                          ) : (
+                            <TrendingDown className="w-5 h-5 text-destructive" />
+                          )}
                         </div>
                         <p className="text-3xl font-bold text-primary">{subjectAverage}%</p>
                       </div>
@@ -186,8 +296,8 @@ const Marks = () => {
 
                       <TabsContent value="tests" className="space-y-3 mt-4">
                         {tests.map((test) => (
-                          <div 
-                            key={test.testId} 
+                          <div
+                            key={test.testId}
                             className="p-4 rounded-lg bg-muted/50 border border-border flex justify-between items-center cursor-pointer hover:border-primary transition-colors"
                             onClick={() => navigate(`/student/tests/take/${test.testId}`)}
                           >

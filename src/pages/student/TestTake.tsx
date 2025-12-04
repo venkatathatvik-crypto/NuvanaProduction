@@ -27,6 +27,11 @@ const TestTake = () => {
     const [pendingSubmission, setPendingSubmission] = useState<StudentSubmission | null>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [isInternalAssessment, setIsInternalAssessment] = useState(false);
+
+    // Helper to get the correct back path based on exam type
+    const getBackPath = () => isInternalAssessment ? "/student/events" : "/student/tests";
+    const getBackLabel = () => isInternalAssessment ? "Back to Assessments" : "Back to Tests";
 
     useEffect(() => {
         const fetchTestData = async () => {
@@ -40,6 +45,12 @@ const TestTake = () => {
                 // First check if already submitted
                 const existingSubmission = await getStudentSubmission(testId, profile.id);
                 if (existingSubmission) {
+                    // Fetch test info to determine exam type for navigation
+                    const testData = await getStudentTestForAttempt(testId, profile.id);
+                    if (testData) {
+                        setIsInternalAssessment(testData.examTypeId === 4);
+                    }
+                    
                     if (existingSubmission.isGraded) {
                         // Graded - show results
                         const testResult = await getTestResult(testId, profile.id);
@@ -56,6 +67,8 @@ const TestTake = () => {
                 const testData = await getStudentTestForAttempt(testId, profile.id);
                 if (testData) {
                     setTest(testData);
+                    // Check if this is an Internal Assessment (exam_type_id = 4)
+                    setIsInternalAssessment(testData.examTypeId === 4);
                 } else {
                     toast.error("Test not found or not accessible");
                     navigate("/student/tests");
@@ -121,8 +134,8 @@ const TestTake = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     className="max-w-2xl mx-auto"
                 >
-                    <Button variant="ghost" onClick={() => navigate("/student/tests")} className="mb-4">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Tests
+                    <Button variant="ghost" onClick={() => navigate(getBackPath())} className="mb-4">
+                        <ArrowLeft className="w-4 h-4 mr-2" /> {getBackLabel()}
                     </Button>
 
                     <Card className="glass-card">
@@ -130,7 +143,7 @@ const TestTake = () => {
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-primary/20 flex items-center justify-center">
                                 <FileCheck className="w-10 h-10 text-primary" />
                             </div>
-                            <CardTitle className="text-3xl neon-text">Test Submitted!</CardTitle>
+                            <CardTitle className="text-3xl neon-text">{isInternalAssessment ? "Assessment Submitted!" : "Test Submitted!"}</CardTitle>
                         </CardHeader>
                         <CardContent className="text-center space-y-6">
                             <div className="p-6 rounded-lg bg-muted/30 border">
@@ -148,8 +161,8 @@ const TestTake = () => {
                                 You will be able to see your results once your teacher has graded your submission.
                             </p>
 
-                            <Button onClick={() => navigate("/student/tests")} className="w-full">
-                                Back to My Tests
+                            <Button onClick={() => navigate(getBackPath())} className="w-full">
+                                {isInternalAssessment ? "Back to My Assessments" : "Back to My Tests"}
                             </Button>
                         </CardContent>
                     </Card>
@@ -173,13 +186,13 @@ const TestTake = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     className="max-w-4xl mx-auto"
                 >
-                    <Button variant="ghost" onClick={() => navigate("/student/tests")} className="mb-4">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Tests
+                    <Button variant="ghost" onClick={() => navigate(getBackPath())} className="mb-4">
+                        <ArrowLeft className="w-4 h-4 mr-2" /> {getBackLabel()}
                     </Button>
 
                     <Card className="glass-card mb-8">
                         <CardHeader className="text-center pb-2">
-                            <CardTitle className="text-3xl neon-text">Test Results</CardTitle>
+                            <CardTitle className="text-3xl neon-text">{isInternalAssessment ? "Assessment Results" : "Test Results"}</CardTitle>
                             <p className="text-muted-foreground">{testInfo.title}</p>
                         </CardHeader>
                         <CardContent className="space-y-8">

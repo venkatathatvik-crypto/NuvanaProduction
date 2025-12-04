@@ -72,15 +72,17 @@ const formSchema = z.object({
     classId: z.string().min(1, "Class is required"),
     subject: z.string().min(1, "Subject is required"),
     examType: z.string().min(1, "Exam type is required"),
+    dueDate: z.string().optional(),
     questions: z.array(questionSchema),
 });
 
 interface TestFormProps {
     initialData?: Test;
     onSubmit: (data: any) => void;
+    defaultExamType?: string;
 }
 
-export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
+export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormProps) => {
     const { profile, profileLoading } = useAuth();
     const [classes, setClasses] = useState<FlattenedClass[]>([]);
     const [examTypes, setExamTypes] = useState<string[]>([]);
@@ -95,7 +97,8 @@ export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
             isPublished: false,
             classId: "",
             subject: "",
-            examType: "",
+            examType: defaultExamType || "",
+            dueDate: "",
             questions: [],
         },
     });
@@ -122,7 +125,13 @@ export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
                 ]);
 
                 setClasses(classesData || []);
-                setExamTypes(examTypesData || []);
+
+                // Add defaultExamType to options if not present
+                let types = examTypesData || [];
+                if (defaultExamType && !types.includes(defaultExamType)) {
+                    types = [...types, defaultExamType];
+                }
+                setExamTypes(types);
 
                 if (initialData) {
                     const initialClassId = (initialData as any).classId || "";
@@ -175,13 +184,17 @@ export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
                         form.setValue("classId", classesData[0].class_id);
                     }
 
-                    if (
-                        examTypesData &&
-                        examTypesData.length > 0 &&
+                    // Set default exam type if provided
+                    if (defaultExamType) {
+                        form.setValue("examType", defaultExamType);
+                    } else if (
+                        types &&
+                        types.length > 0 &&
                         !form.getValues("examType")
                     ) {
-                        form.setValue("examType", examTypesData[0]);
+                        form.setValue("examType", types[0]);
                     }
+
                 }
             } catch (error) {
                 console.error("Failed to fetch initial data", error);
@@ -190,7 +203,7 @@ export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
         };
 
         fetchInitialData();
-    }, [profile, profileLoading, initialData, form]);
+    }, [profile, profileLoading, initialData, form, defaultExamType]);
 
     const selectedClassId = form.watch("classId");
 
@@ -433,6 +446,27 @@ export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
                                     )}
                                 />
 
+                                <FormField
+                                    control={form.control}
+                                    name="dueDate"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Due Date & Time (Optional)</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="datetime-local"
+                                                    {...field}
+                                                    className="w-full"
+                                                />
+                                            </FormControl>
+                                            <FormDescription>
+                                                Set a deadline for students to complete this test
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <FormField
                                         control={form.control}
@@ -632,8 +666,8 @@ export const TestForm = ({ initialData, onSubmit }: TestFormProps) => {
                                                                         <div className="flex items-center gap-2">
                                                                             <div
                                                                                 className={`w-4 h-4 rounded-full border flex items-center justify-center ${correctIndex === optIndex
-                                                                                        ? "border-green-500 bg-green-500/20"
-                                                                                        : "border-muted"
+                                                                                    ? "border-green-500 bg-green-500/20"
+                                                                                    : "border-muted"
                                                                                     }`}
                                                                             >
                                                                                 <span className="text-[10px]">

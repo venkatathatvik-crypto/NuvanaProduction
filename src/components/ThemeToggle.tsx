@@ -1,5 +1,6 @@
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,12 @@ import {
 
 export function ThemeToggle() {
     const { setTheme } = useTheme();
+    const location = useLocation();
+
+    // Hide theme toggle on index page
+    if (location.pathname === "/") {
+        return null;
+    }
 
     return (
         <DropdownMenu>

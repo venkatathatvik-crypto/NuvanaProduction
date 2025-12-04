@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Upload, FileText, Trash2, Download } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Trash2, Download, Video } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,8 @@ import {
 import type { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 
-const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
+const MAX_PDF_SIZE = 5 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
 const TeacherFiles = () => {
   const navigate = useNavigate();
@@ -44,6 +45,7 @@ const TeacherFiles = () => {
   const [fileTitle, setFileTitle] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadFileType, setUploadFileType] = useState<'pdf' | 'video'>('pdf');
   const [uploadedFiles, setUploadedFiles] = useState<TeacherFileItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingFiles, setLoadingFiles] = useState(true);
@@ -174,16 +176,37 @@ const TeacherFiles = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== "application/pdf") {
-      toast.error("Only PDF files are allowed.");
-      event.target.value = "";
-      return;
-    }
+    const videoMimeTypes = [
+      'video/mp4',
+      'video/webm',
+      'video/ogg',
+      'video/quicktime',
+      'video/x-msvideo',
+      'video/x-ms-wmv',
+    ];
 
-    if (file.size > MAX_UPLOAD_SIZE) {
-      toast.error("File size must be 5MB or less.");
-      event.target.value = "";
-      return;
+    if (uploadFileType === 'pdf') {
+      if (file.type !== "application/pdf") {
+        toast.error("Only PDF files are allowed for documents.");
+        event.target.value = "";
+        return;
+      }
+      if (file.size > MAX_PDF_SIZE) {
+        toast.error("PDF file size must be 5MB or less.");
+        event.target.value = "";
+        return;
+      }
+    } else if (uploadFileType === 'video') {
+      if (!videoMimeTypes.includes(file.type)) {
+        toast.error("Only video files (MP4, WebM, OGG, MOV, AVI, WMV) are allowed.");
+        event.target.value = "";
+        return;
+      }
+      if (file.size > MAX_VIDEO_SIZE) {
+        toast.error("Video file size must be 100MB or less.");
+        event.target.value = "";
+        return;
+      }
     }
 
     setSelectedFile(file);
@@ -202,7 +225,7 @@ const TeacherFiles = () => {
       !uploadSubjectId ||
       !selectedFile
     ) {
-      toast.error("Please complete all fields and choose a PDF file.");
+      toast.error(`Please complete all fields and choose a ${uploadFileType === 'pdf' ? 'PDF' : 'video'} file.`);
       return;
     }
 
@@ -215,10 +238,11 @@ const TeacherFiles = () => {
         classId: uploadClass.class_id,
         gradeSubjectId: uploadSubjectId,
         teacherId: profile.id,
+        fileType: uploadFileType,
       });
 
       setUploadedFiles((prev) => [newFile, ...prev]);
-      toast.success("File uploaded successfully!");
+      toast.success(`${uploadFileType === 'pdf' ? 'File' : 'Video'} uploaded successfully!`);
 
       setFileTitle("");
       setSelectedFile(null);
@@ -262,18 +286,31 @@ const TeacherFiles = () => {
     }
 
     try {
+      // Force download the file
+      const response = await fetch(file.storageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      // Update download count
       const newCount = await incrementFileDownload(file.id);
       setUploadedFiles((prev) =>
         prev.map((item) =>
           item.id === file.id ? { ...item, downloads: newCount } : item
         )
       );
-    } catch (error) {
-      console.error("Download count error:", error);
-      toast.error("Failed to update download count.");
-    }
 
-    window.open(file.storageUrl, "_blank", "noopener,noreferrer");
+      toast.success("File downloaded successfully");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Failed to download file.");
+    }
   };
 
   const filteredFiles = uploadedFiles.filter((file) => {
@@ -446,16 +483,55 @@ const TeacherFiles = () => {
               </div>
             </div>
 
+            {/* File Type Selector */}
+            <div className="mb-6">
+              <label className="text-sm text-muted-foreground mb-2 block">
+                File Type
+              </label>
+              <div className="flex gap-4">
+                <Button
+                  type="button"
+                  variant={uploadFileType === 'pdf' ? 'default' : 'outline'}
+                  className={`flex-1 ${uploadFileType === 'pdf' ? 'neon-glow' : 'glass'}`}
+                  onClick={() => {
+                    setUploadFileType('pdf');
+                    setSelectedFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  PDF Document
+                </Button>
+                <Button
+                  type="button"
+                  variant={uploadFileType === 'video' ? 'default' : 'outline'}
+                  className={`flex-1 ${uploadFileType === 'video' ? 'neon-glow' : 'glass'}`}
+                  onClick={() => {
+                    setUploadFileType('video');
+                    setSelectedFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                >
+                  <Video className="w-4 h-4 mr-2" />
+                  Video
+                </Button>
+              </div>
+            </div>
+
             <div
               className="border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-primary transition-colors cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              {uploadFileType === 'pdf' ? (
+                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              ) : (
+                <Video className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              )}
               <p className="text-lg font-medium mb-2">
                 Click to upload or drag and drop
               </p>
               <p className="text-sm text-muted-foreground">
-                PDF only (max. 5MB)
+                {uploadFileType === 'pdf' ? 'PDF only (max. 5MB)' : 'Video files - MP4, WebM, OGG, MOV, AVI, WMV (max. 100MB)'}
               </p>
               {selectedFile && (
                 <p className="text-sm text-primary mt-2">
@@ -465,7 +541,7 @@ const TeacherFiles = () => {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="application/pdf"
+                accept={uploadFileType === 'pdf' ? 'application/pdf' : 'video/*'}
                 className="hidden"
                 onChange={handleFileSelection}
               />
@@ -526,8 +602,12 @@ const TeacherFiles = () => {
                 <Card className="glass-card p-6 hover:neon-glow transition-all">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="p-3 rounded-lg bg-primary/20">
-                        <FileText className="w-6 h-6 text-primary" />
+                      <div className={`p-3 rounded-lg ${file.fileType === 'video' ? 'bg-neon-purple/20' : 'bg-primary/20'}`}>
+                        {file.fileType === 'video' ? (
+                          <Video className="w-6 h-6 text-neon-purple" />
+                        ) : (
+                          <FileText className="w-6 h-6 text-primary" />
+                        )}
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg mb-2">
@@ -537,6 +617,9 @@ const TeacherFiles = () => {
                           <Badge variant="secondary">{file.subject}</Badge>
                           <Badge variant="outline">{file.class}</Badge>
                           <Badge variant="outline">{file.category}</Badge>
+                          <Badge variant={file.fileType === 'video' ? 'default' : 'outline'} className={file.fileType === 'video' ? 'bg-neon-purple/20 text-neon-purple' : ''}>
+                            {file.fileType === 'video' ? 'Video' : 'PDF'}
+                          </Badge>
                           <Badge variant="outline">{file.size ?? "—"}</Badge>
                           <Badge variant="outline">
                             {file.downloads} downloads

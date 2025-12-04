@@ -119,9 +119,8 @@ const Attendance = () => {
                         strokeWidth="12"
                         fill="none"
                         strokeDasharray={`${2 * Math.PI * 80}`}
-                        strokeDashoffset={`${
-                          2 * Math.PI * 80 * (1 - overallAttendance / 100)
-                        }`}
+                        strokeDashoffset={`${2 * Math.PI * 80 * (1 - overallAttendance / 100)
+                          }`}
                         className="text-primary neon-glow"
                         strokeLinecap="round"
                       />
@@ -182,11 +181,10 @@ const Attendance = () => {
                               subject.recentClasses.map((cls, idx) => (
                                 <div
                                   key={idx}
-                                  className={`px-3 py-2 rounded-lg text-xs font-medium ${
-                                    cls.status === "present"
-                                      ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30"
-                                      : "bg-destructive/20 text-destructive border border-destructive/30"
-                                  }`}
+                                  className={`px-3 py-2 rounded-lg text-xs font-medium ${cls.status === "present"
+                                    ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30"
+                                    : "bg-destructive/20 text-destructive border border-destructive/30"
+                                    }`}
                                 >
                                   <p>{cls.date}</p>
                                   <p className="capitalize">{cls.status}</p>

@@ -10,7 +10,7 @@ const Timetable = () => {
 
   const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  const timetable: Record<string, Array<{time: string; subject: string; room: string; teacher: string}>> = {
+  const timetable: Record<string, Array<{ time: string; subject: string; room: string; teacher: string }>> = {
     Monday: [
       { time: "9:00 - 10:30", subject: "Mathematics", room: "Room 301", teacher: "Dr. Smith" },
       { time: "10:45 - 12:15", subject: "Physics", room: "Lab 2", teacher: "Prof. Johnson" },
@@ -86,15 +86,15 @@ const Timetable = () => {
                 <p className="text-sm text-muted-foreground">Days/Week</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-secondary">4</p>
+                <p className="text-3xl font-bold text-primary">4</p>
                 <p className="text-sm text-muted-foreground">Classes/Day</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-accent">1.5h</p>
+                <p className="text-3xl font-bold text-primary">1.5h</p>
                 <p className="text-sm text-muted-foreground">Per Class</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-neon-cyan">9 AM</p>
+                <p className="text-3xl font-bold text-primary">9 AM</p>
                 <p className="text-sm text-muted-foreground">Start Time</p>
               </div>
             </div>

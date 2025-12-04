@@ -126,11 +126,10 @@ const TeacherTests = () => {
                     <CardTitle className="flex justify-between items-start">
                       <span className="truncate">{test.title}</span>
                       <span
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          test.isPublished
+                        className={`text-xs px-2 py-1 rounded-full ${test.isPublished
                             ? "bg-green-500/20 text-green-500"
                             : "bg-yellow-500/20 text-yellow-500"
-                        }`}
+                          }`}
                       >
                         {test.isPublished ? "Published" : "Draft"}
                       </span>
@@ -144,6 +143,23 @@ const TeacherTests = () => {
                       <span>{questionCount} Questions</span>
                       <span>{test.durationMinutes} mins</span>
                     </div>
+                    {test.examTypeName && (
+                      <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded w-fit">
+                        {test.examTypeName}
+                      </div>
+                    )}
+                    {test.dueDate && (
+                      <div className="text-xs text-orange-500 bg-orange-500/10 px-2 py-1 rounded w-fit flex items-center gap-1">
+                        <span>📅</span>
+                        <span>Due: {new Date(test.dueDate).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}</span>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2 pt-4">
                       <Button

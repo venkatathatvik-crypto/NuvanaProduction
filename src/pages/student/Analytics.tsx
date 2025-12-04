@@ -100,7 +100,7 @@ const StudentAnalytics = () => {
                         <CardTitle className="text-sm font-medium text-muted-foreground">Best Subject</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-neon-pink">Mathematics</div>
+                        <div className="text-2xl font-bold text-neon-green">Mathematics</div>
                         <p className="text-xs text-muted-foreground mt-1">98% Average</p>
                     </CardContent>
                 </Card>
@@ -175,7 +175,7 @@ const StudentAnalytics = () => {
                 <Card className="glass-card">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <Award className="w-5 h-5 text-neon-pink" /> Key Strengths
+                            <Award className="w-5 h-5 text-neon-blue" /> Key Strengths
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -194,7 +194,7 @@ const StudentAnalytics = () => {
                 <Card className="glass-card">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <Target className="w-5 h-5 text-neon-cyan" /> Areas for Improvement
+                            <Target className="w-5 h-5 text-red-500" /> Areas for Improvement
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
