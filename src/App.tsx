@@ -8,7 +8,7 @@ import { AuthProvider } from "@/auth/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Login from "./pages/auth/Login";
-import Signup from "./pages/auth/Signup";
+
 import Index from "./pages/Index";
 
 import StudentDashboard from "./pages/student/Dashboard";
@@ -83,14 +83,7 @@ const App = () => (
                     </AuthRedirect>
                   }
                 />
-                <Route
-                  path="/signup"
-                  element={
-                    <AuthRedirect>
-                      <Signup />
-                    </AuthRedirect>
-                  }
-                />
+
 
                 {/* Student Protected Routes */}
                 <Route
@@ -272,12 +265,8 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/teacher/admin"
-                  element={
-                    <ProtectedRoute role="teacher">
-                      <AdminPanel />
-                    </ProtectedRoute>
-                  }
+                  path="/admin"
+                  element={<AdminPanel />}
                 />
                 <Route
                   path="/teacher/profile"

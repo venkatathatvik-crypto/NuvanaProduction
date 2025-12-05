@@ -182,7 +182,7 @@ const Attendance = () => {
                                 <div
                                   key={idx}
                                   className={`px-3 py-2 rounded-lg text-xs font-medium ${cls.status === "present"
-                                    ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30"
+                                    ? "bg-green-500/20 text-neon-cyan border border-green-500/30"
                                     : "bg-destructive/20 text-destructive border border-destructive/30"
                                     }`}
                                 >

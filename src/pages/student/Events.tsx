@@ -151,9 +151,8 @@ const Events = () => {
         </div>
 
         <Tabs defaultValue="assessments" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="assessments">Internal Assessments</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
             <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
             <TabsTrigger value="past">Past Events</TabsTrigger>
           </TabsList>
@@ -224,19 +223,19 @@ const Events = () => {
                                 </span>
                               )}
                             </div>
-                            <Badge 
+                            <Badge
                               variant={
                                 assessment.submissionStatus === "graded" ? "default" :
-                                assessment.submissionStatus === "pending" ? "secondary" : "outline"
+                                  assessment.submissionStatus === "pending" ? "secondary" : "outline"
                               }
                               className={
                                 assessment.submissionStatus === "graded" ? "bg-green-500/20 text-green-500 border-green-500/50" :
-                                assessment.submissionStatus === "pending" ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/50" :
-                                "bg-blue-500/20 text-blue-500 border-blue-500/50"
+                                  assessment.submissionStatus === "pending" ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/50" :
+                                    "bg-blue-500/20 text-blue-500 border-blue-500/50"
                               }
                             >
                               {assessment.submissionStatus === "graded" ? "Graded" :
-                               assessment.submissionStatus === "pending" ? "Submitted" : "Not Started"}
+                                assessment.submissionStatus === "pending" ? "Submitted" : "Not Started"}
                             </Badge>
                           </div>
                           <p className="text-muted-foreground mb-3">
@@ -300,82 +299,7 @@ const Events = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="upcoming" className="space-y-4 mt-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <Card className="glass-card p-6 mb-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                  <div>
-                    <p className="text-3xl font-bold text-primary">{upcomingEvents.length}</p>
-                    <p className="text-sm text-muted-foreground">Upcoming</p>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-bold text-destructive">
-                      {upcomingEvents.filter(e => e.urgent).length}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Urgent</p>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-bold text-secondary">
-                      {upcomingEvents.filter(e => e.type === "Academic").length}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Academic</p>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-bold text-accent">
-                      {upcomingEvents.filter(e => e.type !== "Academic").length}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Extra</p>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
 
-            {upcomingEvents.map((event, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + index * 0.05 }}
-              >
-                <Card className={`glass-card p-6 hover:neon-glow transition-all ${event.urgent ? 'border-destructive' : ''}`}>
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className={`p-4 rounded-lg ${getEventColor(event.color)} flex-shrink-0`}>
-                      <event.icon className="w-8 h-8" />
-                    </div>
-                    <div className="flex-grow">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h3 className="text-xl font-semibold">{event.title}</h3>
-                          {event.urgent && (
-                            <Badge variant="destructive" className="mt-1">Urgent</Badge>
-                          )}
-                        </div>
-                        <Badge variant="outline">{event.type}</Badge>
-                      </div>
-                      <p className="text-muted-foreground mb-3">{event.description}</p>
-                      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          {event.date}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          {event.time}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />
-                          {event.location}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
-          </TabsContent>
 
           <TabsContent value="deadlines" className="space-y-4 mt-6">
             {deadlines.map((deadline, index) => (

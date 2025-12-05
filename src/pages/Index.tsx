@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { BookOpen, Users } from "lucide-react";
+import { BookOpen, Users, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
@@ -118,6 +118,11 @@ const Index = () => {
           />
         </p>
       </motion.div>
+      <div className="fixed top-4 right-4 z-50">
+        <Button variant="default" className="neon-glow" size="icon" onClick={() => navigate('/admin')}>
+          <Shield className="w-5 h-5" />
+        </Button>
+      </div>
     </div>
   );
 };

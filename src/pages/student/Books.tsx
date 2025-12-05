@@ -1,9 +1,10 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, BookOpen, Download, Eye, FileText, Video } from "lucide-react";
+import { ArrowLeft, BookOpen, Download, Eye, FileText, Video, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/auth/AuthContext";
@@ -17,6 +18,7 @@ const Books = () => {
   const [files, setFiles] = useState<any[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [studentClassId, setStudentClassId] = useState<string | null>(null);
+  const [playingVideo, setPlayingVideo] = useState<any | null>(null);
 
   useEffect(() => {
     const fetchStudentBooks = async () => {
@@ -363,6 +365,15 @@ const Books = () => {
                                 <div className="flex gap-2">
                                   <Button
                                     size="sm"
+                                    variant="secondary"
+                                    className="glass hover:neon-glow"
+                                    onClick={() => setPlayingVideo(video)}
+                                  >
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Watch
+                                  </Button>
+                                  <Button
+                                    size="sm"
                                     className="neon-glow"
                                     onClick={() => handleDownload(video)}
                                   >
@@ -402,6 +413,26 @@ const Books = () => {
           </Card>
         </motion.div>
       </div>
+
+      <Dialog open={!!playingVideo} onOpenChange={(open) => !open && setPlayingVideo(null)}>
+        <DialogContent className="sm:max-w-[800px] glass-card border-neon-purple/20">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold neon-text">{playingVideo?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="aspect-video w-full mt-4 rounded-lg overflow-hidden bg-black shadow-2xl border border-white/10">
+            {playingVideo && (
+              <video
+                controls
+                autoPlay
+                className="w-full h-full"
+                src={playingVideo.storageUrl}
+              >
+                Your browser does not support the video tag.
+              </video>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

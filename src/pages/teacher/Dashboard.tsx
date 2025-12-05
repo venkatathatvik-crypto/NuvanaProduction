@@ -9,7 +9,6 @@ import {
   BarChart2,
   Mic,
   LogOut,
-  Shield,
   CheckSquare,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -59,7 +58,6 @@ const TeacherDashboard = () => {
     { label: "Manage Tests", icon: FileText, color: "text-green-500", path: "/teacher/tests" },
     { label: "Analytics", icon: BarChart2, color: "text-blue-500", path: "/teacher/analytics" },
     { label: "Voice Upload", icon: Mic, color: "text-green-500", path: "/teacher/voice-upload" },
-    { label: "Admin Panel", icon: Shield, color: "text-neon-purple", path: "/teacher/admin" },
     { label: "My Tasks", icon: CheckSquare, color: "text-green-500", path: "/teacher/tasks" },
   ];
 
@@ -191,6 +189,7 @@ const TeacherDashboard = () => {
             </ul>
           </Card>
         </motion.div>
+
       </div>
     </div>
   );

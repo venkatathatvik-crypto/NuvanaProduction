@@ -20,7 +20,9 @@ import { UserRole, authService } from "@/lib/auth"; // 👈 Import authService
 import { GraduationCap, School, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
+  email: z.string().email("Please enter a valid email address").refine((email) => email.endsWith("@nuvana.com"), {
+    message: "Only @nuvana.com emails are allowed",
+  }),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -202,17 +204,7 @@ const Login = () => {
                 </Button>
               </form>
             </CardContent>
-            <CardFooter className="flex justify-center">
-              <p className="text-sm text-muted-foreground">
-                Don't have an account?{" "}
-                <Link
-                  to="/signup"
-                  className="text-primary hover:underline font-medium"
-                >
-                  Sign up
-                </Link>
-              </p>
-            </CardFooter>
+
           </Card>
         </Tabs>
       </div>
