@@ -16,25 +16,28 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico"],
+      includeAssets: ["favicon.ico", "logo.png"],
       manifest: {
         name: "Nuvana360",
         short_name: "Nuvana360",
         description:
           "Your complete 360° academic companion for learning, teaching, and thriving",
-        theme_color: "#0a0a0a",
+        theme_color: "#8b5cf6",
         background_color: "#0a0a0a",
         display: "standalone",
+        start_url: "/",
         icons: [
           {
-            src: "/placeholder.svg",
+            src: "/logo.png",
             sizes: "192x192",
-            type: "image/svg+xml",
+            type: "image/png",
+            purpose: "any maskable",
           },
           {
-            src: "/placeholder.svg",
+            src: "/logo.png",
             sizes: "512x512",
-            type: "image/svg+xml",
+            type: "image/png",
+            purpose: "any maskable",
           },
         ],
       },
