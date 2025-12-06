@@ -8,6 +8,7 @@ import { AuthProvider } from "@/auth/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Login from "./pages/auth/Login";
+import AdminLogin from "./pages/auth/AdminLogin";
 
 import Index from "./pages/Index";
 
@@ -30,6 +31,7 @@ import TestDetails from "./pages/teacher/TestDetails";
 import AnalyticsDashboard from "./pages/teacher/Analytics";
 import VoiceUpload from "./pages/teacher/VoiceUpload";
 import AdminPanel from "./pages/teacher/AdminPanel";
+import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 
 import StudentTests from "./pages/student/Tests";
 import TestTake from "./pages/student/TestTake";
@@ -83,6 +85,11 @@ const App = () => (
                     </AuthRedirect>
                   }
                 />
+                <Route
+                  path="/admin-login"
+                  element={<AdminLogin />}
+                />
+
 
 
                 {/* Student Protected Routes */}
@@ -266,7 +273,11 @@ const App = () => (
                 />
                 <Route
                   path="/admin"
-                  element={<AdminPanel />}
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminPanel />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/teacher/profile"
@@ -283,6 +294,12 @@ const App = () => (
                       <TeacherTasks />
                     </ProtectedRoute>
                   }
+                />
+                
+                {/* Super Admin Route - Unprotected for onboarding */}
+                <Route
+                  path="/super-admin"
+                  element={<SuperAdminDashboard />}
                 />
 
                 {/* Catch all */}

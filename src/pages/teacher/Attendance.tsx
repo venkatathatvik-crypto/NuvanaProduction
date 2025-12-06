@@ -45,7 +45,7 @@ const TeacherAttendance = () => {
       }
 
       try {
-        const classResponse = await getTeacherClasses(profile.id);
+        const classResponse = await getTeacherClasses(profile.id, profile.school_id);
         if (classResponse && classResponse.length > 0) {
           setClasses(classResponse);
           setSelectedClass(classResponse[0]);
@@ -144,7 +144,8 @@ const TeacherAttendance = () => {
         selectedClass.class_id,
         selectedDate,
         students,
-        profile.id
+        profile.id,
+        profile.school_id
       );
       const presentCount = students.filter((s) => s.present).length;
       toast.success(

@@ -23,8 +23,8 @@ const Index = () => {
     };
 
     const fetchExamTypes = async () => {
-      const response = await getExamTypes();
-      console.log("Fetched exam types:", response);
+      // const response = await getExamTypes();
+      console.log("Fetched exam types: skipped - needs school_id");
     };
 
     const fetchSubjects = async () => {

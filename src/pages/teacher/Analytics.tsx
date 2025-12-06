@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TrendingUp, Users, BookOpen, AlertCircle, Clock, CheckCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { getTeacherClasses, FlattenedClass } from "@/services/academic";
+import { getTeacherClasses, FlattenedClass, getChapterTopicAnalytics } from "@/services/academic";
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
@@ -298,6 +298,31 @@ const AnalyticsDashboard = () => {
 
     // new state for topic/chapter analytics
     const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+    const [analyticsData, setAnalyticsData] = useState<{
+        chapters: { name: string; avgScore: number; totalQuestions: number }[];
+        topics: { name: string; avgScore: number; totalQuestions: number; chapters: string[] }[];
+    }>({ chapters: [], topics: [] });
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+    // Fetch analytics data when class changes
+    useEffect(() => {
+        const fetchAnalyticsData = async () => {
+            if (!selectedClass) return;
+            
+            setAnalyticsLoading(true);
+            try {
+                const data = await getChapterTopicAnalytics(selectedClass.class_id);
+                setAnalyticsData(data);
+            } catch (error: any) {
+                console.error('Error fetching analytics:', error);
+                toast.error('Failed to load analytics data');
+            } finally {
+                setAnalyticsLoading(false);
+            }
+        };
+
+        fetchAnalyticsData();
+    }, [selectedClass]);
 
     useEffect(() => {
         const fetchClasses = async () => {
@@ -309,7 +334,7 @@ const AnalyticsDashboard = () => {
                 return;
             }
             try {
-                const res = await getTeacherClasses(profile.id);
+                const res = await getTeacherClasses(profile.id, profile.school_id);
                 setClasses(res || []);
                 setSelectedClass(res?.[0]);
             } catch {
@@ -350,8 +375,9 @@ const AnalyticsDashboard = () => {
             </motion.div>
 
             <Tabs defaultValue="class" className="space-y-6">
-                <TabsList className="grid grid-cols-3 w-full max-w-lg">
+                <TabsList className="grid grid-cols-4 w-full max-w-xl">
                     <TabsTrigger value="class">Class Insights</TabsTrigger>
+                    <TabsTrigger value="topics">Chapter & Topics</TabsTrigger>
                     <TabsTrigger value="student">Student Analysis</TabsTrigger>
                     <TabsTrigger value="test">Test Metrics</TabsTrigger>
                 </TabsList>
@@ -610,6 +636,183 @@ const AnalyticsDashboard = () => {
                             </CardContent>
                         </Card>
                     </div>
+                </TabsContent>
+
+                {/* ---------------- CHAPTER & TOPIC ANALYTICS ---------------- */}
+                <TabsContent value="topics" className="space-y-6">
+                    {analyticsLoading ? (
+                        <div className="flex justify-center p-20">
+                            <LoadingSpinner />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* CHAPTER PERFORMANCE */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Chapter Performance</CardTitle>
+                                    <CardDescription>Average scores by chapter (sorted by performance)</CardDescription>
+                                </CardHeader>
+                                <CardContent className="h-[400px]">
+                                    {analyticsData.chapters.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={analyticsData.chapters} layout="vertical">
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis type="number" domain={[0, 100]} />
+                                                <YAxis dataKey="name" type="category" width={100} />
+                                                <Tooltip 
+                                                    content={({ active, payload }) => {
+                                                        if (active && payload && payload[0]) {
+                                                            const data = payload[0].payload;
+                                                            return (
+                                                                <div className="bg-background border rounded p-2">
+                                                                    <p className="font-semibold">{data.name}</p>
+                                                                    <p className="text-sm">Average: {data.avgScore}%</p>
+                                                                    <p className="text-sm">Questions: {data.totalQuestions}</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
+                                                <Bar dataKey="avgScore" fill="#8884d8" radius={[0, 4, 4, 0]}>
+                                                    {analyticsData.chapters.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#8884d8" : "#ff7373"} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            No chapter data available. Make sure tests have chapter information.
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* TOPIC PERFORMANCE */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Topic Performance</CardTitle>
+                                    <CardDescription>Average scores by topic (sorted by performance)</CardDescription>
+                                </CardHeader>
+                                <CardContent className="h-[400px]">
+                                    {analyticsData.topics.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={analyticsData.topics} layout="vertical">
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis type="number" domain={[0, 100]} />
+                                                <YAxis dataKey="name" type="category" width={100} />
+                                                <Tooltip 
+                                                    content={({ active, payload }) => {
+                                                        if (active && payload && payload[0]) {
+                                                            const data = payload[0].payload;
+                                                            return (
+                                                                <div className="bg-background border rounded p-2">
+                                                                    <p className="font-semibold">{data.name}</p>
+                                                                    <p className="text-sm">Average: {data.avgScore}%</p>
+                                                                    <p className="text-sm">Questions: {data.totalQuestions}</p>
+                                                                    <p className="text-xs text-muted-foreground">Chapters: {data.chapters.join(', ')}</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
+                                                <Bar dataKey="avgScore" fill="#82ca9d" radius={[0, 4, 4, 0]}>
+                                                    {analyticsData.topics.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#82ca9d" : "#ff7373"} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            No topic data available. Make sure tests have topic information.
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
+                    {/* WEAK AREAS IDENTIFICATION */}
+                    {!analyticsLoading && (analyticsData.chapters.length > 0 || analyticsData.topics.length > 0) && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* WEAK CHAPTERS */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <AlertCircle className="w-5 h-5 text-red-500" />
+                                        Weak Chapters (Need Attention)
+                                    </CardTitle>
+                                    <CardDescription>Chapters with average score below 60%</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {analyticsData.chapters.filter(c => c.avgScore < 60).length > 0 ? (
+                                        <div className="space-y-3">
+                                            {analyticsData.chapters
+                                                .filter(c => c.avgScore < 60)
+                                                .sort((a, b) => a.avgScore - b.avgScore)
+                                                .map((chapter, index) => (
+                                                    <div key={index} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded-lg">
+                                                        <div>
+                                                            <p className="font-medium">{chapter.name}</p>
+                                                            <p className="text-sm text-muted-foreground">{chapter.totalQuestions} questions</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="font-bold text-red-600">{chapter.avgScore}%</p>
+                                                            <p className="text-xs text-muted-foreground">Average</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-center text-muted-foreground py-8">
+                                            Great! No chapters need immediate attention.
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* WEAK TOPICS */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <AlertCircle className="w-5 h-5 text-orange-500" />
+                                        Weak Topics (Need Focus)
+                                    </CardTitle>
+                                    <CardDescription>Topics with average score below 60%</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {analyticsData.topics.filter(t => t.avgScore < 60).length > 0 ? (
+                                        <div className="space-y-3">
+                                            {analyticsData.topics
+                                                .filter(t => t.avgScore < 60)
+                                                .sort((a, b) => a.avgScore - b.avgScore)
+                                                .map((topic, index) => (
+                                                    <div key={index} className="flex items-center justify-between p-3 bg-orange-50 dark: bg-orange-950/20 rounded-lg">
+                                                        <div>
+                                                            <p className="font-medium">{topic.name}</p>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                {topic.chapters.join(', ')} • {topic.totalQuestions} questions
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="font-bold text-orange-600">{topic.avgScore}%</p>
+                                                            <p className="text-xs text-muted-foreground">Average</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-center text-muted-foreground py-8">
+                                            Excellent! All topics are performing well.
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
                 </TabsContent>
             </Tabs>
         </div>

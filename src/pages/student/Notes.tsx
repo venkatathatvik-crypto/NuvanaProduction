@@ -48,7 +48,7 @@ const Notes = () => {
         const studentData = await getStudentData(profile.id);
         if (studentData?.class_id) {
           // Fetch voice notes for this class
-          const notesData = await getStudentVoiceNotes(studentData.class_id);
+          const notesData = await getStudentVoiceNotes(studentData.class_id, profile.school_id);
           setVoiceNotes(notesData);
         }
       } catch (error) {

@@ -120,10 +120,11 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
 
             try {
                 const [classesData, examTypesData] = await Promise.all([
-                    getTeacherClasses(profile.id),
-                    getExamTypes(),
+                    getTeacherClasses(profile.id, profile.school_id),
+                    getExamTypes(profile.school_id),
                 ]);
 
+                console.log("Classes data loaded:", classesData);
                 setClasses(classesData || []);
 
                 // Add defaultExamType to options if not present
@@ -167,7 +168,9 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                         );
                         if (selectedClass) {
                             try {
+                                console.log("Fetching subjects for grade_id:", selectedClass.grade_id);
                                 const subjectsData = await getSubjects(selectedClass.grade_id);
+                                console.log("Subjects data received:", subjectsData);
                                 setSubjects(subjectsData || []);
                             } catch (error) {
                                 console.error("Failed to fetch subjects for initial class", error);
@@ -197,7 +200,8 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
 
                 }
             } catch (error) {
-                console.error("Failed to fetch initial data", error);
+                console.error("Failed to fetch initial data:", error);
+                console.error("Error details:", error);
                 toast.error("Failed to load form data");
             }
         };
@@ -225,7 +229,9 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
             }
 
             try {
+                console.log("Class changed - fetching subjects for grade_id:", selectedClass.grade_id);
                 const subjectsData = await getSubjects(selectedClass.grade_id);
+                console.log("Subjects data received for class change:", subjectsData);
                 setSubjects(subjectsData || []);
 
                 if (initialData && (initialData as any).subject) {

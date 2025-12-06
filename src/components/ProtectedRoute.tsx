@@ -15,8 +15,15 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
   // Wait for initial auth check
   if (loading) return <LoadingSpinner />;
 
-  // If no session, redirect to login
-  if (!session) return <Navigate to="/login" />;
+  // If no session, redirect based on required role
+  if (!session) {
+    // School admins should use admin login page
+    if (role === "school_admin") {
+      return <Navigate to="/admin-login" />;
+    }
+    // Everyone else uses regular login
+    return <Navigate to="/login" />;
+  }
 
   // If we have a session but profile is still loading, wait
   if (profileLoading) return <LoadingSpinner />;
@@ -24,7 +31,10 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
   // If role is required but profile doesn't exist or role doesn't match
   if (role) {
     if (!profile) {
-      // Profile failed to load, redirect to login
+      // Profile failed to load, redirect to appropriate login
+      if (role === "school_admin") {
+        return <Navigate to="/admin-login" />;
+      }
       return <Navigate to="/login" />;
     }
     if (profile.role !== role) {
@@ -36,3 +46,4 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
 };
 
 export default ProtectedRoute;
+

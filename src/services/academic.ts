@@ -61,6 +61,7 @@ interface UploadTeacherFileParams {
   classId: string;
   gradeSubjectId: string;
   teacherId: string;
+  schoolId: string;
   fileType: 'pdf' | 'video';
 }
 
@@ -122,7 +123,7 @@ interface AnnouncementInsertResult {
   id: string;
 }
 
-export const getClasses = async (): Promise<FlattenedClass[]> => {
+export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> => {
   const { data: rawData, error } = await supabase.from("classes").select(`
     id,
     name,
@@ -130,7 +131,8 @@ export const getClasses = async (): Promise<FlattenedClass[]> => {
       id,
       name
     )
-  `);
+  `)
+  .eq("school_id", schoolId);
 
   if (error) {
     console.error("Error fetching classes:", error);
@@ -138,7 +140,7 @@ export const getClasses = async (): Promise<FlattenedClass[]> => {
   }
 
   if (!rawData) {
-    return null;
+    return [];
   }
 
   // 3. Client-Side Mapping (Transformation)
@@ -160,8 +162,9 @@ export const getClasses = async (): Promise<FlattenedClass[]> => {
   return flattenedClasses;
 };
 
-export const getExamTypes = async (): Promise<string[]> => {
-  const { data, error } = await supabase.from("exam_types").select("name");
+export const getExamTypes = async (schoolId: string): Promise<string[]> => {
+  const { data, error } = await supabase.from("exam_types").select("name")
+    .eq("school_id", schoolId);
   if (error) {
     console.error("Error fetching exam types:", error);
     throw new Error("Failed to load exam types.");
@@ -214,10 +217,11 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
     .filter((name): name is string => name !== null); // Filter out any null values
 };
 
-export const getFileCategories = async (): Promise<FileCategoryOption[]> => {
+export const getFileCategories = async (schoolId: string): Promise<FileCategoryOption[]> => {
   const { data, error } = await supabase
     .from("file_categories")
     .select("id, name")
+    .eq("school_id", schoolId)
     .order("name");
   if (error) {
     console.error("Error fetching file categories:", error);
@@ -233,7 +237,8 @@ export const getFileCategories = async (): Promise<FileCategoryOption[]> => {
 };
 
 export const getTeacherClasses = async (
-  teacherId: string
+  teacherId: string,
+  schoolId: string
 ): Promise<FlattenedClass[]> => {
   console.log("[getTeacherClasses] Filtering by teacher_id:", teacherId);
   const { data, error } = await supabase
@@ -251,7 +256,8 @@ export const getTeacherClasses = async (
       )
     `
     )
-    .eq("teacher_id", teacherId);
+    .eq("teacher_id", teacherId)
+    .eq("school_id", schoolId);
 
   if (error) {
     console.error("Error fetching teacher classes:", error);
@@ -390,7 +396,8 @@ const mapFileRecordToItem = (record: TeacherFileRow): TeacherFileItem => {
 };
 
 export const getTeacherFiles = async (
-  teacherId: string
+  teacherId: string,
+  schoolId: string
 ): Promise<TeacherFileItem[]> => {
   const { data, error } = await supabase
     .from("files")
@@ -413,6 +420,7 @@ export const getTeacherFiles = async (
     `
     )
     .eq("teacher_id", teacherId)
+    .eq("school_id", schoolId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -443,7 +451,7 @@ const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5MB for PDFs
 export const uploadTeacherFile = async (
   params: UploadTeacherFileParams
 ): Promise<TeacherFileItem> => {
-  const { file, teacherId, classId, gradeSubjectId, categoryId, title, fileType } =
+  const { file, teacherId, classId, gradeSubjectId, categoryId, title, fileType, schoolId } =
     params;
 
   // Validate file type
@@ -487,6 +495,7 @@ export const uploadTeacherFile = async (
       grade_subject_id: gradeSubjectId,
       storage_url: storageData.path,
       teacher_id: teacherId,
+      school_id: schoolId,
       file_type: fileType,
     })
     .select(
@@ -641,7 +650,8 @@ const mapAnnouncementRecord = (
 };
 
 export const getTeacherAnnouncements = async (
-  teacherId: string
+  teacherId: string,
+  schoolId: string
 ): Promise<TeacherAnnouncement[]> => {
   const { data, error } = await supabase
     .from("announcements")
@@ -662,6 +672,7 @@ export const getTeacherAnnouncements = async (
     `
     )
     .eq("teacher_id", teacherId)
+    .eq("school_id", schoolId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -682,12 +693,13 @@ interface CreateAnnouncementParams {
   isUrgent: boolean;
   classIds: string[];
   teacherId: string;
+  schoolId: string;
 }
 
 export const createTeacherAnnouncement = async (
   params: CreateAnnouncementParams
 ): Promise<TeacherAnnouncement> => {
-  const { title, message, isUrgent, classIds, teacherId } = params;
+  const { title, message, isUrgent, classIds, teacherId, schoolId } = params;
 
   const { data: announcementData, error: announcementError } = await supabase
     .from("announcements")
@@ -696,6 +708,7 @@ export const createTeacherAnnouncement = async (
       message,
       is_urgent: isUrgent,
       teacher_id: teacherId,
+      school_id: schoolId,
     })
     .select("id, created_at")
     .single<AnnouncementInsertResult>();
@@ -802,7 +815,7 @@ export const getStudentData = async (
   studentId: string
 ): Promise<StudentData | null> => {
   const { data, error } = await supabase
-    .from("students")
+    .from("profiles")
     .select(
       `
       id,
@@ -819,6 +832,7 @@ export const getStudentData = async (
     `
     )
     .eq("id", studentId)
+    .eq("role_id", 4)
     .single();
 
   if (error) {
@@ -851,7 +865,8 @@ export const getStudentData = async (
 
 // Get files filtered by class_id for students
 export const getStudentFiles = async (
-  classId: string
+  classId: string,
+  schoolId: string
 ): Promise<StudentFileItem[]> => {
   const { data, error } = await supabase
     .from("files")
@@ -872,6 +887,7 @@ export const getStudentFiles = async (
     `
     )
     .eq("class_id", classId)
+    .eq("school_id", schoolId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -899,7 +915,8 @@ export interface StudentVoiceNote {
 }
 
 export const getStudentVoiceNotes = async (
-  classId: string
+  classId: string,
+  schoolId: string
 ): Promise<StudentVoiceNote[]> => {
   const { data, error } = await supabase
     .from("voice_notes")
@@ -918,6 +935,7 @@ export const getStudentVoiceNotes = async (
     `
     )
     .eq("class_id", classId)
+    .eq("school_id", schoolId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -1077,6 +1095,7 @@ interface CreateTestParams {
   gradeSubjectId: string;
   examTypeId: number;
   teacherId: string;
+  schoolId: string;
   dueDate?: string;
   questions: {
     text: string;
@@ -1164,6 +1183,7 @@ export const createTeacherTest = async (
     gradeSubjectId,
     examTypeId,
     teacherId,
+    schoolId,
     dueDate,
     questions,
   } = params;
@@ -1180,6 +1200,7 @@ export const createTeacherTest = async (
       grade_subject_id: gradeSubjectId,
       exam_type_id: examTypeId,
       teacher_id: teacherId,
+      school_id: schoolId,
       due_date: dueDate || null,
     })
     .select("id, created_at")
@@ -1784,9 +1805,10 @@ export const getStudentTestForAttempt = async (
 
   // Verify student belongs to the test's class
   const { data: studentData, error: studentError } = await supabase
-    .from("students")
+    .from("profiles")
     .select("class_id")
     .eq("id", studentId)
+    .eq("role_id", 4)
     .single();
 
   if (studentError || !studentData || studentData.class_id !== testData.class_id) {
@@ -2227,18 +2249,10 @@ export const getStudentsInClass = async (
   classId: string
 ): Promise<ClassStudentInfo[]> => {
   const { data, error } = await supabase
-    .from("students")
-    .select(
-      `
-      id,
-      roll_number,
-      profiles (
-        name
-      )
-    `
-    )
+    .from("profiles")
+    .select("id, name, roll_number")
     .eq("class_id", classId)
-    .eq("is_active", true)
+    .eq("role_id", 4)
     .order("roll_number", { ascending: true });
 
   if (error) {
@@ -2248,17 +2262,11 @@ export const getStudentsInClass = async (
 
   if (!data) return [];
 
-  return data.map((student: any) => {
-    const profile = Array.isArray(student.profiles)
-      ? student.profiles[0]
-      : student.profiles;
-
-    return {
-      id: student.id,
-      name: profile?.name || "Unknown",
-      rollNo: student.roll_number || "",
-    };
-  });
+  return data.map((student: any) => ({
+    id: student.id,
+    name: student.name || "Unknown",
+    rollNo: student.roll_number || "",
+  }));
 };
 
 // ==================== TEACHER GRADING ====================
@@ -2388,6 +2396,153 @@ export interface SubmissionToGrade {
 }
 
 // Get submissions for a test (for teacher grading)
+// Get chapter and topic-wise performance analytics for a class
+export const getChapterTopicAnalytics = async (
+  classId: string,
+  subjectId?: string
+): Promise<{
+  chapters: { name: string; avgScore: number; totalQuestions: number }[];
+  topics: { name: string; avgScore: number; totalQuestions: number; chapters: string[] }[];
+}> => {
+  try {
+    // First get all tests for this class
+    const { data: testsData, error: testsError } = await supabase
+      .from('tests')
+      .select('id, title, grade_subject_id')
+      .eq('class_id', classId);
+
+    if (testsError) throw testsError;
+    if (!testsData || testsData.length === 0) {
+      return { chapters: [], topics: [] };
+    }
+
+    // Get test IDs
+    const testIds = testsData.map(test => test.id);
+
+    // Get all submissions for these tests
+    const { data: submissions, error: submissionsError } = await supabase
+      .from('test_submissions')
+      .select('id, total_marks_obtained, test_id')
+      .in('test_id', testIds)
+      .not('total_marks_obtained', 'is', null);
+
+    if (submissionsError) throw submissionsError;
+    if (!submissions || submissions.length === 0) {
+      return { chapters: [], topics: [] };
+    }
+
+    // Fetch questions for all tests
+    const { data: questionsData, error: questionsError } = await supabase
+      .from('questions')
+      .select('id, test_id, chapter, topic, marks')
+      .in('test_id', testIds);
+
+    if (questionsError) throw questionsError;
+
+    // Create a map of questions by test_id
+    const questionsByTest: Record<string, any[]> = {};
+    if (questionsData) {
+      questionsData.forEach(question => {
+        if (!questionsByTest[question.test_id]) {
+          questionsByTest[question.test_id] = [];
+        }
+        questionsByTest[question.test_id].push(question);
+      });
+    }
+
+    // Collect all questions with their performance data
+    const questionPerformance: Record<string, {
+      chapter: string;
+      topic: string;
+      totalMarks: number;
+      obtainedMarks: number;
+      count: number;
+    }> = {};
+
+    submissions.forEach(submission => {
+      const testQuestions = questionsByTest[submission.test_id] || [];
+      
+      testQuestions.forEach((question: any) => {
+        const key = `${question.chapter || 'Unknown'}-${question.topic || 'Unknown'}`;
+        
+        if (!questionPerformance[key]) {
+          questionPerformance[key] = {
+            chapter: question.chapter || 'Unknown',
+            topic: question.topic || 'Unknown',
+            totalMarks: 0,
+            obtainedMarks: 0,
+            count: 0
+          };
+        }
+        
+        questionPerformance[key].totalMarks += question.marks || 0;
+        questionPerformance[key].count += 1;
+      });
+      
+      // Distribute obtained marks proportionally across questions
+      const totalTestMarks = testQuestions.reduce((sum: number, q: any) => sum + (q.marks || 0), 0);
+      if (totalTestMarks > 0) {
+        const marksPerPoint = (submission.total_marks_obtained || 0) / totalTestMarks;
+        
+        testQuestions.forEach((question: any) => {
+          const key = `${question.chapter || 'Unknown'}-${question.topic || 'Unknown'}`;
+          if (questionPerformance[key]) {
+            questionPerformance[key].obtainedMarks += (question.marks || 0) * marksPerPoint;
+          }
+        });
+      }
+    });
+
+    // Aggregate by chapter
+    const chapterMap: Record<string, { totalScore: number; totalMarks: number; count: number }> = {};
+    
+    // Aggregate by topic
+    const topicMap: Record<string, { totalScore: number; totalMarks: number; count: number; chapters: Set<string> }> = {};
+
+    Object.values(questionPerformance).forEach(qp => {
+      // Chapter aggregation
+      if (!chapterMap[qp.chapter]) {
+        chapterMap[qp.chapter] = { totalScore: 0, totalMarks: 0, count: 0 };
+      }
+      chapterMap[qp.chapter].totalScore += qp.obtainedMarks;
+      chapterMap[qp.chapter].totalMarks += qp.totalMarks;
+      chapterMap[qp.chapter].count += qp.count;
+
+      // Topic aggregation
+      if (!topicMap[qp.topic]) {
+        topicMap[qp.topic] = { totalScore: 0, totalMarks: 0, count: 0, chapters: new Set() };
+      }
+      topicMap[qp.topic].totalScore += qp.obtainedMarks;
+      topicMap[qp.topic].totalMarks += qp.totalMarks;
+      topicMap[qp.topic].count += qp.count;
+      topicMap[qp.topic].chapters.add(qp.chapter);
+    });
+
+    // Convert to arrays and calculate averages
+    const chapters = Object.entries(chapterMap)
+      .map(([name, data]) => ({
+        name,
+        avgScore: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0,
+        totalQuestions: data.count
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    const topics = Object.entries(topicMap)
+      .map(([name, data]) => ({
+        name,
+        avgScore: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0,
+        totalQuestions: data.count,
+        chapters: Array.from(data.chapters)
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    return { chapters, topics };
+  } catch (error) {
+    console.error('Error fetching chapter/topic analytics:', error);
+    throw new Error('Failed to load analytics data');
+  }
+};
+
 export const getTestSubmissionsForGrading = async (
   testId: string
 ): Promise<SubmissionToGrade[]> => {
@@ -2401,9 +2556,9 @@ export const getTestSubmissionsForGrading = async (
       submitted_at,
       is_graded,
       total_marks_obtained,
-      students (
+      profiles!student_id (
         id,
-        profiles ( name ),
+        name,
         roll_number
       )
     `
@@ -2468,8 +2623,8 @@ export const getTestSubmissionsForGrading = async (
       });
     }
 
-    const student = sub.students as any;
-    const studentName = student?.profiles?.name || "Unknown";
+    const student = sub.profiles as any;
+    const studentName = student?.name || "Unknown";
     const studentRollNo = student?.roll_number || "";
 
     submissions.push({
@@ -2577,6 +2732,7 @@ interface UploadVoiceNoteParams {
   classId: string;
   gradeSubjectId: string;
   teacherId: string;
+  schoolId: string;
   durationSeconds: number;
 }
 
@@ -2610,7 +2766,8 @@ const mapVoiceNoteRecord = (record: VoiceNoteRow): TeacherVoiceNote => {
 
 // Get all voice notes for a teacher
 export const getTeacherVoiceNotes = async (
-  teacherId: string
+  teacherId: string,
+  schoolId: string
 ): Promise<TeacherVoiceNote[]> => {
   const { data, error } = await supabase
     .from("voice_notes")
@@ -2622,6 +2779,8 @@ export const getTeacherVoiceNotes = async (
       duration_seconds,
       file_size_bytes,
       created_at,
+      class_id,
+      grade_subject_id,
       classes ( id, name ),
       grade_subjects (
         subjects_master ( name )
@@ -2629,6 +2788,7 @@ export const getTeacherVoiceNotes = async (
     `
     )
     .eq("teacher_id", teacherId)
+    .eq("school_id", schoolId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -2647,7 +2807,7 @@ export const getTeacherVoiceNotes = async (
 export const uploadTeacherVoiceNote = async (
   params: UploadVoiceNoteParams
 ): Promise<TeacherVoiceNote> => {
-  const { file, teacherId, classId, gradeSubjectId, title, durationSeconds } =
+  const { file, teacherId, classId, gradeSubjectId, title, durationSeconds, schoolId } =
     params;
 
   // Validate file type (audio files)
@@ -2722,6 +2882,7 @@ export const uploadTeacherVoiceNote = async (
       duration_seconds: durationSeconds,
       file_size_bytes: file.size,
       teacher_id: teacherId,
+      school_id: schoolId,
     })
     .select(
       `
@@ -2820,22 +2981,10 @@ export const getStudentsByClass = async (
   classId: string
 ): Promise<StudentAttendance[]> => {
   const { data, error } = await supabase
-    .from("students")
-    .select(
-      `
-      id,
-      roll_number,
-      profiles (
-        name
-      ),
-      classes (
-        id,
-        name
-      )
-    `
-    )
+    .from("profiles")
+    .select("id, name, roll_number")
     .eq("class_id", classId)
-    .eq("is_active", true)
+    .eq("role_id", 4) // role_id 4 = student
     .order("roll_number", { ascending: true });
 
   if (error) {
@@ -2847,18 +2996,12 @@ export const getStudentsByClass = async (
     return [];
   }
 
-  return data.map((student: any) => {
-    const profile = Array.isArray(student.profiles)
-      ? student.profiles[0]
-      : student.profiles;
-
-    return {
-      id: student.id,
-      name: profile?.name || "Unknown Student",
-      roll_number: student.roll_number || "",
-      present: false, // Default to absent, will be updated from attendance records
-    };
-  });
+  return data.map((student: any) => ({
+    id: student.id,
+    name: student.name || "Unknown Student",
+    roll_number: student.roll_number || "",
+    present: false, // Default to absent, will be updated from attendance records
+  }));
 };
 
 // Fetch existing attendance records for a specific date and class
@@ -2893,7 +3036,8 @@ export const saveAttendance = async (
   classId: string,
   attendanceDate: string,
   students: StudentAttendance[],
-  teacherId: string
+  teacherId: string,
+  schoolId: string
 ): Promise<void> => {
   // Delete existing attendance records for the specific students on this date (to avoid duplicates)
   const studentIds = students.map((s) => s.id);
@@ -2914,6 +3058,7 @@ export const saveAttendance = async (
     attendance_date: attendanceDate,
     status: student.present ? "present" : "absent",
     taken_by: teacherId,
+    school_id: schoolId,
     recorded_at: new Date().toISOString(),
   }));
 
@@ -2943,7 +3088,7 @@ export const getStudentAttendanceBySubject = async (
   try {
     // First get student's class and grade level
     const { data: studentData, error: studentError } = await supabase
-      .from("students")
+      .from("profiles")
       .select(
         `
         class_id,
@@ -2953,6 +3098,7 @@ export const getStudentAttendanceBySubject = async (
       `
       )
       .eq("id", studentId)
+      .eq("role_id", 4)
       .single();
 
     if (studentError) {
@@ -3102,9 +3248,10 @@ export const getStudentPendingTestsCount = async (
   try {
     // Get student's class_id
     const { data: studentData, error: studentError } = await supabase
-      .from("students")
+      .from("profiles")
       .select("class_id")
       .eq("id", studentId)
+      .eq("role_id", 4)
       .single();
 
     if (studentError || !studentData) {
@@ -3157,9 +3304,10 @@ export const getStudentPendingAssessmentsCount = async (
   try {
     // Get student's class_id
     const { data: studentData, error: studentError } = await supabase
-      .from("students")
+      .from("profiles")
       .select("class_id")
       .eq("id", studentId)
+      .eq("role_id", 4)
       .single();
 
     if (studentError || !studentData) {

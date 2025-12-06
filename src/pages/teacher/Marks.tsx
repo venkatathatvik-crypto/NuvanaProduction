@@ -69,8 +69,8 @@ const TeacherMarks = () => {
 
       try {
         const [classResponse, examResponse, queueResponse] = await Promise.all([
-          getTeacherClasses(profile.id),
-          getExamTypes(),
+          getTeacherClasses(profile.id, profile.school_id),
+          getExamTypes(profile.school_id),
           getTeacherGradingQueue(profile.id),
         ]);
 

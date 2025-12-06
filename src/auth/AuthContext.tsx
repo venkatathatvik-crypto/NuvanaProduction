@@ -31,26 +31,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  ////console.log("%c🔵 AuthContext Mounted", "color: dodgerblue");
+  console.log("%c🔵 AuthContext Mounted", "color: dodgerblue");
 
   useEffect(() => {
-    ////console.log("%c🔍 Checking existing Supabase session...", "color: orange");
+    console.log("%c🔍 Checking existing Supabase session...", "color: orange");
 
     supabase.auth.getSession().then(async ({ data, error }) => {
-      //console.log("➡️ getSession() response:", data, error);
+      console.log("➡️ getSession() response:", data, error);
 
       if (error) console.error("❌ Error getting session:", error);
 
       setSession(data.session);
-      //console.log("✔️ Session set to:", data.session);
+      console.log("✔️ Session set to:", data.session);
 
       if (data.session?.user) {
-        //console.log("📌 User found in session:", data.session.user.id);
+        console.log("📌 User found in session:", data.session.user.id);
         setProfileLoading(true);
         await fetchUserProfile(data.session.user.id);
         setProfileLoading(false);
       } else {
-        //console.log("⚠️ No user found in initial session.");
+        console.log("⚠️ No user found in initial session.");
         setProfileLoading(false);
       }
 
@@ -60,24 +60,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Listen to login/logout/session refresh
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        //console.log(
-        //   "%c🔄 Auth state changed:",
-        //   "color: cyan",
-        //   event,
-        //   newSession
-        // );
+        console.log(
+           "%c🔄 Auth state changed:",
+           "color: cyan",
+           event,
+           newSession
+         );
 
         setSession(newSession);
-        //console.log("✔️ Updated session:", newSession);
+        console.log("✔️ Updated session:", newSession);
 
         if (newSession?.user) {
-          //console.log("📌 Fetching profile for user:", newSession.user.id);
+          console.log("📌 Fetching profile for user:", newSession.user.id);
           setProfileLoading(true);
           fetchUserProfile(newSession.user.id).finally(() => {
             setProfileLoading(false);
           });
         } else {
-          //console.log("⚠️ No session user → clearing profile.");
+          console.log("⚠️ No session user → clearing profile.");
           setProfile(null);
           setProfileLoading(false);
         }
@@ -85,22 +85,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     );
 
     return () => {
-      //console.log("%c🧹 Cleaning up AuthListener", "color: gray");
+      console.log("%c🧹 Cleaning up AuthListener", "color: gray");
       listener.subscription.unsubscribe();
     };
   }, []);
 
   // Fetch profile from Supabase
   const fetchUserProfile = async (userId: string) => {
-    //console.log("%c📥 Fetching profile for ID: " + userId, "color: violet");
+    console.log("%c📥 Fetching profile for ID: " + userId, "color: violet");
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("*, user_roles(role)")
       .eq("id", userId)
       .single();
 
-    //console.log("➡️ Supabase Profile Fetch Result:", { data, error });
+    console.log("➡️ Supabase Profile Fetch Result:", { data, error });
 
     if (error) {
       console.error("❌ Profile fetch error:", error);
@@ -114,8 +114,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return;
     }
 
-    setProfile(data);
-    //console.log("✔️ Profile state updated to:", data);
+    // Transform to UserProfile type
+    // @ts-ignore
+    const userRole = data.user_roles?.role as UserRole;
+    
+    const formattedProfile: UserProfile = {
+      ...data,
+      role: userRole
+    };
+
+    setProfile(formattedProfile);
+    console.log("✔️ Profile state updated to:", formattedProfile);
   };
 
   // Logout function
@@ -129,7 +138,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setProfile(null);
   };
 
-  //console.log("🔎 Current Auth State:", { session, profile, loading, profileLoading });
+  console.log("🔎 Current Auth State:", { session, profile, loading, profileLoading });
 
   return (
     <AuthContext.Provider
