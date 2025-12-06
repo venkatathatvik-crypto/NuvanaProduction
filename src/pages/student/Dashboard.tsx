@@ -23,6 +23,7 @@ import {
   getStudentPendingTestsCount,
   getStudentPendingAssessmentsCount,
 } from "@/services/academic";
+import { getStudentTimetable, DAY_NAMES } from "@/services/timetableService";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -42,6 +43,8 @@ const Dashboard = () => {
   const [loadingTests, setLoadingTests] = useState(true);
   const [pendingAssessments, setPendingAssessments] = useState<number>(0);
   const [loadingAssessments, setLoadingAssessments] = useState(true);
+  const [todayClasses, setTodayClasses] = useState<Array<{ subject: string; time: string; room: string }>>([]);
+  const [loadingTodayClasses, setLoadingTodayClasses] = useState(true);
 
   const handleLogout = async () => {
     await logout();
@@ -58,6 +61,7 @@ const Dashboard = () => {
         setLoadingMarks(false);
         setLoadingTests(false);
         setLoadingAssessments(false);
+        setLoadingTodayClasses(false);
         return;
       }
 
@@ -87,6 +91,27 @@ const Dashboard = () => {
             studentData.class_id
           );
           setAnnouncements(announcementsData);
+
+          // Fetch today's classes from timetable
+          if (profile.school_id) {
+            const timetableData = await getStudentTimetable(studentData.class_id, profile.school_id);
+            // Get today's day (0=Sunday, 1=Monday, etc. in JS)
+            const jsDay = new Date().getDay();
+            // Convert: JS Sunday=0 -> skip, JS Monday=1 -> "Monday", etc.
+            // Our DAY_NAMES array: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+            const dayName = jsDay === 0 ? null : DAY_NAMES[jsDay - 1]; // Sunday has no classes
+            
+            if (dayName && timetableData[dayName]) {
+              setTodayClasses(timetableData[dayName].map((p: any) => ({
+                subject: p.subject,
+                time: p.time,
+                room: p.room,
+                teacher: p.teacher,
+              })));
+            } else {
+              setTodayClasses([]);
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching student data:", error);
@@ -96,6 +121,7 @@ const Dashboard = () => {
         setLoadingMarks(false);
         setLoadingTests(false);
         setLoadingAssessments(false);
+        setLoadingTodayClasses(false);
       }
     };
 
@@ -161,15 +187,9 @@ const Dashboard = () => {
     },
   ];
 
-  const todayClasses = [
-    { subject: "Mathematics", time: "9:00 AM - 10:30 AM", room: "Room 301" },
-    { subject: "Physics", time: "11:00 AM - 12:30 PM", room: "Lab 2" },
-    {
-      subject: "Computer Science",
-      time: "2:00 PM - 3:30 PM",
-      room: "Room 105",
-    },
-  ];
+  // Get today's day name for display
+  const jsDay = new Date().getDay();
+  const todayDayName = jsDay === 0 ? "Sunday" : DAY_NAMES[jsDay - 1];
 
   return (
     <div className="min-h-screen p-6">
@@ -241,24 +261,40 @@ const Dashboard = () => {
             transition={{ delay: 0.4 }}
           >
             <Card className="glass-card p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <Calendar className="w-6 h-6 text-primary" />
-                <h2 className="text-2xl font-semibold">Today's Classes</h2>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-6 h-6 text-primary" />
+                  <h2 className="text-2xl font-semibold">Today's Classes</h2>
+                </div>
+                <span className="text-sm text-muted-foreground bg-primary/10 px-3 py-1 rounded-full">
+                  {todayDayName}
+                </span>
               </div>
-              <div className="space-y-4">
-                {todayClasses.map((cls, index) => (
-                  <div
-                    key={index}
-                    className="p-4 rounded-lg bg-muted/50 border border-border hover:border-primary transition-colors"
-                  >
-                    <h3 className="font-semibold text-lg">{cls.subject}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {cls.time}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{cls.room}</p>
-                  </div>
-                ))}
-              </div>
+              {loadingTodayClasses ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : todayClasses.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>{todayDayName === "Sunday" ? "No classes on Sunday! 🎉" : "No classes scheduled for today"}</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {todayClasses.map((cls: any, index: number) => (
+                    <div
+                      key={index}
+                      className="p-4 rounded-lg bg-muted/50 border border-border hover:border-primary transition-colors"
+                    >
+                      <h3 className="font-semibold text-lg">{cls.subject}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {cls.time}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{cls.room} {cls.teacher && `• ${cls.teacher}`}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           </motion.div>
 

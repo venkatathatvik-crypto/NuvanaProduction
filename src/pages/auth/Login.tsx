@@ -17,12 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserRole, authService } from "@/lib/auth"; // 👈 Import authService
-import { GraduationCap, School, Loader2 } from "lucide-react";
+import { GraduationCap, School, Shield, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email address").refine((email) => email.endsWith("@nuvana.com"), {
-    message: "Only @nuvana.com emails are allowed",
-  }),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -70,6 +68,8 @@ const Login = () => {
         navigate("/student", { replace: true });
       } else if (userRole === "teacher") {
         navigate("/teacher", { replace: true });
+      } else if (userRole === "school_admin") {
+        navigate("/admin", { replace: true });
       } else {
         throw new Error("Unknown user role in profile.");
       }
@@ -128,7 +128,7 @@ const Login = () => {
           onValueChange={(v) => setActiveTab(v as UserRole)}
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="student" className="flex items-center gap-2">
               <GraduationCap className="h-4 w-4" />
               Student
@@ -137,12 +137,16 @@ const Login = () => {
               <School className="h-4 w-4" />
               Teacher
             </TabsTrigger>
+            <TabsTrigger value="school_admin" className="flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              School Admin
+            </TabsTrigger>
           </TabsList>
 
           <Card className="border-border/50 shadow-xl">
             <CardHeader>
               <CardTitle>
-                {activeTab === "student" ? "Student" : "Teacher"} Login
+                {activeTab === "student" ? "Student" : activeTab === "teacher" ? "Teacher" : "School Admin"} Login
               </CardTitle>
               <CardDescription>
                 Enter your credentials to access your dashboard
@@ -164,8 +168,10 @@ const Login = () => {
                     type="email"
                     placeholder={
                       activeTab === "student"
-                        ? "student@nuvana.com"
-                        : "teacher@nuvana.com"
+                        ? "student@school.com"
+                        : activeTab === "teacher"
+                        ? "teacher@school.com"
+                        : "admin@school.com"
                     }
                     {...register("email")}
                     className="bg-background/50"

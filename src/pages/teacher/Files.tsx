@@ -83,8 +83,8 @@ const TeacherFiles = () => {
 
       try {
         const [classResponse, categoryResponse] = await Promise.all([
-          getTeacherClasses(profile.id),
-          getFileCategories(),
+          getTeacherClasses(profile.id, profile.school_id),
+          getFileCategories(profile.school_id),
         ]);
 
         if (classResponse && classResponse.length > 0) {
@@ -158,7 +158,7 @@ const TeacherFiles = () => {
       }
 
       try {
-        const files = await getTeacherFiles(profile.id);
+        const files = await getTeacherFiles(profile.id, profile.school_id);
         setUploadedFiles(files);
       } catch (error) {
         console.error("Error fetching teacher files:", error);
@@ -238,6 +238,7 @@ const TeacherFiles = () => {
         classId: uploadClass.class_id,
         gradeSubjectId: uploadSubjectId,
         teacherId: profile.id,
+        schoolId: profile.school_id,
         fileType: uploadFileType,
       });
 

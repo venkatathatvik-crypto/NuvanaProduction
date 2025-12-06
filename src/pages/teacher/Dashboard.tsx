@@ -33,7 +33,7 @@ const TeacherDashboard = () => {
       }
 
       try {
-        const teacherClasses = await getTeacherClasses(profile.id);
+        const teacherClasses = await getTeacherClasses(profile.id, profile.school_id);
         setClasses(teacherClasses);
       } catch (error) {
         console.error("Error fetching teacher classes:", error);

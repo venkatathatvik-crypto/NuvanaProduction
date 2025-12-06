@@ -46,7 +46,7 @@ const TeacherAnnouncements = () => {
       }
 
       try {
-        const classResponse = await getTeacherClasses(profile.id);
+        const classResponse = await getTeacherClasses(profile.id, profile.school_id);
         if (classResponse && classResponse.length > 0) {
           setClasses(classResponse);
         } else {
@@ -75,7 +75,7 @@ const TeacherAnnouncements = () => {
       }
 
       try {
-        const data = await getTeacherAnnouncements(profile.id);
+        const data = await getTeacherAnnouncements(profile.id, profile.school_id);
         setAnnouncements(data);
       } catch (error) {
         console.error("Error fetching announcements:", error);
@@ -131,6 +131,7 @@ const TeacherAnnouncements = () => {
         isUrgent,
         classIds,
         teacherId: profile.id,
+        schoolId: profile.school_id,
       });
       setAnnouncements((prev) => [newAnnouncement, ...prev]);
       toast.success("Announcement sent successfully!");

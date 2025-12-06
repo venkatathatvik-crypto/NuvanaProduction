@@ -86,7 +86,7 @@ const VoiceUpload = () => {
       }
 
       try {
-        const classResponse = await getTeacherClasses(profile.id);
+        const classResponse = await getTeacherClasses(profile.id, profile.school_id);
         if (classResponse && classResponse.length > 0) {
           setClasses(classResponse);
           setSelectedClass(classResponse[0]); // Set the default class object
@@ -150,7 +150,7 @@ const VoiceUpload = () => {
       }
 
       try {
-        const voiceNotes = await getTeacherVoiceNotes(profile.id);
+        const voiceNotes = await getTeacherVoiceNotes(profile.id, profile.school_id);
         setRecordings(voiceNotes);
       } catch (error) {
         console.error("Error fetching voice notes:", error);
@@ -292,6 +292,7 @@ const VoiceUpload = () => {
         classId: selectedClass.class_id,
         gradeSubjectId,
         teacherId: profile.id,
+        schoolId: profile.school_id,
         durationSeconds: recordingTime,
       });
 
@@ -388,6 +389,7 @@ const VoiceUpload = () => {
         classId: selectedClass.class_id,
         gradeSubjectId,
         teacherId: profile.id,
+        schoolId: profile.school_id,
         durationSeconds,
       });
 

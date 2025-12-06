@@ -16,10 +16,11 @@ const Events = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
   const [internalAssessments, setInternalAssessments] = useState<StudentTest[]>([]);
+  const [allTests, setAllTests] = useState<StudentTest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchInternalAssessments = async () => {
+    const fetchTests = async () => {
       if (profileLoading) return;
 
       if (!profile) {
@@ -34,19 +35,27 @@ const Events = () => {
           return;
         }
 
-        // Fetch all tests and filter only Internal Assessments (exam_type_id = 4)
+        // Fetch all tests
         const testsData = await getStudentTests(studentData.class_id, profile.id);
+        
+        // Filter only Internal Assessments (exam_type_id = 4)
         const assessments = testsData.filter(test => test.examTypeId === 4);
         setInternalAssessments(assessments);
+        
+        // Set all tests and sort by due date (closest deadline first)
+        const sortedTests = testsData
+          .filter(test => test.dueDate) // Only include tests with due dates
+          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+        setAllTests(sortedTests);
       } catch (error: any) {
-        console.error("Error fetching internal assessments:", error);
-        toast.error("Failed to load assessments");
+        console.error("Error fetching tests:", error);
+        toast.error("Failed to load tests");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchInternalAssessments();
+    fetchTests();
   }, [profile, profileLoading]);
 
   const upcomingEvents = [
@@ -117,12 +126,17 @@ const Events = () => {
     },
   ];
 
-  const deadlines = [
-    { task: "Computer Science Project", dueDate: "2024-12-03", priority: "high" },
-    { task: "Physics Lab Report", dueDate: "2024-12-05", priority: "high" },
-    { task: "English Essay Submission", dueDate: "2024-12-08", priority: "medium" },
-    { task: "Mathematics Assignment", dueDate: "2024-12-12", priority: "medium" },
-  ];
+  // Convert tests to deadline format
+  const deadlines = allTests.map(test => ({
+    task: test.title,
+    dueDate: test.dueDate,
+    priority: new Date(test.dueDate) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? "high" : "medium", // High if due within 3 days
+    examType: test.examTypeName,
+    subject: test.subjectName,
+    testId: test.id,
+    submitted: test.submittedAt !== undefined,
+    marksObtained: test.marksObtained
+  }));
 
   const getEventColor = (color: string) => {
     const colors: Record<string, string> = {
@@ -304,23 +318,58 @@ const Events = () => {
           <TabsContent value="deadlines" className="space-y-4 mt-6">
             {deadlines.map((deadline, index) => (
               <motion.div
-                key={index}
+                key={deadline.testId || index}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 + index * 0.05 }}
               >
-                <Card className="glass-card p-6 hover:neon-glow transition-all">
+                <Card className={`glass-card p-6 hover:neon-glow transition-all ${deadline.submitted ? 'opacity-75' : ''}`}>
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-lg font-semibold mb-2">{deadline.task}</h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="w-4 h-4" />
-                        Due: {deadline.dueDate}
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          Due: {format(new Date(deadline.dueDate), 'MMM dd, yyyy')}
+                        </div>
+                        {deadline.examType && (
+                          <Badge variant="outline">{deadline.examType}</Badge>
+                        )}
+                        {deadline.subject && (
+                          <span className="text-xs px-2 py-1 bg-secondary rounded">{deadline.subject}</span>
+                        )}
                       </div>
+                      {deadline.submitted && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span className="text-green-500">
+                            Submitted {deadline.marksObtained !== undefined ? `- Score: ${deadline.marksObtained}` : ''}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <Badge variant={deadline.priority === "high" ? "destructive" : "secondary"}>
-                      {deadline.priority.toUpperCase()}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={deadline.priority === "high" ? "destructive" : "secondary"}>
+                        {deadline.priority.toUpperCase()}
+                      </Badge>
+                      {!deadline.submitted && deadline.testId && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => navigate(`/student/tests/take/${deadline.testId}`)}
+                        >
+                          Take Test
+                        </Button>
+                      )}
+                      {deadline.submitted && deadline.testId && (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => navigate(`/student/tests/take/${deadline.testId}`)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </Card>
               </motion.div>

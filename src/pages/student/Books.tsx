@@ -35,7 +35,7 @@ const Books = () => {
         if (studentData && studentData.class_id) {
           setStudentClassId(studentData.class_id);
           // Fetch files for this class
-          const filesData = await getStudentFiles(studentData.class_id);
+          const filesData = await getStudentFiles(studentData.class_id, profile.school_id);
           setFiles(filesData);
         }
       } catch (error) {

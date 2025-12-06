@@ -8,6 +8,9 @@ import { AuthProvider } from "@/auth/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Login from "./pages/auth/Login";
+import AdminLogin from "./pages/auth/AdminLogin";
+import SuperAdminLogin from "./pages/auth/SuperAdminLogin";
+import SuperAdminSignup from "./pages/auth/SuperAdminSignup";
 
 import Index from "./pages/Index";
 
@@ -30,6 +33,7 @@ import TestDetails from "./pages/teacher/TestDetails";
 import AnalyticsDashboard from "./pages/teacher/Analytics";
 import VoiceUpload from "./pages/teacher/VoiceUpload";
 import AdminPanel from "./pages/teacher/AdminPanel";
+import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 
 import StudentTests from "./pages/student/Tests";
 import TestTake from "./pages/student/TestTake";
@@ -83,6 +87,19 @@ const App = () => (
                     </AuthRedirect>
                   }
                 />
+                <Route
+                  path="/admin-login"
+                  element={<AdminLogin />}
+                />
+                <Route
+                  path="/super-admin-login"
+                  element={<SuperAdminLogin />}
+                />
+                <Route
+                  path="/super-admin-signup"
+                  element={<SuperAdminSignup />}
+                />
+
 
 
                 {/* Student Protected Routes */}
@@ -266,7 +283,11 @@ const App = () => (
                 />
                 <Route
                   path="/admin"
-                  element={<AdminPanel />}
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminPanel />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/teacher/profile"
@@ -281,6 +302,16 @@ const App = () => (
                   element={
                     <ProtectedRoute role="teacher">
                       <TeacherTasks />
+                    </ProtectedRoute>
+                  }
+                />
+                
+                {/* Super Admin Protected Route */}
+                <Route
+                  path="/super-admin"
+                  element={
+                    <ProtectedRoute role="super_admin">
+                      <SuperAdminDashboard />
                     </ProtectedRoute>
                   }
                 />

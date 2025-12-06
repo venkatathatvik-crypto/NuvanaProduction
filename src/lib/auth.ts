@@ -1,5 +1,5 @@
 import { supabase } from "@/supabase/client";
-export type UserRole = "student" | "teacher";
+export type UserRole = "student" | "teacher" | "school_admin" | "super_admin";
 
 export interface User {
   id: string;
@@ -10,8 +10,12 @@ export interface UserProfile {
   id: string;
   role: UserRole;
   name: string;
+  email?: string;
   avatar_url?: string;
   created_at: string;
+  school_id: string;
+  class_id?: string;
+  roll_number?: string;
 }
 
 export interface AuthenticatedUser {
@@ -83,18 +87,26 @@ export const authService = {
   },
 
   async getProfile(userId: string): Promise<UserProfile> {
-    const { data: profile, error } = await supabase
+    const { data: profileData, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("*, user_roles(role)")
       .eq("id", userId)
       .single();
 
-    console.log("Fetched profile : ", profile, userId);
+    console.log("Fetched profile : ", profileData, userId);
 
     if (error) {
       throw new Error(`Failed to fetch user profile: ${error.message}`);
     }
 
-    return profile as UserProfile;
+    // @ts-ignore
+    const userRole = profileData.user_roles?.role as UserRole;
+
+    const profile: UserProfile = {
+        ...profileData,
+        role: userRole
+    };
+
+    return profile;
   },
 };
