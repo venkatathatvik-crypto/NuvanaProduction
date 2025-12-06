@@ -3412,3 +3412,803 @@ export const getStudentAverageMarksPercentage = async (
     return 0;
   }
 };
+
+// ==================== STUDENT ANALYTICS ====================
+
+// Interface for student chapter/topic analytics
+export interface StudentChapterTopicAnalytics {
+  chapters: { name: string; avgScore: number; totalQuestions: number }[];
+  topics: { name: string; avgScore: number; totalQuestions: number; chapters: string[] }[];
+}
+
+// Get chapter and topic-wise performance analytics for a specific student
+export const getStudentChapterTopicAnalytics = async (
+  studentId: string
+): Promise<StudentChapterTopicAnalytics> => {
+  try {
+    // Get all graded submissions for this student
+    const { data: submissionsData, error: submissionsError } = await supabase
+      .from("test_submissions")
+      .select("id, test_id, total_marks_obtained")
+      .eq("student_id", studentId)
+      .eq("is_graded", true);
+
+    if (submissionsError) throw submissionsError;
+    if (!submissionsData || submissionsData.length === 0) {
+      return { chapters: [], topics: [] };
+    }
+
+    const testIds = submissionsData.map(s => s.test_id);
+
+    // Get all questions with chapter/topic for these tests
+    const { data: questionsData, error: questionsError } = await supabase
+      .from("questions")
+      .select("id, test_id, chapter, topic, marks")
+      .in("test_id", testIds);
+
+    if (questionsError) throw questionsError;
+
+    // Get student answers with marks
+    const submissionIds = submissionsData.map(s => s.id);
+    const { data: answersData, error: answersError } = await supabase
+      .from("student_answers")
+      .select("question_id, marks_awarded, submission_id")
+      .in("submission_id", submissionIds);
+
+    if (answersError) throw answersError;
+
+    // Create a map of question_id -> marks_awarded
+    const answerMarksMap: Record<string, number> = {};
+    if (answersData) {
+      answersData.forEach(a => {
+        answerMarksMap[a.question_id] = a.marks_awarded || 0;
+      });
+    }
+
+    // Aggregate by chapter and topic
+    const chapterMap: Record<string, { totalScore: number; totalMarks: number; count: number }> = {};
+    const topicMap: Record<string, { totalScore: number; totalMarks: number; count: number; chapters: Set<string> }> = {};
+
+    if (questionsData) {
+      questionsData.forEach(q => {
+        const chapter = q.chapter || "Unknown";
+        const topic = q.topic || "Unknown";
+        const maxMarks = q.marks || 0;
+        const obtainedMarks = answerMarksMap[q.id] || 0;
+
+        // Chapter aggregation
+        if (!chapterMap[chapter]) {
+          chapterMap[chapter] = { totalScore: 0, totalMarks: 0, count: 0 };
+        }
+        chapterMap[chapter].totalScore += obtainedMarks;
+        chapterMap[chapter].totalMarks += maxMarks;
+        chapterMap[chapter].count += 1;
+
+        // Topic aggregation
+        if (!topicMap[topic]) {
+          topicMap[topic] = { totalScore: 0, totalMarks: 0, count: 0, chapters: new Set() };
+        }
+        topicMap[topic].totalScore += obtainedMarks;
+        topicMap[topic].totalMarks += maxMarks;
+        topicMap[topic].count += 1;
+        topicMap[topic].chapters.add(chapter);
+      });
+    }
+
+    // Convert to arrays and calculate averages
+    const chapters = Object.entries(chapterMap)
+      .map(([name, data]) => ({
+        name,
+        avgScore: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0,
+        totalQuestions: data.count
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    const topics = Object.entries(topicMap)
+      .map(([name, data]) => ({
+        name,
+        avgScore: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0,
+        totalQuestions: data.count,
+        chapters: Array.from(data.chapters)
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    return { chapters, topics };
+  } catch (error) {
+    console.error("Error in getStudentChapterTopicAnalytics:", error);
+    return { chapters: [], topics: [] };
+  }
+};
+
+// Interface for subject performance data (for radar chart)
+export interface SubjectPerformance {
+  subject: string;
+  score: number;
+  fullMark: number;
+}
+
+// Get student's subject-wise performance for radar chart
+export const getStudentSubjectPerformance = async (
+  studentId: string
+): Promise<SubjectPerformance[]> => {
+  try {
+    // Get all graded submissions with subject info
+    const { data: submissionsData, error: submissionsError } = await supabase
+      .from("test_submissions")
+      .select(`
+        id,
+        test_id,
+        total_marks_obtained,
+        tests (
+          id,
+          grade_subject_id,
+          grade_subjects (
+            subjects_master ( name )
+          )
+        )
+      `)
+      .eq("student_id", studentId)
+      .eq("is_graded", true);
+
+    if (submissionsError) throw submissionsError;
+    if (!submissionsData || submissionsData.length === 0) {
+      return [];
+    }
+
+    // Aggregate by subject
+    const subjectMap: Record<string, { totalScore: number; totalMarks: number }> = {};
+
+    for (const sub of submissionsData) {
+      const test = sub.tests as any;
+      if (!test) continue;
+
+      // Get subject name
+      let subjectName = "Unknown";
+      if (test.grade_subjects) {
+        const gradeSubject = Array.isArray(test.grade_subjects)
+          ? test.grade_subjects[0]
+          : test.grade_subjects;
+        if (gradeSubject?.subjects_master) {
+          const master = Array.isArray(gradeSubject.subjects_master)
+            ? gradeSubject.subjects_master[0]
+            : gradeSubject.subjects_master;
+          subjectName = master?.name || "Unknown";
+        }
+      }
+
+      // Get total marks for this test
+      const { data: questionsData } = await supabase
+        .from("questions")
+        .select("marks")
+        .eq("test_id", test.id);
+
+      const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+
+      if (!subjectMap[subjectName]) {
+        subjectMap[subjectName] = { totalScore: 0, totalMarks: 0 };
+      }
+      subjectMap[subjectName].totalScore += sub.total_marks_obtained || 0;
+      subjectMap[subjectName].totalMarks += testMaxMarks;
+    }
+
+    // Convert to array for radar chart
+    return Object.entries(subjectMap)
+      .map(([subject, data]) => ({
+        subject,
+        score: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 150) : 0, // Scale to 150 for chart
+        fullMark: 150
+      }))
+      .sort((a, b) => b.score - a.score);
+  } catch (error) {
+    console.error("Error in getStudentSubjectPerformance:", error);
+    return [];
+  }
+};
+
+// Interface for progress trend data
+export interface ProgressTrendPoint {
+  month: string;
+  score: number;
+}
+
+// Get student's performance trend over time
+export const getStudentProgressTrend = async (
+  studentId: string
+): Promise<ProgressTrendPoint[]> => {
+  try {
+    // Get all graded submissions ordered by date
+    const { data: submissionsData, error: submissionsError } = await supabase
+      .from("test_submissions")
+      .select(`
+        id,
+        test_id,
+        submitted_at,
+        total_marks_obtained
+      `)
+      .eq("student_id", studentId)
+      .eq("is_graded", true)
+      .order("submitted_at", { ascending: true });
+
+    if (submissionsError) throw submissionsError;
+    if (!submissionsData || submissionsData.length === 0) {
+      return [];
+    }
+
+    // Group by month and calculate average percentage
+    const monthlyData: Record<string, { totalScore: number; totalMarks: number; count: number }> = {};
+
+    for (const sub of submissionsData) {
+      const date = new Date(sub.submitted_at);
+      const monthKey = date.toLocaleString("en-US", { month: "short" });
+
+      // Get total marks for this test
+      const { data: questionsData } = await supabase
+        .from("questions")
+        .select("marks")
+        .eq("test_id", sub.test_id);
+
+      const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = { totalScore: 0, totalMarks: 0, count: 0 };
+      }
+      monthlyData[monthKey].totalScore += sub.total_marks_obtained || 0;
+      monthlyData[monthKey].totalMarks += testMaxMarks;
+      monthlyData[monthKey].count += 1;
+    }
+
+    // Convert to array
+    return Object.entries(monthlyData)
+      .map(([month, data]) => ({
+        month,
+        score: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0
+      }));
+  } catch (error) {
+    console.error("Error in getStudentProgressTrend:", error);
+    return [];
+  }
+};
+
+// Interface for strength/weakness item
+export interface StrengthWeaknessItem {
+  subject: string;
+  desc: string;
+}
+
+// Get student's strengths and weaknesses based on subject performance
+export const getStudentStrengthsWeaknesses = async (
+  studentId: string
+): Promise<{ strengths: StrengthWeaknessItem[]; weaknesses: StrengthWeaknessItem[] }> => {
+  try {
+    const subjectData = await getStudentSubjectPerformance(studentId);
+
+    if (subjectData.length === 0) {
+      return { strengths: [], weaknesses: [] };
+    }
+
+    const strengths: StrengthWeaknessItem[] = [];
+    const weaknesses: StrengthWeaknessItem[] = [];
+
+    // Calculate percentage for each subject
+    const subjectsWithPercentage = subjectData.map(s => ({
+      subject: s.subject,
+      percentage: Math.round((s.score / s.fullMark) * 100)
+    }));
+
+    // Strengths: subjects with >= 80%
+    subjectsWithPercentage
+      .filter(s => s.percentage >= 80)
+      .slice(0, 3)
+      .forEach(s => {
+        strengths.push({
+          subject: s.subject,
+          desc: s.percentage >= 90 
+            ? `Excellent performance - ${s.percentage}% average`
+            : `Strong understanding - ${s.percentage}% average`
+        });
+      });
+
+    // Weaknesses: subjects with < 60%
+    subjectsWithPercentage
+      .filter(s => s.percentage < 60)
+      .slice(0, 3)
+      .forEach(s => {
+        weaknesses.push({
+          subject: s.subject,
+          desc: s.percentage < 40 
+            ? `Needs significant improvement - ${s.percentage}% average`
+            : `Room for improvement - ${s.percentage}% average`
+        });
+      });
+
+    return { strengths, weaknesses };
+  } catch (error) {
+    console.error("Error in getStudentStrengthsWeaknesses:", error);
+    return { strengths: [], weaknesses: [] };
+  }
+};
+
+// Interface for student stats summary
+export interface StudentStatsSummary {
+  overallPercentage: number;
+  totalTests: number;
+  bestSubject: string;
+  attendancePercentage: number;
+}
+
+// Get student's overall statistics summary
+export const getStudentStatsSummary = async (
+  studentId: string
+): Promise<StudentStatsSummary> => {
+  try {
+    // Get overall percentage
+    const overallPercentage = await getStudentAverageMarksPercentage(studentId);
+
+    // Get total graded tests count
+    const { data: testsData, error: testsError } = await supabase
+      .from("test_submissions")
+      .select("id")
+      .eq("student_id", studentId)
+      .eq("is_graded", true);
+
+    if (testsError) throw testsError;
+    const totalTests = testsData?.length || 0;
+
+    // Get best subject
+    const subjectPerformance = await getStudentSubjectPerformance(studentId);
+    const bestSubject = subjectPerformance.length > 0 ? subjectPerformance[0].subject : "N/A";
+
+    // Get attendance percentage
+    const attendancePercentage = await getOverallAttendancePercentage(studentId);
+
+    return {
+      overallPercentage: Math.round(overallPercentage),
+      totalTests,
+      bestSubject,
+      attendancePercentage: Math.round(attendancePercentage)
+    };
+  } catch (error) {
+    console.error("Error in getStudentStatsSummary:", error);
+    return {
+      overallPercentage: 0,
+      totalTests: 0,
+      bestSubject: "N/A",
+      attendancePercentage: 0
+    };
+  }
+};
+
+// ==================== TEACHER CLASS ANALYTICS ====================
+
+// Interface for class performance trend data
+export interface ClassPerformanceTrend {
+  month: string;
+  avgScore: number;
+  attendance: number;
+}
+
+// Get class performance trend over time
+export const getClassPerformanceTrend = async (
+  classId: string
+): Promise<ClassPerformanceTrend[]> => {
+  try {
+    // Get all graded submissions for this class with dates
+    const { data: submissionsData, error: submissionsError } = await supabase
+      .from("test_submissions")
+      .select(`
+        id,
+        test_id,
+        submitted_at,
+        total_marks_obtained,
+        student_id,
+        tests!inner (
+          class_id
+        )
+      `)
+      .eq("is_graded", true)
+      .eq("tests.class_id", classId)
+      .order("submitted_at", { ascending: true });
+
+    if (submissionsError) throw submissionsError;
+    if (!submissionsData || submissionsData.length === 0) return [];
+
+    // Get attendance data for the class
+    const { data: attendanceData } = await supabase
+      .from("attendance")
+      .select("attendance_date, status, student_id")
+      .order("attendance_date", { ascending: true });
+
+    // Group submissions by month
+    const monthlyScores: Record<string, { totalScore: number; totalMarks: number; count: number }> = {};
+    
+    for (const sub of submissionsData) {
+      const date = new Date(sub.submitted_at);
+      const monthKey = date.toLocaleString("en-US", { month: "short" });
+      
+      // Get total marks for this test
+      const { data: questionsData } = await supabase
+        .from("questions")
+        .select("marks")
+        .eq("test_id", sub.test_id);
+      
+      const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+      
+      if (!monthlyScores[monthKey]) {
+        monthlyScores[monthKey] = { totalScore: 0, totalMarks: 0, count: 0 };
+      }
+      monthlyScores[monthKey].totalScore += sub.total_marks_obtained || 0;
+      monthlyScores[monthKey].totalMarks += testMaxMarks;
+      monthlyScores[monthKey].count += 1;
+    }
+
+    // Group attendance by month
+    const monthlyAttendance: Record<string, { present: number; total: number }> = {};
+    if (attendanceData) {
+      attendanceData.forEach(a => {
+        const date = new Date(a.attendance_date);
+        const monthKey = date.toLocaleString("en-US", { month: "short" });
+        
+        if (!monthlyAttendance[monthKey]) {
+          monthlyAttendance[monthKey] = { present: 0, total: 0 };
+        }
+        monthlyAttendance[monthKey].total += 1;
+        if (a.status === "present") {
+          monthlyAttendance[monthKey].present += 1;
+        }
+      });
+    }
+
+    // Combine data
+    return Object.entries(monthlyScores).map(([month, data]) => ({
+      month,
+      avgScore: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0,
+      attendance: monthlyAttendance[month]?.total > 0 
+        ? Math.round((monthlyAttendance[month].present / monthlyAttendance[month].total) * 100) 
+        : 0
+    }));
+  } catch (error) {
+    console.error("Error in getClassPerformanceTrend:", error);
+    return [];
+  }
+};
+
+// Interface for student in class with scores
+export interface ClassStudentWithScore {
+  id: string;
+  name: string;
+  avgScore: number;
+  attendancePercentage: number;
+}
+
+// Get all students in a class with their average scores
+export const getClassStudentsWithScores = async (
+  classId: string
+): Promise<ClassStudentWithScore[]> => {
+  try {
+    // Get all students in the class
+    const { data: studentsData, error: studentsError } = await supabase
+      .from("profiles")
+      .select("id, name")
+      .eq("class_id", classId)
+      .eq("role_id", 4);
+
+    if (studentsError) throw studentsError;
+    if (!studentsData || studentsData.length === 0) return [];
+
+    const students: ClassStudentWithScore[] = [];
+
+    for (const student of studentsData) {
+      // Get student's graded submissions
+      const { data: submissionsData } = await supabase
+        .from("test_submissions")
+        .select(`
+          total_marks_obtained,
+          test_id
+        `)
+        .eq("student_id", student.id)
+        .eq("is_graded", true);
+
+      let totalScore = 0;
+      let totalMarks = 0;
+
+      if (submissionsData) {
+        for (const sub of submissionsData) {
+          const { data: questionsData } = await supabase
+            .from("questions")
+            .select("marks")
+            .eq("test_id", sub.test_id);
+          
+          const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+          totalScore += sub.total_marks_obtained || 0;
+          totalMarks += testMaxMarks;
+        }
+      }
+
+      // Get attendance
+      const { data: attendanceData } = await supabase
+        .from("attendance")
+        .select("status")
+        .eq("student_id", student.id);
+
+      const attendancePercentage = attendanceData && attendanceData.length > 0
+        ? Math.round((attendanceData.filter(a => a.status === "present").length / attendanceData.length) * 100)
+        : 0;
+
+      students.push({
+        id: student.id,
+        name: student.name || "Unknown",
+        avgScore: totalMarks > 0 ? Math.round((totalScore / totalMarks) * 100) : 0,
+        attendancePercentage
+      });
+    }
+
+    return students.sort((a, b) => b.avgScore - a.avgScore);
+  } catch (error) {
+    console.error("Error in getClassStudentsWithScores:", error);
+    return [];
+  }
+};
+
+// Interface for recent test data
+export interface RecentTestMetrics {
+  test: string;
+  avg: number;
+  top: number;
+}
+
+// Get recent tests metrics for a class
+export const getRecentTestsMetrics = async (
+  classId: string
+): Promise<RecentTestMetrics[]> => {
+  try {
+    // Get recent tests for this class
+    const { data: testsData, error: testsError } = await supabase
+      .from("tests")
+      .select("id, title, created_at")
+      .eq("class_id", classId)
+      .eq("is_published", true)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (testsError) throw testsError;
+    if (!testsData || testsData.length === 0) return [];
+
+    const results: RecentTestMetrics[] = [];
+
+    for (const test of testsData) {
+      // Get submissions for this test
+      const { data: submissionsData } = await supabase
+        .from("test_submissions")
+        .select("total_marks_obtained")
+        .eq("test_id", test.id)
+        .eq("is_graded", true);
+
+      if (!submissionsData || submissionsData.length === 0) continue;
+
+      // Get total marks for this test
+      const { data: questionsData } = await supabase
+        .from("questions")
+        .select("marks")
+        .eq("test_id", test.id);
+
+      const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+      if (testMaxMarks === 0) continue;
+
+      const scores = submissionsData.map(s => 
+        Math.round(((s.total_marks_obtained || 0) / testMaxMarks) * 100)
+      );
+
+      results.push({
+        test: test.title.length > 15 ? test.title.substring(0, 15) + "..." : test.title,
+        avg: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+        top: Math.max(...scores)
+      });
+    }
+
+    return results.reverse(); // Return in chronological order
+  } catch (error) {
+    console.error("Error in getRecentTestsMetrics:", error);
+    return [];
+  }
+};
+
+// Interface for subject average data
+export interface SubjectAverageData {
+  subject: string;
+  avg: number;
+}
+
+// Get subject-wise class averages
+export const getClassSubjectAverages = async (
+  classId: string
+): Promise<SubjectAverageData[]> => {
+  try {
+    // Get all graded submissions for this class with subject info
+    const { data: submissionsData, error: submissionsError } = await supabase
+      .from("test_submissions")
+      .select(`
+        total_marks_obtained,
+        test_id,
+        tests!inner (
+          id,
+          class_id,
+          grade_subjects (
+            subjects_master ( name )
+          )
+        )
+      `)
+      .eq("is_graded", true)
+      .eq("tests.class_id", classId);
+
+    if (submissionsError) throw submissionsError;
+    if (!submissionsData || submissionsData.length === 0) return [];
+
+    const subjectMap: Record<string, { totalScore: number; totalMarks: number }> = {};
+
+    for (const sub of submissionsData) {
+      const test = sub.tests as any;
+      if (!test) continue;
+
+      // Get subject name
+      let subjectName = "Unknown";
+      if (test.grade_subjects) {
+        const gradeSubject = Array.isArray(test.grade_subjects)
+          ? test.grade_subjects[0]
+          : test.grade_subjects;
+        if (gradeSubject?.subjects_master) {
+          const master = Array.isArray(gradeSubject.subjects_master)
+            ? gradeSubject.subjects_master[0]
+            : gradeSubject.subjects_master;
+          subjectName = master?.name || "Unknown";
+        }
+      }
+
+      // Get total marks for this test
+      const { data: questionsData } = await supabase
+        .from("questions")
+        .select("marks")
+        .eq("test_id", test.id);
+
+      const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+
+      if (!subjectMap[subjectName]) {
+        subjectMap[subjectName] = { totalScore: 0, totalMarks: 0 };
+      }
+      subjectMap[subjectName].totalScore += sub.total_marks_obtained || 0;
+      subjectMap[subjectName].totalMarks += testMaxMarks;
+    }
+
+    return Object.entries(subjectMap)
+      .map(([subject, data]) => ({
+        subject,
+        avg: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0
+      }))
+      .sort((a, b) => b.avg - a.avg);
+  } catch (error) {
+    console.error("Error in getClassSubjectAverages:", error);
+    return [];
+  }
+};
+
+// Interface for attendance vs marks correlation
+export interface AttendanceVsMarks {
+  attendance: number;
+  marks: number;
+  student: string;
+}
+
+// Get attendance vs marks data for scatter plot
+export const getAttendanceVsMarksData = async (
+  classId: string
+): Promise<AttendanceVsMarks[]> => {
+  try {
+    const students = await getClassStudentsWithScores(classId);
+    
+    return students.map((s, idx) => ({
+      attendance: s.attendancePercentage,
+      marks: s.avgScore,
+      student: `S${idx + 1}`
+    }));
+  } catch (error) {
+    console.error("Error in getAttendanceVsMarksData:", error);
+    return [];
+  }
+};
+
+// Interface for question type distribution
+export interface QuestionTypeDistribution {
+  name: string;
+  value: number;
+}
+
+// Get question type distribution for a class
+export const getQuestionTypeDistribution = async (
+  classId: string
+): Promise<QuestionTypeDistribution[]> => {
+  try {
+    // Get all tests for this class
+    const { data: testsData, error: testsError } = await supabase
+      .from("tests")
+      .select("id")
+      .eq("class_id", classId);
+
+    if (testsError) throw testsError;
+    if (!testsData || testsData.length === 0) return [];
+
+    const testIds = testsData.map(t => t.id);
+
+    // Get all questions for these tests
+    const { data: questionsData, error: questionsError } = await supabase
+      .from("questions")
+      .select("question_type")
+      .in("test_id", testIds);
+
+    if (questionsError) throw questionsError;
+    if (!questionsData || questionsData.length === 0) return [];
+
+    // Count by type
+    const typeCounts: Record<string, number> = {};
+    questionsData.forEach(q => {
+      const type = q.question_type || "MCQ";
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+    });
+
+    return Object.entries(typeCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  } catch (error) {
+    console.error("Error in getQuestionTypeDistribution:", error);
+    return [];
+  }
+};
+
+// Interface for individual student analytics (for teacher viewing a student)
+export interface StudentAnalyticsForTeacher {
+  radar: { subject: string; A: number; B: number; fullMark: number }[];
+  strengths: { subject: string; desc: string }[];
+  weaknesses: { subject: string; desc: string }[];
+}
+
+// Get individual student analytics for teacher view
+export const getStudentAnalyticsForTeacher = async (
+  studentId: string,
+  classId: string
+): Promise<StudentAnalyticsForTeacher> => {
+  try {
+    // Get student's subject performance
+    const studentSubjects = await getStudentSubjectPerformance(studentId);
+    
+    // Get class average for comparison
+    const classSubjects = await getClassSubjectAverages(classId);
+    const classAvgMap: Record<string, number> = {};
+    classSubjects.forEach(s => {
+      classAvgMap[s.subject] = Math.round((s.avg / 100) * 150); // Scale to 150
+    });
+
+    // Create radar data
+    const radar = studentSubjects.map(s => ({
+      subject: s.subject,
+      A: s.score, // Student score (already scaled to 150)
+      B: classAvgMap[s.subject] || 110, // Class average
+      fullMark: 150
+    }));
+
+    // Get strengths and weaknesses
+    const { strengths: strengthItems, weaknesses: weaknessItems } = await getStudentStrengthsWeaknesses(studentId);
+    
+    const strengths = strengthItems.map(s => ({
+      subject: s.subject,
+      desc: s.desc
+    }));
+
+    const weaknesses = weaknessItems.map(w => ({
+      subject: w.subject,
+      desc: w.desc
+    }));
+
+    return { radar, strengths, weaknesses };
+  } catch (error) {
+    console.error("Error in getStudentAnalyticsForTeacher:", error);
+    return { radar: [], strengths: [], weaknesses: [] };
+  }
+};

@@ -19,8 +19,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { School, Plus, Loader2, UserPlus, Building2 } from "lucide-react";
+import { School, Plus, Loader2, UserPlus, Building2, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/auth/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface SchoolData {
   id: string;
@@ -29,6 +31,8 @@ interface SchoolData {
 }
 
 export default function SuperAdminDashboard() {
+  const { profile, logout } = useAuth();
+  const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolData[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -39,6 +43,16 @@ export default function SuperAdminDashboard() {
   const [adminName, setAdminName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success("Logged out successfully");
+      navigate("/super-admin-login");
+    } catch (error) {
+      toast.error("Failed to logout");
+    }
+  };
 
   useEffect(() => {
     fetchSchools();
@@ -108,12 +122,13 @@ export default function SuperAdminDashboard() {
           </p>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 transition-opacity">
-              <Plus className="w-4 h-4 mr-2" /> Onboard School
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 transition-opacity">
+                <Plus className="w-4 h-4 mr-2" /> Onboard School
+              </Button>
+            </DialogTrigger>
           <DialogContent className="glass-card sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -177,6 +192,15 @@ export default function SuperAdminDashboard() {
             </form>
           </DialogContent>
         </Dialog>
+        
+          <Button 
+            variant="outline" 
+            onClick={handleLogout}
+            className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+          >
+            <LogOut className="w-4 h-4 mr-2" /> Logout
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6">

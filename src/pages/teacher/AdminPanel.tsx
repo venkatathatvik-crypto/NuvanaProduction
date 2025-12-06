@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Shield, BookOpen, Users, School, Save, Plus, Trash2, Key, CheckCircle, Calendar, Mail, UserPlus, Ban, Loader2, LogOut, Edit, FileText, Folder } from "lucide-react";
+import { Shield, BookOpen, Users, School, Save, Plus, Trash2, Key, CheckCircle, Calendar, Mail, UserPlus, Ban, Loader2, LogOut, Edit, FileText, Folder, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/supabase/client";
 import { useAuth } from "@/auth/AuthContext";
+import { getTimetableForClass, getOrCreateTimetableDay, saveTimetablePeriod, deleteTimetablePeriod, DAY_NAMES, WeeklyTimetable } from "@/services/timetableService";
 
 export default function AdminPanel() {
     const { profile, logout } = useAuth();
@@ -58,6 +59,29 @@ export default function AdminPanel() {
     // Edit states
     const [editingItem, setEditingItem] = useState<any>(null);
     const [editForm, setEditForm] = useState<any>({});
+
+    // Timetable states
+    const [selectedTimetableClass, setSelectedTimetableClass] = useState<string>("");
+    const [selectedTimetableDay, setSelectedTimetableDay] = useState<number>(1); // 1=Monday, 2=Tuesday, etc.
+    const [timetableData, setTimetableData] = useState<WeeklyTimetable>({});
+    const [timetableLoading, setTimetableLoading] = useState(false);
+    const [periodForm, setPeriodForm] = useState<{
+        id?: string;
+        period_number: number;
+        subject_id: string;
+        teacher_id: string;
+        start_time: string;
+        end_time: string;
+        room: string;
+    }>({
+        period_number: 1,
+        subject_id: "",
+        teacher_id: "",
+        start_time: "09:00",
+        end_time: "10:30",
+        room: "",
+    });
+    const [isEditingPeriod, setIsEditingPeriod] = useState(false);
 
     useEffect(() => {
         if (profile?.school_id) {
@@ -424,6 +448,107 @@ export default function AdminPanel() {
         }
     };
 
+    // Timetable Functions
+    const fetchTimetable = async (classId: string) => {
+        if (!classId || !profile?.school_id) return;
+        setTimetableLoading(true);
+        try {
+            const data = await getTimetableForClass(classId, profile.school_id);
+            setTimetableData(data);
+        } catch (error) {
+            console.error("Error fetching timetable:", error);
+            toast.error("Failed to load timetable");
+        } finally {
+            setTimetableLoading(false);
+        }
+    };
+
+    const handleAddPeriod = async () => {
+        if (!selectedTimetableClass || !profile?.school_id) {
+            toast.error("Please select a class first");
+            return;
+        }
+        if (!periodForm.subject_id || !periodForm.teacher_id) {
+            toast.error("Please fill all required fields");
+            return;
+        }
+
+        try {
+            // Get or create the day entry
+            const day = await getOrCreateTimetableDay(
+                selectedTimetableClass,
+                selectedTimetableDay,
+                profile.school_id
+            );
+
+            if (!day) {
+                toast.error("Failed to create timetable day");
+                return;
+            }
+
+            // Save the period
+            const result = await saveTimetablePeriod({
+                id: periodForm.id,
+                timetable_day_id: day.id,
+                period_number: periodForm.period_number,
+                subject_id: periodForm.subject_id,
+                teacher_id: periodForm.teacher_id,
+                start_time: periodForm.start_time,
+                end_time: periodForm.end_time,
+                room: periodForm.room,
+                school_id: profile.school_id,
+            });
+
+            if (result) {
+                toast.success(isEditingPeriod ? "Period updated" : "Period added");
+                resetPeriodForm();
+                fetchTimetable(selectedTimetableClass);
+            } else {
+                toast.error("Failed to save period");
+            }
+        } catch (error) {
+            console.error("Error saving period:", error);
+            toast.error("Failed to save period");
+        }
+    };
+
+    const handleEditPeriod = (period: any) => {
+        setPeriodForm({
+            id: period.id,
+            period_number: period.period_number,
+            subject_id: period.subject_id,
+            teacher_id: period.teacher_id,
+            start_time: period.start_time,
+            end_time: period.end_time,
+            room: period.room || "",
+        });
+        setIsEditingPeriod(true);
+    };
+
+    const handleDeletePeriod = async (periodId: string) => {
+        if (!confirm("Are you sure you want to delete this period?")) return;
+
+        const success = await deleteTimetablePeriod(periodId);
+        if (success) {
+            toast.success("Period deleted");
+            fetchTimetable(selectedTimetableClass);
+        } else {
+            toast.error("Failed to delete period");
+        }
+    };
+
+    const resetPeriodForm = () => {
+        setPeriodForm({
+            period_number: 1,
+            subject_id: "",
+            teacher_id: "",
+            start_time: "09:00",
+            end_time: "10:30",
+            room: "",
+        });
+        setIsEditingPeriod(false);
+    };
+
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>;
 
     console.log("Current fileCategories state:", fileCategories);
@@ -469,6 +594,16 @@ export default function AdminPanel() {
         return matchesSearch && matchesClass;
     });
 
+    // Get subjects for the selected timetable class's grade
+    // Note: subject_id in timetable_periods references grade_subjects.id, not subjects_master.id
+    const selectedClassData = classes.find(c => c.id === selectedTimetableClass);
+    const filteredSubjectsForClass = selectedClassData 
+        ? gradeSubjects
+            .filter(gs => gs.grade_level_id === selectedClassData.grade_level_id)
+            .map(gs => ({ id: gs.id, name: gs.subjects_master?.name })) // Use gs.id (grade_subjects.id)
+            .filter(s => s.name) // Filter out any with missing names
+        : subjects; // Fallback to all subjects if no class selected
+
     return (
         <div className="min-h-screen p-6">
             <div className="max-w-7xl mx-auto space-y-8">
@@ -487,7 +622,7 @@ export default function AdminPanel() {
                 </motion.div>
 
                 <Tabs defaultValue="grades" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 glass p-1 h-auto">
+                    <TabsList className="grid w-full grid-cols-2 md:grid-cols-8 glass p-1 h-auto">
                         <TabsTrigger value="grades">Grades</TabsTrigger>
                         <TabsTrigger value="classes">Classes</TabsTrigger>
                         <TabsTrigger value="subjects">Subjects</TabsTrigger>
@@ -495,6 +630,7 @@ export default function AdminPanel() {
                         <TabsTrigger value="assignments">Assignments</TabsTrigger>
                         <TabsTrigger value="examtypes">Exam Types</TabsTrigger>
                         <TabsTrigger value="files">File Categories</TabsTrigger>
+                        <TabsTrigger value="timetable">Timetable</TabsTrigger>
                     </TabsList>
 
                     {/* Grades Tab */}
@@ -1056,6 +1192,180 @@ export default function AdminPanel() {
                                     </div>
                                 )}
                             </div>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Timetable Tab */}
+                    <TabsContent value="timetable">
+                        <Card className="glass-card p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-semibold flex items-center gap-2">
+                                    <Clock className="w-6 h-6 text-primary" /> Class Timetable
+                                </h2>
+                                <div className="flex gap-2">
+                                    <select
+                                        className="bg-background/50 border border-input rounded-md h-10 px-3"
+                                        value={selectedTimetableClass}
+                                        onChange={(e) => {
+                                            setSelectedTimetableClass(e.target.value);
+                                            if (e.target.value) fetchTimetable(e.target.value);
+                                        }}
+                                    >
+                                        <option value="">Select Class</option>
+                                        {classes.map((c) => (
+                                            <option key={c.id} value={c.id}>{c.name} ({c.grade_levels?.name})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {!selectedTimetableClass ? (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                                    <p>Select a class to manage its timetable</p>
+                                </div>
+                            ) : timetableLoading ? (
+                                <div className="flex justify-center py-12">
+                                    <Loader2 className="animate-spin" />
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Day Tabs */}
+                                    <div className="flex gap-2 flex-wrap">
+                                        {DAY_NAMES.map((day, index) => (
+                                            <Button
+                                                key={day}
+                                                variant={selectedTimetableDay === index + 1 ? "default" : "outline"}
+                                                onClick={() => setSelectedTimetableDay(index + 1)}
+                                                size="sm"
+                                            >
+                                                {day.slice(0, 3)}
+                                            </Button>
+                                        ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        {/* Period List */}
+                                        <div className="space-y-4">
+                                            <h3 className="font-semibold">{DAY_NAMES[selectedTimetableDay - 1]} Schedule</h3>
+                                            {timetableData[selectedTimetableDay]?.periods?.length > 0 ? (
+                                                <div className="space-y-2">
+                                                    {timetableData[selectedTimetableDay]?.periods.map((period: any) => (
+                                                        <div key={period.id} className="p-4 rounded-lg bg-secondary/20 border border-border/50 flex justify-between items-center">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Badge variant="secondary">P{period.period_number}</Badge>
+                                                                    <span className="font-medium">{period.subject_name || "Unknown"}</span>
+                                                                </div>
+                                                                <p className="text-sm text-muted-foreground mt-1">
+                                                                    {period.start_time?.slice(0, 5)} - {period.end_time?.slice(0, 5)} | {period.teacher_name || "TBA"} | {period.room || "-"}
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <Button size="sm" variant="outline" onClick={() => handleEditPeriod(period)}>
+                                                                    <Edit className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button size="sm" variant="destructive" onClick={() => handleDeletePeriod(period.id)}>
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                                                    <p>No periods added for {DAY_NAMES[selectedTimetableDay - 1]}</p>
+                                                    <p className="text-sm">Use the form to add periods</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Add/Edit Period Form */}
+                                        <Card className="glass-card p-4">
+                                            <h3 className="font-semibold mb-4">
+                                                {isEditingPeriod ? "Edit Period" : "Add Period"}
+                                            </h3>
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-sm text-muted-foreground">Period #</label>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            max={10}
+                                                            value={periodForm.period_number}
+                                                            onChange={(e) => setPeriodForm({ ...periodForm, period_number: parseInt(e.target.value) || 1 })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-sm text-muted-foreground">Room</label>
+                                                        <Input
+                                                            placeholder="e.g. Lab 1"
+                                                            value={periodForm.room}
+                                                            onChange={(e) => setPeriodForm({ ...periodForm, room: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm text-muted-foreground">Subject *</label>
+                                                    <select
+                                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                                        value={periodForm.subject_id}
+                                                        onChange={(e) => setPeriodForm({ ...periodForm, subject_id: e.target.value })}
+                                                    >
+                                                        <option value="">Select Subject</option>
+                                                        {filteredSubjectsForClass.map((s) => (
+                                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm text-muted-foreground">Teacher *</label>
+                                                    <select
+                                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                                        value={periodForm.teacher_id}
+                                                        onChange={(e) => setPeriodForm({ ...periodForm, teacher_id: e.target.value })}
+                                                    >
+                                                        <option value="">Select Teacher</option>
+                                                        {teachers.map((t) => (
+                                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-sm text-muted-foreground">Start Time</label>
+                                                        <Input
+                                                            type="time"
+                                                            value={periodForm.start_time}
+                                                            onChange={(e) => setPeriodForm({ ...periodForm, start_time: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-sm text-muted-foreground">End Time</label>
+                                                        <Input
+                                                            type="time"
+                                                            value={periodForm.end_time}
+                                                            onChange={(e) => setPeriodForm({ ...periodForm, end_time: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button className="flex-1" onClick={handleAddPeriod}>
+                                                        {isEditingPeriod ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                                                        {isEditingPeriod ? "Update Period" : "Add Period"}
+                                                    </Button>
+                                                    {isEditingPeriod && (
+                                                        <Button variant="outline" onClick={resetPeriodForm}>
+                                                            Cancel
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                </div>
+                            )}
                         </Card>
                     </TabsContent>
                 </Tabs>

@@ -1,20 +1,24 @@
 import { motion } from "framer-motion";
-import { User, Mail, Phone, MapPin, Award, BookOpen, Star, Calendar } from "lucide-react";
+import { User, Mail, Phone, MapPin, Award, BookOpen, Star, Calendar, Camera, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentData } from "@/services/academic";
+import { uploadProfilePhoto } from "@/services/profileService";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { supabase } from "@/supabase/client";
+import { toast } from "sonner";
 
 const StudentProfile = () => {
     const navigate = useNavigate();
-    const { profile, profileLoading } = useAuth();
+    const { profile, profileLoading, refreshProfile } = useAuth();
     const [studentData, setStudentData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [userEmail, setUserEmail] = useState<string>("");
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Mock logic for feedback activation (once a year)
     // For demo purposes, we'll toggle this with a state or just set it to true
@@ -50,6 +54,39 @@ const StudentProfile = () => {
 
         fetchStudentDetails();
     }, [profile, profileLoading]);
+
+    const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !profile?.id) return;
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            toast.error('Please select an image file');
+            return;
+        }
+
+        // Validate file size (max 2MB)
+        if (file.size > 2 * 1024 * 1024) {
+            toast.error('Image size should be less than 2MB');
+            return;
+        }
+
+        setUploadingPhoto(true);
+        try {
+            const url = await uploadProfilePhoto(profile.id, file);
+            if (url) {
+                await refreshProfile();
+                toast.success('Profile photo updated!');
+            } else {
+                toast.error('Failed to upload photo');
+            }
+        } catch (error) {
+            console.error('Error uploading photo:', error);
+            toast.error('Failed to upload photo');
+        } finally {
+            setUploadingPhoto(false);
+        }
+    };
 
     if (loading || profileLoading) {
         return <LoadingSpinner />;
@@ -89,12 +126,27 @@ const StudentProfile = () => {
                         className="md:col-span-1"
                     >
                         <Card className="glass-card p-6 flex flex-col items-center text-center h-full">
-                            <div className="w-32 h-32 rounded-full bg-secondary/50 flex items-center justify-center mb-4 border-2 border-primary/50 relative overflow-hidden">
-                                {profile.avatar_url ? (
+                            <div className="w-32 h-32 rounded-full bg-secondary/50 flex items-center justify-center mb-4 border-2 border-primary/50 relative overflow-hidden group cursor-pointer"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                {uploadingPhoto ? (
+                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                ) : profile.avatar_url ? (
                                     <img src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <User className="w-16 h-16 text-muted-foreground" />
                                 )}
+                                {/* Hover overlay */}
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <Camera className="w-8 h-8 text-white" />
+                                </div>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handlePhotoUpload}
+                                />
                             </div>
                             <h2 className="text-2xl font-bold text-foreground">{profile.name || "Student"}</h2>
                             <p className="text-muted-foreground">{studentData.roll_number || profile.id}</p>

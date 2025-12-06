@@ -17,6 +17,10 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
 
   // If no session, redirect based on required role
   if (!session) {
+    // Super admins should use super admin login page
+    if (role === "super_admin") {
+      return <Navigate to="/super-admin-login" />;
+    }
     // School admins should use admin login page
     if (role === "school_admin") {
       return <Navigate to="/admin-login" />;
@@ -32,6 +36,9 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
   if (role) {
     if (!profile) {
       // Profile failed to load, redirect to appropriate login
+      if (role === "super_admin") {
+        return <Navigate to="/super-admin-login" />;
+      }
       if (role === "school_admin") {
         return <Navigate to="/admin-login" />;
       }

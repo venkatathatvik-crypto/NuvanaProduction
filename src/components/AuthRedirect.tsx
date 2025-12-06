@@ -29,7 +29,9 @@ const AuthRedirect = ({ children }: AuthRedirectProps) => {
     if (profile.role === "school_admin") {
       return <Navigate to="/admin" replace />;
     }
-    // Note: super_admin page is unprotected, no redirect needed
+    if (profile.role === "super_admin") {
+      return <Navigate to="/super-admin" replace />;
+    }
   }
 
   return <>{children}</>;

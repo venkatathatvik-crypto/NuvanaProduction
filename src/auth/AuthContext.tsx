@@ -17,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   profileLoading: boolean;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -138,11 +139,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setProfile(null);
   };
 
+  // Refresh profile function (for after avatar upload, etc.)
+  const refreshProfile = async () => {
+    if (session?.user) {
+      await fetchUserProfile(session.user.id);
+    }
+  };
+
   console.log("🔎 Current Auth State:", { session, profile, loading, profileLoading });
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, profileLoading, logout }}
+      value={{ session, profile, loading, profileLoading, logout, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

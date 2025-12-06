@@ -9,6 +9,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Login from "./pages/auth/Login";
 import AdminLogin from "./pages/auth/AdminLogin";
+import SuperAdminLogin from "./pages/auth/SuperAdminLogin";
+import SuperAdminSignup from "./pages/auth/SuperAdminSignup";
 
 import Index from "./pages/Index";
 
@@ -88,6 +90,14 @@ const App = () => (
                 <Route
                   path="/admin-login"
                   element={<AdminLogin />}
+                />
+                <Route
+                  path="/super-admin-login"
+                  element={<SuperAdminLogin />}
+                />
+                <Route
+                  path="/super-admin-signup"
+                  element={<SuperAdminSignup />}
                 />
 
 
@@ -296,10 +306,14 @@ const App = () => (
                   }
                 />
                 
-                {/* Super Admin Route - Unprotected for onboarding */}
+                {/* Super Admin Protected Route */}
                 <Route
                   path="/super-admin"
-                  element={<SuperAdminDashboard />}
+                  element={
+                    <ProtectedRoute role="super_admin">
+                      <SuperAdminDashboard />
+                    </ProtectedRoute>
+                  }
                 />
 
                 {/* Catch all */}

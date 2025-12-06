@@ -34,251 +34,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TrendingUp, Users, BookOpen, AlertCircle, Clock, CheckCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { getTeacherClasses, FlattenedClass, getChapterTopicAnalytics } from "@/services/academic";
+import {
+    getTeacherClasses,
+    FlattenedClass,
+    getChapterTopicAnalytics,
+    getClassPerformanceTrend,
+    getClassStudentsWithScores,
+    getRecentTestsMetrics,
+    getClassSubjectAverages,
+    getAttendanceVsMarksData,
+    getQuestionTypeDistribution,
+    getStudentAnalyticsForTeacher,
+    ClassPerformanceTrend,
+    ClassStudentWithScore,
+    RecentTestMetrics,
+    SubjectAverageData,
+    AttendanceVsMarks,
+    QuestionTypeDistribution,
+    StudentAnalyticsForTeacher
+} from "@/services/academic";
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
-
-// ---------------- MOCK DATA ----------------
-const performanceTrendData = [
-    { month: "Jan", avgScore: 65, attendance: 85 },
-    { month: "Feb", avgScore: 68, attendance: 82 },
-    { month: "Mar", avgScore: 75, attendance: 88 },
-    { month: "Apr", avgScore: 72, attendance: 86 },
-    { month: "May", avgScore: 82, attendance: 92 },
-    { month: "Jun", avgScore: 85, attendance: 90 },
-];
-
-const attendanceVsMarksData = [
-    { attendance: 65, marks: 55, student: "S1" },
-    { attendance: 70, marks: 62, student: "S2" },
-    { attendance: 75, marks: 68, student: "S3" },
-    { attendance: 80, marks: 75, student: "S4" },
-    { attendance: 85, marks: 82, student: "S5" },
-    { attendance: 90, marks: 88, student: "S6" },
-    { attendance: 92, marks: 95, student: "S7" },
-    { attendance: 95, marks: 92, student: "S8" },
-    { attendance: 60, marks: 45, student: "S9" },
-    { attendance: 98, marks: 98, student: "S10" },
-];
-
-const subjectAverageData = [
-    { subject: "Math", avg: 78 },
-    { subject: "Physics", avg: 82 },
-    { subject: "Chemistry", avg: 75 },
-    { subject: "Biology", avg: 85 },
-    { subject: "English", avg: 88 },
-    { subject: "History", avg: 72 },
-];
-
-const recentTestsData = [
-    { test: "Unit Test 1", avg: 75, top: 95 },
-    { test: "Unit Test 2", avg: 78, top: 98 },
-    { test: "Mid Term", avg: 72, top: 92 },
-    { test: "Unit Test 3", avg: 82, top: 96 },
-    { test: "Final Mock", avg: 85, top: 99 },
-];
-
-const questionTypeData = [
-    { name: "MCQ", value: 40 },
-    { name: "Short Answer", value: 30 },
-    { name: "Long Answer", value: 20 },
-    { name: "Problem Solving", value: 10 },
-];
-
-const studentsList = [
-    { id: "S1", name: "Alice Johnson" },
-    { id: "S2", name: "Bob Smith" },
-    { id: "S3", name: "Charlie Brown" },
-];
-
-const studentAnalyticsData: Record<string, any> = {
-    S1: {
-        radar: [
-            { subject: "Math", A: 140, B: 110, fullMark: 150 },
-            { subject: "Physics", A: 130, B: 130, fullMark: 150 },
-            { subject: "Chemistry", A: 120, B: 130, fullMark: 150 },
-            { subject: "Biology", A: 110, B: 100, fullMark: 150 },
-            { subject: "English", A: 100, B: 90, fullMark: 150 },
-            { subject: "History", A: 90, B: 85, fullMark: 150 },
-        ],
-        strengths: [
-            { subject: "Mathematics", desc: "Consistently scores above 90%" },
-            { subject: "Physics", desc: "Strong conceptual understanding" },
-        ],
-        weaknesses: [
-            { subject: "History", desc: "Struggles with dates and events" },
-        ],
-    },
-    S2: {
-        radar: [
-            { subject: "Math", A: 90, B: 110, fullMark: 150 },
-            { subject: "Physics", A: 85, B: 130, fullMark: 150 },
-            { subject: "Chemistry", A: 95, B: 130, fullMark: 150 },
-            { subject: "Biology", A: 130, B: 100, fullMark: 150 },
-            { subject: "English", A: 120, B: 90, fullMark: 150 },
-            { subject: "History", A: 110, B: 85, fullMark: 150 },
-        ],
-        strengths: [
-            { subject: "Biology", desc: "Excellent diagrammatic skills" },
-            { subject: "English", desc: "Strong vocabulary and grammar" },
-        ],
-        weaknesses: [
-            { subject: "Physics", desc: "Needs improvement in numericals" },
-        ],
-    },
-    S3: {
-        radar: [
-            { subject: "Math", A: 110, B: 110, fullMark: 150 },
-            { subject: "Physics", A: 100, B: 130, fullMark: 150 },
-            { subject: "Chemistry", A: 105, B: 130, fullMark: 150 },
-            { subject: "Biology", A: 95, B: 100, fullMark: 150 },
-            { subject: "English", A: 115, B: 90, fullMark: 150 },
-            { subject: "History", A: 125, B: 85, fullMark: 150 },
-        ],
-        strengths: [
-            { subject: "History", desc: "Great retention of facts" },
-            { subject: "Math", desc: "Good at algebra" },
-        ],
-        weaknesses: [
-            { subject: "Biology", desc: "Struggles with terminology" },
-        ],
-    },
-};
-
-// ---------------- NEW TOPIC/CHAPTER DATA ----------------
-const topicChapterData: Record<string, any> = {
-    S1: {
-        Math: {
-            topics: [
-                {
-                    topic: "Algebra",
-                    avg: 85,
-                    chapters: [
-                        { chapter: "Linear Equations", score: 88 },
-                        { chapter: "Quadratic Equations", score: 80 },
-                        { chapter: "Polynomials", score: 90 },
-                    ],
-                },
-                {
-                    topic: "Geometry",
-                    avg: 78,
-                    chapters: [
-                        { chapter: "Triangles", score: 74 },
-                        { chapter: "Circles", score: 81 },
-                        { chapter: "Coordinate Geometry", score: 79 },
-                    ],
-                },
-            ],
-        },
-        Physics: {
-            topics: [
-                {
-                    topic: "Mechanics",
-                    avg: 92,
-                    chapters: [
-                        { chapter: "Motion", score: 90 },
-                        { chapter: "Forces", score: 94 },
-                        { chapter: "Work & Energy", score: 92 },
-                    ],
-                },
-                {
-                    topic: "Thermodynamics",
-                    avg: 85,
-                    chapters: [
-                        { chapter: "Heat", score: 82 },
-                        { chapter: "Laws of Thermo", score: 88 },
-                    ],
-                },
-            ],
-        },
-        Chemistry: {
-            topics: [
-                {
-                    topic: "Organic",
-                    avg: 75,
-                    chapters: [
-                        { chapter: "Hydrocarbons", score: 72 },
-                        { chapter: "Alcohols", score: 78 },
-                    ],
-                },
-                {
-                    topic: "Inorganic",
-                    avg: 82,
-                    chapters: [
-                        { chapter: "Periodic Table", score: 85 },
-                        { chapter: "Bonding", score: 80 },
-                    ],
-                },
-            ],
-        },
-        Biology: {
-            topics: [
-                {
-                    topic: "Human Physiology",
-                    avg: 88,
-                    chapters: [
-                        { chapter: "Digestion", score: 90 },
-                        { chapter: "Respiration", score: 86 },
-                    ],
-                },
-            ],
-        },
-        English: {
-            topics: [
-                {
-                    topic: "Grammar",
-                    avg: 70,
-                    chapters: [
-                        { chapter: "Tenses", score: 65 },
-                        { chapter: "Active/Passive", score: 75 },
-                    ],
-                },
-            ],
-        },
-        History: {
-            topics: [
-                {
-                    topic: "World War",
-                    avg: 65,
-                    chapters: [
-                        { chapter: "WW1", score: 60 },
-                        { chapter: "WW2", score: 70 },
-                    ],
-                },
-            ],
-        },
-    },
-    S2: {
-        Math: {
-            topics: [
-                {
-                    topic: "Calculus",
-                    avg: 60,
-                    chapters: [
-                        { chapter: "Limits", score: 55 },
-                        { chapter: "Derivatives", score: 65 },
-                    ],
-                },
-            ],
-        },
-        // Add other subjects as needed...
-    },
-    S3: {
-        Math: {
-            topics: [
-                {
-                    topic: "Statistics",
-                    avg: 95,
-                    chapters: [
-                        { chapter: "Mean/Median", score: 98 },
-                        { chapter: "Probability", score: 92 },
-                    ],
-                },
-            ],
-        },
-    },
-};
 
 const NEON_COLORS = {
     primary: "#8884d8",
@@ -287,16 +64,38 @@ const NEON_COLORS = {
     danger: "#ff7373",
 };
 
+// ---------------- TYPE DEFINITIONS ----------------
+interface StudentListItem {
+    id: string;
+    name: string;
+    avgScore: number;
+    attendancePercentage: number;
+}
+
+interface StudentAnalyticsData {
+    radar: { subject: string; A: number; B: number }[];
+    strengths: { subject: string; desc: string }[];
+    weaknesses: { subject: string; desc: string }[];
+}
+
+interface TopicChapterData {
+    topics: {
+        topic: string;
+        avg: number;
+        chapters: { chapter: string; score: number }[];
+    }[];
+}
+
 // ---------------- MAIN COMPONENT ----------------
 const AnalyticsDashboard = () => {
     const { profile, profileLoading } = useAuth();
     const [classes, setClasses] = useState<FlattenedClass[]>([]);
     const [selectedClass, setSelectedClass] = useState<FlattenedClass | undefined>();
     const navigate = useNavigate();
-    const [selectedStudent, setSelectedStudent] = useState("S1");
+    const [selectedStudent, setSelectedStudent] = useState<string>("");
     const [loading, setLoading] = useState(true);
 
-    // new state for topic/chapter analytics
+    // State for topic/chapter analytics (class level)
     const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
     const [analyticsData, setAnalyticsData] = useState<{
         chapters: { name: string; avgScore: number; totalQuestions: number }[];
@@ -304,7 +103,50 @@ const AnalyticsDashboard = () => {
     }>({ chapters: [], topics: [] });
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
-    // Fetch analytics data when class changes
+    // State for class insights tab
+    const [performanceTrendData, setPerformanceTrendData] = useState<ClassPerformanceTrend[]>([]);
+    const [subjectAverageData, setSubjectAverageData] = useState<SubjectAverageData[]>([]);
+    const [attendanceVsMarksData, setAttendanceVsMarksData] = useState<AttendanceVsMarks[]>([]);
+    const [classInsightsLoading, setClassInsightsLoading] = useState(false);
+
+    // State for student analysis tab
+    const [studentsList, setStudentsList] = useState<StudentListItem[]>([]);
+    const [studentAnalyticsData, setStudentAnalyticsData] = useState<Record<string, StudentAnalyticsData>>({});
+    const [topicChapterData, setTopicChapterData] = useState<Record<string, Record<string, TopicChapterData>>>({});
+    const [studentAnalysisLoading, setStudentAnalysisLoading] = useState(false);
+
+    // State for test metrics tab
+    const [recentTestsData, setRecentTestsData] = useState<RecentTestMetrics[]>([]);
+    const [questionTypeData, setQuestionTypeData] = useState<QuestionTypeDistribution[]>([]);
+    const [testMetricsLoading, setTestMetricsLoading] = useState(false);
+
+    // Fetch class insights data when class changes
+    useEffect(() => {
+        const fetchClassInsights = async () => {
+            if (!selectedClass) return;
+            
+            setClassInsightsLoading(true);
+            try {
+                const [trend, subjects, attVsMarks] = await Promise.all([
+                    getClassPerformanceTrend(selectedClass.class_id),
+                    getClassSubjectAverages(selectedClass.class_id),
+                    getAttendanceVsMarksData(selectedClass.class_id)
+                ]);
+                setPerformanceTrendData(trend);
+                setSubjectAverageData(subjects);
+                setAttendanceVsMarksData(attVsMarks);
+            } catch (error: any) {
+                console.error('Error fetching class insights:', error);
+                toast.error('Failed to load class insights');
+            } finally {
+                setClassInsightsLoading(false);
+            }
+        };
+
+        fetchClassInsights();
+    }, [selectedClass]);
+
+    // Fetch chapter/topic analytics data when class changes
     useEffect(() => {
         const fetchAnalyticsData = async () => {
             if (!selectedClass) return;
@@ -324,6 +166,83 @@ const AnalyticsDashboard = () => {
         fetchAnalyticsData();
     }, [selectedClass]);
 
+    // Fetch students list when class changes
+    useEffect(() => {
+        const fetchStudentsList = async () => {
+            if (!selectedClass) return;
+            
+            setStudentAnalysisLoading(true);
+            try {
+                const students = await getClassStudentsWithScores(selectedClass.class_id);
+                setStudentsList(students);
+                // Set first student as selected if available
+                if (students.length > 0 && !selectedStudent) {
+                    setSelectedStudent(students[0].id);
+                }
+            } catch (error: any) {
+                console.error('Error fetching students list:', error);
+                toast.error('Failed to load students');
+            } finally {
+                setStudentAnalysisLoading(false);
+            }
+        };
+
+        fetchStudentsList();
+    }, [selectedClass]);
+
+    // Fetch individual student analytics when student selection changes
+    useEffect(() => {
+        const fetchStudentAnalytics = async () => {
+            if (!selectedStudent || !selectedClass) return;
+            // Don't refetch if we already have data for this student
+            if (studentAnalyticsData[selectedStudent]) return;
+            
+            try {
+                const analytics = await getStudentAnalyticsForTeacher(selectedStudent, selectedClass.class_id);
+                setStudentAnalyticsData(prev => ({
+                    ...prev,
+                    [selectedStudent]: {
+                        radar: analytics.radar,
+                        strengths: analytics.strengths,
+                        weaknesses: analytics.weaknesses
+                    }
+                }));
+                // Note: topicChapterData is not currently returned by the service function
+                // This can be enhanced later if per-student topic breakdown is needed
+            } catch (error: any) {
+                console.error('Error fetching student analytics:', error);
+                toast.error('Failed to load student analytics');
+            }
+        };
+
+        fetchStudentAnalytics();
+    }, [selectedStudent, selectedClass]);
+
+    // Fetch test metrics when class changes
+    useEffect(() => {
+        const fetchTestMetrics = async () => {
+            if (!selectedClass) return;
+            
+            setTestMetricsLoading(true);
+            try {
+                const [recentTests, questionTypes] = await Promise.all([
+                    getRecentTestsMetrics(selectedClass.class_id),
+                    getQuestionTypeDistribution(selectedClass.class_id)
+                ]);
+                setRecentTestsData(recentTests);
+                setQuestionTypeData(questionTypes);
+            } catch (error: any) {
+                console.error('Error fetching test metrics:', error);
+                toast.error('Failed to load test metrics');
+            } finally {
+                setTestMetricsLoading(false);
+            }
+        };
+
+        fetchTestMetrics();
+    }, [selectedClass]);
+
+    // Fetch classes on mount
     useEffect(() => {
         const fetchClasses = async () => {
             if (profileLoading) return;
@@ -350,6 +269,16 @@ const AnalyticsDashboard = () => {
     if (loading) return <LoadingSpinner />;
     if (!selectedClass)
         return <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">No classes found</div>;
+
+    // Get current student analytics with fallback
+    const currentStudentAnalytics = studentAnalyticsData[selectedStudent] || {
+        radar: [],
+        strengths: [],
+        weaknesses: []
+    };
+
+    // Get current topic/chapter data with fallback
+    const currentTopicChapterData = topicChapterData[selectedStudent] || {};
 
     return (
         <div className="min-h-screen p-6 space-y-8 bg-background">
@@ -384,205 +313,236 @@ const AnalyticsDashboard = () => {
 
                 {/* ---------------- CLASS LEVEL INSIGHTS ---------------- */}
                 <TabsContent value="class" className="space-y-6">
+                    {classInsightsLoading ? (
+                        <div className="flex justify-center p-20">
+                            <LoadingSpinner />
+                        </div>
+                    ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* PERFORMANCE TREND */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Class Performance Trend</CardTitle>
-                                <CardDescription>Average scores over the last 6 months</CardDescription>
+                                <CardTitle>📈 Class Performance Trend</CardTitle>
+                                <CardDescription>Average scores and attendance over the last 6 months</CardDescription>
                             </CardHeader>
                             <CardContent className="h-[300px]">
+                                {performanceTrendData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={performanceTrendData}>
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" />
-                                        <YAxis />
-                                        <Tooltip />
+                                        <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                                        <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
+                                        <Tooltip 
+                                            formatter={(value: number, name: string) => [
+                                                `${value}%`, 
+                                                name === 'avgScore' ? 'Average Score' : 'Attendance Rate'
+                                            ]}
+                                            labelFormatter={(label) => `Month: ${label}`}
+                                        />
                                         <Legend />
-                                        <Line type="monotone" dataKey="avgScore" stroke="#8884d8" strokeWidth={2} />
-                                        <Line type="monotone" dataKey="attendance" stroke="#82ca9d" strokeWidth={2} />
+                                        <Line type="monotone" dataKey="avgScore" stroke="#8884d8" strokeWidth={2} name="Average Score (%)" dot={{ r: 4 }} />
+                                        <Line type="monotone" dataKey="attendance" stroke="#82ca9d" strokeWidth={2} name="Attendance Rate (%)" dot={{ r: 4 }} />
                                     </LineChart>
                                 </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        No performance data available yet.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
                         {/* SUBJECT AVERAGES */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Subject Averages</CardTitle>
+                                <CardTitle>📚 Subject Averages</CardTitle>
                                 <CardDescription>Overall class performance by subject</CardDescription>
                             </CardHeader>
                             <CardContent className="h-[300px]">
+                                {subjectAverageData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={subjectAverageData} layout="vertical">
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" domain={[0, 100]} />
-                                        <YAxis dataKey="subject" type="category" width={80} />
-                                        <Tooltip />
-                                        <Bar dataKey="avg" fill="#8884d8" radius={[0, 4, 4, 0]}>
-                                            {subjectAverageData.map((entry, index) => (
+                                        <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
+                                        <YAxis dataKey="subject" type="category" width={100} tick={{ fontSize: 12 }} />
+                                        <Tooltip 
+                                            formatter={(value: number) => [`${value}%`, 'Class Average']}
+                                            labelFormatter={(label) => `Subject: ${label}`}
+                                        />
+                                        <Bar dataKey="avg" name="Class Average (%)" fill="#8884d8" radius={[0, 4, 4, 0]}>
+                                            {subjectAverageData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill={index % 2 === 0 ? "#8884d8" : "#82ca9d"} />
                                             ))}
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        No subject data available yet.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
                         {/* ATTENDANCE VS MARKS */}
                         <Card className="lg:col-span-2">
                             <CardHeader>
-                                <CardTitle>Attendance vs. Marks Correlation</CardTitle>
-                                <CardDescription>Does attendance impact performance?</CardDescription>
+                                <CardTitle>🔗 Attendance vs. Marks Correlation</CardTitle>
+                                <CardDescription>Does attendance impact performance? Each dot represents a student.</CardDescription>
                             </CardHeader>
                             <CardContent className="h-[300px]">
+                                {attendanceVsMarksData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ScatterChart>
-                                        <CartesianGrid />
-                                        <XAxis type="number" dataKey="attendance" name="Attendance" unit="%" />
-                                        <YAxis type="number" dataKey="marks" name="Marks" unit="%" />
-                                        <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                                    <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis 
+                                            type="number" 
+                                            dataKey="attendance" 
+                                            name="Attendance" 
+                                            unit="%" 
+                                            domain={[0, 100]}
+                                            tick={{ fontSize: 12 }}
+                                            label={{ value: 'Attendance Rate (%)', position: 'bottom', offset: 0, fontSize: 12 }}
+                                        />
+                                        <YAxis 
+                                            type="number" 
+                                            dataKey="marks" 
+                                            name="Marks" 
+                                            unit="%" 
+                                            domain={[0, 100]}
+                                            tick={{ fontSize: 12 }}
+                                            label={{ value: 'Test Scores (%)', angle: -90, position: 'insideLeft', fontSize: 12 }}
+                                        />
+                                        <Tooltip 
+                                            cursor={{ strokeDasharray: '3 3' }}
+                                            formatter={(value: number, name: string) => [
+                                                `${value}%`,
+                                                name === 'Attendance' ? 'Attendance Rate' : 'Test Score'
+                                            ]}
+                                        />
                                         <Scatter name="Students" data={attendanceVsMarksData} fill="#8884d8" />
                                     </ScatterChart>
                                 </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        No attendance/marks correlation data available.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>
+                    )}
                 </TabsContent>
 
                 {/* ---------------- STUDENT LEVEL ANALYSIS ---------------- */}
                 <TabsContent value="student" className="space-y-8">
+                    {studentAnalysisLoading ? (
+                        <div className="flex justify-center p-20">
+                            <LoadingSpinner />
+                        </div>
+                    ) : studentsList.length === 0 ? (
+                        <div className="text-center py-20 text-muted-foreground">
+                            No students found in this class.
+                        </div>
+                    ) : (
+                    <>
+                    {/* CLASS SUMMARY HEADER */}
                     <div className="flex items-center gap-4 bg-secondary/10 p-4 rounded-lg border border-white/5">
                         <Users className="w-5 h-5 text-blue-500" />
-                        <label className="text-sm font-medium">Select Student</label>
-
-                        <Select value={selectedStudent} onValueChange={(v) => { setSelectedStudent(v); setSelectedSubject(null); }}>
-                            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                {studentsList.map((s) => (
-                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <div>
+                            <p className="text-sm font-medium">Class Overview</p>
+                            <p className="text-xs text-muted-foreground">
+                                {studentsList.length} students • Average Score: {studentsList.length > 0 ? Math.round(studentsList.reduce((a, s) => a + s.avgScore, 0) / studentsList.length) : 0}%
+                            </p>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* SUBJECT RADAR */}
+                        {/* CLASS SUBJECT PERFORMANCE RADAR */}
                         <Card className="col-span-2 h-[450px]">
                             <CardHeader>
-                                <CardTitle>Subject-wise Performance</CardTitle>
-                                <CardDescription>{studentsList.find(s => s.id === selectedStudent)?.name}</CardDescription>
+                                <CardTitle>🎯 Class Subject Performance Overview</CardTitle>
+                                <CardDescription>
+                                    Complete class average performance across all subjects
+                                </CardDescription>
                             </CardHeader>
                             <CardContent className="h-[370px]">
+                                {subjectAverageData.length > 0 ? (
                                 <ResponsiveContainer>
-                                    <RadarChart data={studentAnalyticsData[selectedStudent].radar}>
-                                        <PolarGrid />
-                                        <PolarAngleAxis dataKey="subject" />
-                                        <PolarRadiusAxis />
-                                        <Radar dataKey="B" stroke="#82ca9d" fill="#82ca9d" fillOpacity={0.3} name="Class Avg" />
-                                        <Radar dataKey="A" stroke="#8884d8" fill="#8884d8" fillOpacity={0.5} name="Student" />
-                                        <Legend />
+                                    <RadarChart data={subjectAverageData.map(s => ({ subject: s.subject, score: s.avg, fullMark: 100 }))}>
+                                        <PolarGrid gridType="polygon" />
+                                        <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12 }} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} />
+                                        <Radar dataKey="score" stroke="#8884d8" fill="#8884d8" fillOpacity={0.5} name="Class Average" />
+                                        <Tooltip 
+                                            formatter={(value: number) => [`${value}%`, 'Class Average']}
+                                        />
                                     </RadarChart>
                                 </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        No subject performance data available yet.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
-                        {/* STRENGTH & WEAKNESS */}
+                        {/* TOP PERFORMERS & NEEDS ATTENTION */}
                         <Card>
-                            <CardHeader><CardTitle>Strength & Weakness</CardTitle></CardHeader>
+                            <CardHeader><CardTitle>👥 Student Performance</CardTitle></CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
-                                    <h4 className="text-sm font-medium mb-3 text-green-500 flex items-center"><TrendingUp className="w-4 h-4 mr-2" />Strengths</h4>
-                                    {studentAnalyticsData[selectedStudent].strengths.map((s: any, i: number) => (
-                                        <div key={i} className="p-3 bg-green-500/10 rounded-lg border border-green-500/20">
-                                            <p className="font-medium">{s.subject}</p>
-                                            <p className="text-xs text-muted-foreground">{s.desc}</p>
+                                    <h4 className="text-sm font-medium mb-3 text-green-500 flex items-center"><TrendingUp className="w-4 h-4 mr-2" />Top Performers</h4>
+                                    {studentsList.slice(0, 3).map((s, i) => (
+                                        <div key={i} className="p-3 bg-green-500/10 rounded-lg border border-green-500/20 mb-2 flex justify-between items-center">
+                                            <div>
+                                                <p className="font-medium">{s.name}</p>
+                                                <p className="text-xs text-muted-foreground">Attendance: {s.attendancePercentage}%</p>
+                                            </div>
+                                            <span className="text-green-600 font-bold">{s.avgScore}%</span>
                                         </div>
                                     ))}
                                 </div>
                                 <div>
-                                    <h4 className="text-sm font-medium mb-3 text-red-500 flex items-center"><AlertCircle className="w-4 h-4 mr-2" />Weaknesses</h4>
-                                    {studentAnalyticsData[selectedStudent].weaknesses.map((s: any, i: number) => (
-                                        <div key={i} className="p-3 bg-red-500/10 rounded-lg border border-red-500/20">
-                                            <p className="font-medium">{s.subject}</p>
-                                            <p className="text-xs text-muted-foreground">{s.desc}</p>
-                                        </div>
-                                    ))}
+                                    <h4 className="text-sm font-medium mb-3 text-red-500 flex items-center"><AlertCircle className="w-4 h-4 mr-2" />Needs Attention</h4>
+                                    {studentsList.filter(s => s.avgScore < 60).length > 0 ? (
+                                        studentsList.filter(s => s.avgScore < 60).slice(0, 3).map((s, i) => (
+                                            <div key={i} className="p-3 bg-red-500/10 rounded-lg border border-red-500/20 mb-2 flex justify-between items-center">
+                                                <div>
+                                                    <p className="font-medium">{s.name}</p>
+                                                    <p className="text-xs text-muted-foreground">Attendance: {s.attendancePercentage}%</p>
+                                                </div>
+                                                <span className="text-red-600 font-bold">{s.avgScore}%</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">All students performing well! 🎉</p>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* ---------------- TOPIC / CHAPTER PERFORMANCE WITH STRENGTH & WEAKNESS ---------------- */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Topic / Chapter-wise Performance</CardTitle>
-                            <CardDescription>Drill down into topics & chapters</CardDescription>
-                        </CardHeader>
-
-                        <CardContent className="space-y-6">
-                            {/* SUBJECT SELECTOR */}
-                            <Select value={selectedSubject || undefined} onValueChange={setSelectedSubject}>
-                                <SelectTrigger className="w-64"><SelectValue placeholder="Select Subject" /></SelectTrigger>
-                                <SelectContent>
-                                    {studentAnalyticsData[selectedStudent].radar.map((s: any) => (
-                                        <SelectItem key={s.subject} value={s.subject}>{s.subject}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            {/* TOPIC BAR CHART */}
-                            {selectedSubject && topicChapterData[selectedStudent]?.[selectedSubject] && (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={topicChapterData[selectedStudent][selectedSubject].topics}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="topic" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Bar dataKey="avg" fill={NEON_COLORS.primary} name="Avg Score" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            )}
-
-                            {/* CHAPTER CHARTS */}
-                            {selectedSubject && topicChapterData[selectedStudent]?.[selectedSubject] && (
-                                <div className="space-y-6">
-                                    {topicChapterData[selectedStudent][selectedSubject].topics.map((topic: any, i: number) => (
-                                        <div key={i} className="p-4 border rounded-lg bg-secondary/5">
-                                            <h3 className="text-lg font-semibold mb-4">{topic.topic}</h3>
-                                            <ResponsiveContainer width="100%" height={220}>
-                                                <BarChart data={topic.chapters}>
-                                                    <CartesianGrid strokeDasharray="3 3" />
-                                                    <XAxis dataKey="chapter" />
-                                                    <YAxis />
-                                                    <Tooltip />
-                                                    <Bar dataKey="score" fill={NEON_COLORS.secondary} />
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {selectedSubject && !topicChapterData[selectedStudent]?.[selectedSubject] && (
-                                <div className="text-center py-10 text-muted-foreground">
-                                    No detailed topic data available for {selectedSubject}.
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                    </>
+                    )}
                 </TabsContent>
 
                 {/* ---------------- TEST METRICS ---------------- */}
                 <TabsContent value="test" className="space-y-6">
+                    {testMetricsLoading ? (
+                        <div className="flex justify-center p-20">
+                            <LoadingSpinner />
+                        </div>
+                    ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* RECENT TEST PERFORMANCE */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Recent Test Performance</CardTitle>
-                                <CardDescription>Average vs Top scores in recent tests</CardDescription>
+                                <CardTitle>📝 Recent Test Performance</CardTitle>
+                                <CardDescription>Comparing class average vs. top performer in each test</CardDescription>
                             </CardHeader>
                             <CardContent className="h-[300px]">
+                                {recentTestsData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={recentTestsData}>
                                         <defs>
@@ -595,47 +555,78 @@ const AnalyticsDashboard = () => {
                                                 <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <XAxis dataKey="test" />
-                                        <YAxis />
+                                        <XAxis dataKey="test" tick={{ fontSize: 11 }} angle={-15} textAnchor="end" height={50} />
+                                        <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <Tooltip />
-                                        <Area type="monotone" dataKey="avg" stroke="#8884d8" fillOpacity={1} fill="url(#colorAvg)" />
-                                        <Area type="monotone" dataKey="top" stroke="#82ca9d" fillOpacity={1} fill="url(#colorTop)" />
+                                        <Tooltip 
+                                            formatter={(value: number, name: string) => [
+                                                `${value}%`, 
+                                                name === 'avg' ? 'Class Average' : 'Top Score'
+                                            ]}
+                                            labelFormatter={(label) => `Test: ${label}`}
+                                        />
+                                        <Legend />
+                                        <Area type="monotone" dataKey="avg" stroke="#8884d8" fillOpacity={1} fill="url(#colorAvg)" name="Class Average (%)" />
+                                        <Area type="monotone" dataKey="top" stroke="#82ca9d" fillOpacity={1} fill="url(#colorTop)" name="Top Score (%)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        No recent test data available yet.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
                         {/* QUESTION TYPE DISTRIBUTION */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Question Type Analysis</CardTitle>
-                                <CardDescription>Distribution of question types in tests</CardDescription>
+                                <CardTitle>🧠 Question Type Analysis</CardTitle>
+                                <CardDescription>Breakdown of question types used across all tests</CardDescription>
                             </CardHeader>
                             <CardContent className="h-[300px]">
+                                {questionTypeData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
                                             data={questionTypeData}
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
+                                            innerRadius={50}
+                                            outerRadius={90}
                                             fill="#8884d8"
-                                            paddingAngle={5}
+                                            paddingAngle={2}
                                             dataKey="value"
+                                            nameKey="name"
                                         >
-                                            {questionTypeData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042'][index % 4]} />
+                                            {questionTypeData.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />
                                             ))}
                                         </Pie>
-                                        <Tooltip />
-                                        <Legend />
+                                        <Tooltip 
+                                            formatter={(value: number) => [`${value} questions`]}
+                                        />
+                                        <Legend 
+                                            layout="vertical"
+                                            align="right"
+                                            verticalAlign="middle"
+                                            formatter={(value, entry: any) => (
+                                                <span style={{ fontSize: '12px' }}>
+                                                    {value} ({entry.payload?.value || 0})
+                                                </span>
+                                            )}
+                                        />
                                     </PieChart>
                                 </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        No question type data available yet.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>
+                    )}
                 </TabsContent>
 
                 {/* ---------------- CHAPTER & TOPIC ANALYTICS ---------------- */}
