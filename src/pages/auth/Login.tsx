@@ -86,8 +86,14 @@ const Login = () => {
         message.includes("not confirmed")
       ) {
         setErrorMsg(
-          "Invalid credentials or account not confirmed. Please check your email."
+          "Invalid email or password. Please check your credentials."
         );
+      } else if (message.includes("Account not found")) {
+        setErrorMsg("No account exists with these credentials. Please check your email and password.");
+      } else if (message.includes("not properly configured")) {
+        setErrorMsg("Your account setup is incomplete. Please contact your school administrator.");
+      } else if (message.includes("Unable to access")) {
+        setErrorMsg("Unable to access your profile. Please try again or contact support.");
       } else {
         setErrorMsg(message);
       }
