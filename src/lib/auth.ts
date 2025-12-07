@@ -91,16 +91,26 @@ export const authService = {
       .from("profiles")
       .select("*, user_roles(role)")
       .eq("id", userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle to avoid error when no row found
 
     console.log("Fetched profile : ", profileData, userId);
 
     if (error) {
-      throw new Error(`Failed to fetch user profile: ${error.message}`);
+      // Handle RLS or database errors
+      throw new Error("Unable to access your profile. Please contact support.");
+    }
+
+    if (!profileData) {
+      // No profile found - user exists in auth but not in profiles table
+      throw new Error("Account not found. Please check your credentials or contact support.");
     }
 
     // @ts-ignore
     const userRole = profileData.user_roles?.role as UserRole;
+
+    if (!userRole) {
+      throw new Error("Your account is not properly configured. Please contact your school administrator.");
+    }
 
     const profile: UserProfile = {
         ...profileData,
