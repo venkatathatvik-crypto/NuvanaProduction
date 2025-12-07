@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserRole, authService } from "@/lib/auth"; // 👈 Import authService
-import { GraduationCap, School, Shield, Loader2 } from "lucide-react";
+import { GraduationCap, School, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -54,13 +54,17 @@ const Login = () => {
       const userRole = authData.profile.role;
       const selectedRole = activeTab;
 
-      console.log("Selected role:", selectedRole);
-      console.log("Actual DB role:", userRole);
+      console.log("🔐 Role Check:", {
+        selectedTab: selectedRole,
+        databaseRole: userRole,
+        email: data.email
+      });
 
       if (userRole !== selectedRole) {
+        console.warn(`❌ Role mismatch! User is '${userRole}' but tried to login as '${selectedRole}'`);
         await authService.logout();
         throw new Error(
-          `Your account is registered as a ${userRole}. Please switch the login tab.`
+          `Access Denied: You are registered as a "${userRole}". Please use the "${userRole}" login tab.`
         );
       }
 
@@ -128,7 +132,7 @@ const Login = () => {
           onValueChange={(v) => setActiveTab(v as UserRole)}
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-3 mb-8">
+          <TabsList className="grid w-full grid-cols-2 mb-8">
             <TabsTrigger value="student" className="flex items-center gap-2">
               <GraduationCap className="h-4 w-4" />
               Student
@@ -137,16 +141,12 @@ const Login = () => {
               <School className="h-4 w-4" />
               Teacher
             </TabsTrigger>
-            <TabsTrigger value="school_admin" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              School Admin
-            </TabsTrigger>
           </TabsList>
 
           <Card className="border-border/50 shadow-xl">
             <CardHeader>
               <CardTitle>
-                {activeTab === "student" ? "Student" : activeTab === "teacher" ? "Teacher" : "School Admin"} Login
+                {activeTab === "student" ? "Student" : "Teacher"} Login
               </CardTitle>
               <CardDescription>
                 Enter your credentials to access your dashboard
@@ -169,9 +169,7 @@ const Login = () => {
                     placeholder={
                       activeTab === "student"
                         ? "student@school.com"
-                        : activeTab === "teacher"
-                        ? "teacher@school.com"
-                        : "admin@school.com"
+                        : "teacher@school.com"
                     }
                     {...register("email")}
                     className="bg-background/50"
