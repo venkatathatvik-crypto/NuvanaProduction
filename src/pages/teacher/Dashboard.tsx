@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
+import NotificationBell from "@/components/NotificationBell";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -69,49 +70,50 @@ const TeacherDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen p-6 relative overflow-hidden">
+    <div className="min-h-screen p-3 sm:p-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/10" />
 
-      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex items-center justify-between"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
-          <div>
-            <h1 className="text-4xl font-bold neon-text mb-2">Welcome, {profile?.name || "Teacher"}! 📚</h1>
-            <p className="text-muted-foreground">Manage your classes and students efficiently</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2 truncate">Welcome, {profile?.name || "Teacher"}! 📚</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Manage your classes and students efficiently</p>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-2 sm:gap-4 shrink-0">
+            <NotificationBell />
             <Button variant="outline" className="glass hover:neon-glow" onClick={() => navigate("/teacher/profile")}>
-              <Users className="mr-2 w-4 h-4" />
-              My Profile
+              <Users className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">My Profile</span>
             </Button>
             <Button variant="outline" className="glass hover:neon-glow text-destructive hover:text-destructive" onClick={handleLogout}>
-              <LogOut className="mr-2 w-4 h-4" />
-              Logout
+              <LogOut className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           {quickActions.map((action, index) => (
             <motion.div key={action.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.1 }}>
-              <Button className="w-full h-32 glass-card hover:neon-glow flex flex-col gap-3 text-lg" variant="outline" onClick={() => navigate(action.path)}>
-                <action.icon className={`w-8 h-8 ${action.color}`} />
-                {action.label}
+              <Button className="w-full h-24 sm:h-32 glass-card hover:neon-glow flex flex-col gap-2 sm:gap-3 text-sm sm:text-lg" variant="outline" onClick={() => navigate(action.path)}>
+                <action.icon className={`w-6 h-6 sm:w-8 sm:h-8 ${action.color}`} />
+                <span className="truncate px-1">{action.label}</span>
               </Button>
             </motion.div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}>
-            <Card className="glass-card p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <TrendingUp className="w-6 h-6 text-primary" />
-                <h2 className="text-2xl font-semibold">Class Overview</h2>
+            <Card className="glass-card p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                <h2 className="text-xl sm:text-2xl font-semibold">Class Overview</h2>
               </div>
               <div className="space-y-4">
                 {loading ? (
@@ -158,10 +160,10 @@ const TeacherDashboard = () => {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>
-            <Card className="glass-card p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <Calendar className="w-6 h-6 text-accent" />
-                <h2 className="text-2xl font-semibold">Recent Activity</h2>
+            <Card className="glass-card p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+                <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-accent" />
+                <h2 className="text-xl sm:text-2xl font-semibold">Recent Activity</h2>
               </div>
               <div className="space-y-4">
                 {recentActivity.map((activity) => (
@@ -179,7 +181,7 @@ const TeacherDashboard = () => {
         </div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-          <Card className="glass-card p-6">
+          <Card className="glass-card p-4 sm:p-6">
             <h3 className="text-lg font-semibold mb-4">Quick Tips</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>• Upload marks regularly to keep students updated on their progress</li>

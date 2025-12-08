@@ -9,8 +9,6 @@ interface AuthRedirectProps {
 
 const AuthRedirect = ({ children }: AuthRedirectProps) => {
   const { session, profile, loading, profileLoading } = useAuth();
-  console.log("---------------------------------------------------");
-  console.log(session, profile, loading, profileLoading);
 
   // Wait for initial auth check
   if (loading) return <LoadingSpinner />;

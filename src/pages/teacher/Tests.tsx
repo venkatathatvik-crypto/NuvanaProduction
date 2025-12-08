@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Edit, Trash2, FileText } from "lucide-react";
+import { Plus, Edit, Trash2, FileText, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -10,6 +10,10 @@ import {
   getTeacherTests,
   deleteTeacherTest,
   publishTeacherTest,
+  createNotificationsForClass,
+  getStudentIdsInClass,
+  getStudentEmailsInClass,
+  sendTestPublishedEmail,
   TeacherTest,
 } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -73,6 +77,34 @@ const TeacherTests = () => {
           ? "Test unpublished successfully"
           : "Test published successfully"
       );
+
+      // Send notification to students if publishing (not unpublishing)
+      if (!test.isPublished && test.classId) {
+        try {
+          const studentIds = await getStudentIdsInClass(test.classId);
+          await createNotificationsForClass(studentIds, {
+            school_id: profile.school_id,
+            title: "New Test Available",
+            message: `"${test.title}" is now available for you to take.`,
+            notification_type: "test",
+            target_url: "/student/tests",
+          });
+        } catch (notifError) {
+          console.error("Failed to send notifications:", notifError);
+        }
+
+        // Send email notifications
+        try {
+          const studentEmails = await getStudentEmailsInClass(test.classId);
+          await sendTestPublishedEmail(
+            studentEmails,
+            test.title,
+            test.className || 'your class'
+          );
+        } catch (emailError) {
+          console.error("Failed to send emails:", emailError);
+        }
+      }
     } catch (error: any) {
       console.error("Error updating test status:", error);
       toast.error(error.message || "Failed to update test status");
@@ -80,27 +112,30 @@ const TeacherTests = () => {
   };
 
   return (
-    <div className="min-h-screen p-6 bg-background space-y-8">
+    <div className="min-h-screen p-3 sm:p-6 bg-background space-y-4 sm:space-y-8">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex justify-between items-center"
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
       >
-        <div>
-          <h1 className="text-4xl font-bold neon-text mb-2">Manage Tests 📝</h1>
-          <p className="text-muted-foreground">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Manage Tests 📝</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">
             Create and manage MCQ assessments
           </p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-2 sm:gap-4 shrink-0">
           <Button variant="outline" onClick={() => navigate("/teacher")}>
-            Back to Dashboard
+            <ArrowLeft className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Back</span>
           </Button>
           <Button
             onClick={() => navigate("/teacher/tests/create")}
             className="gap-2"
           >
-            <Plus className="w-4 h-4" /> Create New Test
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Create New Test</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       </motion.div>

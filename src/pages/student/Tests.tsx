@@ -33,8 +33,8 @@ const StudentTests = () => {
                     return;
                 }
                 const testsData = await getStudentTests(studentData.class_id, profile.id);
-                // Exclude internal assessments (exam_type_id = 4) – they belong to Events page
-                const filteredTests = testsData.filter(test => test.examTypeId !== 4);
+                // Exclude internal assessments – they belong to Events page
+                const filteredTests = testsData.filter(test => test.examTypeCategory !== 'Internal Assessment');
                 setTests(filteredTests);
             } catch (error: any) {
                 console.error("Error fetching tests:", error);

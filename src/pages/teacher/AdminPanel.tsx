@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/supabase/client";
 import { useAuth } from "@/auth/AuthContext";
 import { getTimetableForClass, getOrCreateTimetableDay, saveTimetablePeriod, deleteTimetablePeriod, DAY_NAMES, WeeklyTimetable } from "@/services/timetableService";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export default function AdminPanel() {
     const { profile, logout } = useAuth();
@@ -23,6 +24,12 @@ export default function AdminPanel() {
     const [grades, setGrades] = useState<any[]>([]);
     const [fileCategories, setFileCategories] = useState<any[]>([]);
     const [examTypes, setExamTypes] = useState<any[]>([]);
+    const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
+    const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
+    
+    // Teacher-Subject Assignment
+    const [selectedTeacherForSubject, setSelectedTeacherForSubject] = useState<string>("");
+    const [selectedSubjectsForTeacher, setSelectedSubjectsForTeacher] = useState<string[]>([]);
     
     // Form States
     const [newClass, setNewClass] = useState("");
@@ -34,14 +41,18 @@ export default function AdminPanel() {
     // Student-Class Assignment
     const [selectedStudent, setSelectedStudent] = useState<string>("");
     const [selectedClassForStudent, setSelectedClassForStudent] = useState<string>("");
+    const [studentAssignSearch, setStudentAssignSearch] = useState("");
     
+    // Teacher-Class Assignment
+    const [teacherAssignSearch, setTeacherAssignSearch] = useState("");
     // Subject-Grade Assignment
     const [selectedGradeForSubject, setSelectedGradeForSubject] = useState<string>("");
-    const [selectedSubject, setSelectedSubject] = useState<string>("");
+    const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
     const [gradeSubjects, setGradeSubjects] = useState<any[]>([]);
     const [newSubject, setNewSubject] = useState("");
     const [newFileCategory, setNewFileCategory] = useState("");
     const [newExamType, setNewExamType] = useState("");
+    const [newExamTypeCategory, setNewExamTypeCategory] = useState<"Internal Assessment" | "School Exam">("Internal Assessment");
 
     // Search filters
     const [teacherSearch, setTeacherSearch] = useState("");
@@ -93,7 +104,7 @@ export default function AdminPanel() {
         setLoading(true);
         try {
             // Parallel fetching
-            const [teachersRes, studentsRes, classesRes, teacherClassesRes, subjectsRes, gradesRes, gradeSubjectsRes, fileCategoriesRes, examTypesRes] = await Promise.all([
+            const [teachersRes, studentsRes, classesRes, teacherClassesRes, subjectsRes, gradesRes, gradeSubjectsRes, fileCategoriesRes, examTypesRes, teacherSubjectsRes] = await Promise.all([
                 supabase.from('profiles').select('*').eq('school_id', profile?.school_id).eq('role_id', 3), // Teacher
                 supabase.from('profiles').select('*, classes(id, name)').eq('school_id', profile?.school_id).eq('role_id', 4), // Student
                 supabase.from('classes').select('*, grade_levels(name)').eq('school_id', profile?.school_id),
@@ -102,7 +113,8 @@ export default function AdminPanel() {
                 supabase.from('grade_levels').select('*').eq('school_id', profile?.school_id),
                 supabase.from('grade_subjects').select('*, grade_levels!inner(id, name, school_id), subjects_master(name)').eq('grade_levels.school_id', profile?.school_id),
                 supabase.from('file_categories').select('*').eq('school_id', profile?.school_id),
-                supabase.from('exam_types').select('*').eq('school_id', profile?.school_id)
+                supabase.from('exam_types').select('*').eq('school_id', profile?.school_id),
+                supabase.from('teacher_subjects').select('*, grade_subjects(id, subjects_master(name), grade_levels(name))').eq('school_id', profile?.school_id)
             ]);
 
             if (teachersRes.error) throw teachersRes.error;
@@ -135,6 +147,8 @@ export default function AdminPanel() {
             if (gradeSubjectsRes.data) setGradeSubjects(gradeSubjectsRes.data);
             if (fileCategoriesRes.data) setFileCategories(fileCategoriesRes.data);
             if (examTypesRes.data) setExamTypes(examTypesRes.data);
+            if (teacherClassesRes.data) setTeacherClasses(teacherClassesRes.data);
+            if (teacherSubjectsRes.data) setTeacherSubjects(teacherSubjectsRes.data);
 
         } catch (error: any) {
             console.error("Error fetching data:", error);
@@ -271,20 +285,82 @@ export default function AdminPanel() {
         }
     };
 
-    const addSubjectToGrade = async () => {
-        if (!selectedGradeForSubject || !selectedSubject) {
-            toast.error("Select both grade and subject");
+    const assignSubjectsToTeacher = async () => {
+        if (!selectedTeacherForSubject || selectedSubjectsForTeacher.length === 0) {
+            toast.error("Select teacher and at least one subject");
             return;
         }
         try {
-            const { error } = await supabase.from('grade_subjects').insert({
-                grade_level_id: parseInt(selectedGradeForSubject),
-                subject_master_id: selectedSubject
-            });
+            // selectedSubjectsForTeacher now contains subject_master IDs
+            // Find all grade_subjects for these subject_master IDs
+            const gradeSubjectIdsToAssign: string[] = [];
+            
+            for (const subjectMasterId of selectedSubjectsForTeacher) {
+                const matchingGradeSubjects = gradeSubjects.filter(gs => gs.subject_master_id === subjectMasterId);
+                gradeSubjectIdsToAssign.push(...matchingGradeSubjects.map(gs => gs.id));
+            }
+            
+            // Get already assigned grade_subject IDs for this teacher
+            const alreadyAssigned = teacherSubjects
+                .filter(ts => ts.teacher_id === selectedTeacherForSubject)
+                .map(ts => ts.grade_subject_id);
+            
+            // Filter out already assigned
+            const newGradeSubjectIds = gradeSubjectIdsToAssign.filter(id => !alreadyAssigned.includes(id));
+            
+            if (newGradeSubjectIds.length === 0) {
+                toast.error("Selected subjects are already assigned to this teacher");
+                return;
+            }
+            
+            // Insert all grade_subject entries
+            const insertData = newGradeSubjectIds.map(gradeSubjectId => ({
+                teacher_id: selectedTeacherForSubject,
+                grade_subject_id: gradeSubjectId,
+                school_id: profile?.school_id
+            }));
+            
+            const { error } = await supabase.from('teacher_subjects').insert(insertData);
             
             if (error) throw error;
-            toast.success("Subject added to grade");
-            setSelectedSubject("");
+            toast.success(`${selectedSubjectsForTeacher.length} subject(s) assigned to teacher`);
+            setSelectedSubjectsForTeacher([]);
+            fetchSchoolData();
+        } catch (error: any) {
+            toast.error(error.message);
+        }
+    };
+
+    const addSubjectToGrade = async () => {
+        if (!selectedGradeForSubject || selectedSubjects.length === 0) {
+            toast.error("Select grade and at least one subject");
+            return;
+        }
+        try {
+            // Get already assigned subject IDs for this grade
+            const alreadyAssigned = gradeSubjects
+                .filter(gs => gs.grade_level_id === parseInt(selectedGradeForSubject))
+                .map(gs => gs.subject_master_id);
+            
+            // Filter out already assigned subjects
+            const newSubjects = selectedSubjects.filter(subjectId => !alreadyAssigned.includes(subjectId));
+            
+            if (newSubjects.length === 0) {
+                toast.error("Selected subjects are already assigned to this grade");
+                return;
+            }
+            
+            // Insert all selected subjects
+            const insertData = newSubjects.map(subjectId => ({
+                grade_level_id: parseInt(selectedGradeForSubject),
+                subject_master_id: subjectId
+            }));
+            
+            const { error } = await supabase.from('grade_subjects').insert(insertData);
+            
+            if (error) throw error;
+            toast.success(`${newSubjects.length} subject(s) added to grade`);
+            setSelectedSubjects([]);
             fetchSchoolData();
         } catch (error: any) {
             toast.error(error.message);
@@ -338,12 +414,14 @@ export default function AdminPanel() {
         try {
             const { error } = await supabase.from('exam_types').insert({
                 name: newExamType.trim(),
-                school_id: profile?.school_id
+                school_id: profile?.school_id,
+                type: newExamTypeCategory
             });
             
             if (error) throw error;
             toast.success("Exam type created");
             setNewExamType("");
+            setNewExamTypeCategory("Internal Assessment");
             fetchSchoolData();
         } catch (error: any) {
             toast.error(error.message);
@@ -605,50 +683,52 @@ export default function AdminPanel() {
         : subjects; // Fallback to all subjects if no class selected
 
     return (
-        <div className="min-h-screen p-6">
-            <div className="max-w-7xl mx-auto space-y-8">
+        <div className="min-h-screen p-3 sm:p-6">
+            <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between"
+                    className="flex items-center justify-between gap-4"
                 >
-                    <div>
-                        <h1 className="text-4xl font-bold neon-text mb-2">School Admin Panel 🛡️</h1>
-                        <p className="text-muted-foreground">{profile?.name} - {profile?.school_id}</p>
+                    <div className="min-w-0">
+                        <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2 truncate">School Admin Panel 🛡️</h1>
+                        <p className="text-muted-foreground text-sm sm:text-base truncate">{profile?.name}</p>
                     </div>
-                    <Button variant="destructive" size="sm" onClick={() => logout()}>
-                        <LogOut className="w-4 h-4 mr-2" /> Logout
+                    <Button variant="destructive" size="sm" onClick={() => logout()} className="shrink-0">
+                        <LogOut className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Logout</span>
                     </Button>
                 </motion.div>
 
-                <Tabs defaultValue="grades" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-2 md:grid-cols-8 glass p-1 h-auto">
-                        <TabsTrigger value="grades">Grades</TabsTrigger>
-                        <TabsTrigger value="classes">Classes</TabsTrigger>
-                        <TabsTrigger value="subjects">Subjects</TabsTrigger>
-                        <TabsTrigger value="members">Members</TabsTrigger>
-                        <TabsTrigger value="assignments">Assignments</TabsTrigger>
-                        <TabsTrigger value="examtypes">Exam Types</TabsTrigger>
-                        <TabsTrigger value="files">File Categories</TabsTrigger>
-                        <TabsTrigger value="timetable">Timetable</TabsTrigger>
+                <Tabs defaultValue="grades" className="space-y-4 sm:space-y-6">
+                    <TabsList className="grid w-full grid-cols-4 md:grid-cols-8 glass p-1 h-auto gap-1">
+                        <TabsTrigger value="grades" className="text-xs sm:text-sm px-1 sm:px-3">Grades</TabsTrigger>
+                        <TabsTrigger value="classes" className="text-xs sm:text-sm px-1 sm:px-3">Classes</TabsTrigger>
+                        <TabsTrigger value="subjects" className="text-xs sm:text-sm px-1 sm:px-3">Subjects</TabsTrigger>
+                        <TabsTrigger value="members" className="text-xs sm:text-sm px-1 sm:px-3">Members</TabsTrigger>
+                        <TabsTrigger value="assignments" className="text-xs sm:text-sm px-1 sm:px-3">Assign</TabsTrigger>
+                        <TabsTrigger value="examtypes" className="text-xs sm:text-sm px-1 sm:px-3">Exams</TabsTrigger>
+                        <TabsTrigger value="files" className="text-xs sm:text-sm px-1 sm:px-3">Files</TabsTrigger>
+                        <TabsTrigger value="timetable" className="text-xs sm:text-sm px-1 sm:px-3">Timetable</TabsTrigger>
                     </TabsList>
 
                     {/* Grades Tab */}
                     <TabsContent value="grades">
-                        <Card className="glass-card p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                                    <School className="w-6 h-6 text-primary" /> Grade Levels
+                        <Card className="glass-card p-4 sm:p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+                                    <School className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Grade Levels
                                 </h2>
                                 <div className="flex gap-2">
                                     <Input
                                         placeholder="e.g. Grade 10"
                                         value={newGrade}
                                         onChange={(e) => setNewGrade(e.target.value)}
-                                        className="w-48"
+                                        className="flex-1 sm:w-48"
                                     />
-                                    <Button onClick={addGrade}>
-                                        <Plus className="w-4 h-4 mr-2" /> Add Grade
+                                    <Button onClick={addGrade} className="shrink-0">
+                                        <Plus className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Add Grade</span>
                                     </Button>
                                 </div>
                             </div>
@@ -709,14 +789,14 @@ export default function AdminPanel() {
 
                     {/* Classes Tab */}
                     <TabsContent value="classes">
-                        <Card className="glass-card p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                                    <School className="w-6 h-6 text-primary" /> Classes
+                        <Card className="glass-card p-4 sm:p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+                                    <School className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Classes
                                 </h2>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                     <select 
-                                        className="bg-background/50 border border-input rounded-md h-10 px-3"
+                                        className="bg-muted border border-border rounded-md h-10 px-3 text-sm flex-1 sm:flex-none"
                                         value={selectedGrade}
                                         onChange={(e) => setSelectedGrade(e.target.value)}
                                     >
@@ -729,10 +809,11 @@ export default function AdminPanel() {
                                         placeholder="e.g. 10-A"
                                         value={newClass}
                                         onChange={(e) => setNewClass(e.target.value)}
-                                        className="w-48"
+                                        className="flex-1 sm:w-32"
                                     />
-                                    <Button onClick={addClass}>
-                                        <Plus className="w-4 h-4 mr-2" /> Add Class
+                                    <Button onClick={addClass} className="shrink-0">
+                                        <Plus className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Add</span>
                                     </Button>
                                 </div>
                             </div>
@@ -770,7 +851,7 @@ export default function AdminPanel() {
                     {/* Subjects Tab */}
                     <TabsContent value="subjects">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card className="glass-card p-6">
+                            <Card className="glass-card p-4 sm:p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <BookOpen className="w-5 h-5 text-primary" /> Master Subjects
                                 </h2>
@@ -794,45 +875,96 @@ export default function AdminPanel() {
                                 </div>
                             </Card>
 
-                            <Card className="glass-card p-6">
+                            <Card className="glass-card p-4 sm:p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <BookOpen className="w-5 h-5 text-primary" /> Grade Subjects
                                 </h2>
                                 <div className="space-y-4 mb-4">
                                     <select 
-                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                        className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedGradeForSubject}
-                                        onChange={(e) => setSelectedGradeForSubject(e.target.value)}
+                                        onChange={(e) => {
+                                            setSelectedGradeForSubject(e.target.value);
+                                            setSelectedSubjects([]); // Reset selections when grade changes
+                                        }}
                                     >
                                         <option value="">Select Grade</option>
                                         {grades.map((g) => (
                                             <option key={g.id} value={g.id}>{g.name}</option>
                                         ))}
                                     </select>
-                                    <select 
-                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
-                                        value={selectedSubject}
-                                        onChange={(e) => setSelectedSubject(e.target.value)}
-                                    >
-                                        <option value="">Select Subject</option>
-                                        {subjects.map((s) => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                    <Button onClick={addSubjectToGrade} className="w-full">
-                                        Add Subject to Grade
-                                    </Button>
-                                </div>
-                                <div className="space-y-2 max-h-64 overflow-y-auto">
-                                    {gradeSubjects.map((gs) => (
-                                        <div key={gs.id} className="flex items-center justify-between p-2 rounded hover:bg-secondary/20">
-                                            <span>{gs.grade_levels?.name}: {gs.subjects_master?.name}</span>
-                                            <Button size="sm" variant="destructive" onClick={() => deleteItem('grade_subjects', gs.id, 'mapping')}>
-                                                <Trash2 className="w-4 h-4" />
+                                    
+                                    {selectedGradeForSubject && (
+                                        <>
+                                            <div className="border border-input rounded-md p-3 max-h-48 overflow-y-auto bg-background/30">
+                                                <p className="text-sm text-muted-foreground mb-2">Select subjects to add:</p>
+                                                <div className="space-y-2">
+                                                    {subjects.map((s) => {
+                                                        // Check if already assigned
+                                                        const isAssigned = gradeSubjects.some(
+                                                            gs => gs.grade_level_id === parseInt(selectedGradeForSubject) && gs.subject_master_id === s.id
+                                                        );
+                                                        return (
+                                                            <label 
+                                                                key={s.id} 
+                                                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? 'opacity-50' : ''}`}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    disabled={isAssigned}
+                                                                    checked={selectedSubjects.includes(s.id)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setSelectedSubjects([...selectedSubjects, s.id]);
+                                                                        } else {
+                                                                            setSelectedSubjects(selectedSubjects.filter(id => id !== s.id));
+                                                                        }
+                                                                    }}
+                                                                    className="w-4 h-4 rounded border-input"
+                                                                />
+                                                                <span className={isAssigned ? 'line-through' : ''}>{s.name}</span>
+                                                                {isAssigned && <span className="text-xs text-muted-foreground">(already added)</span>}
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <Button 
+                                                onClick={addSubjectToGrade} 
+                                                className="w-full"
+                                                disabled={selectedSubjects.length === 0}
+                                            >
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Add {selectedSubjects.length > 0 ? `${selectedSubjects.length} Subject(s)` : 'Subjects'} to Grade
                                             </Button>
-                                        </div>
-                                    ))}
+                                        </>
+                                    )}
                                 </div>
+                                {selectedGradeForSubject && (
+                                    <>
+                                        <p className="text-sm text-muted-foreground mb-2">
+                                            Subjects in {grades.find(g => g.id.toString() === selectedGradeForSubject)?.name || 'selected grade'}:
+                                        </p>
+                                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                                            {gradeSubjects
+                                                .filter(gs => gs.grade_level_id === parseInt(selectedGradeForSubject))
+                                                .map((gs) => (
+                                                    <div key={gs.id} className="flex items-center justify-between p-2 rounded hover:bg-secondary/20 bg-secondary/10">
+                                                        <span>{gs.subjects_master?.name}</span>
+                                                        <Button size="sm" variant="destructive" onClick={() => deleteItem('grade_subjects', gs.id, 'mapping')}>
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            {gradeSubjects.filter(gs => gs.grade_level_id === parseInt(selectedGradeForSubject)).length === 0 && (
+                                                <p className="text-sm text-muted-foreground text-center py-4">No subjects assigned to this grade yet</p>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                                {!selectedGradeForSubject && (
+                                    <p className="text-sm text-muted-foreground text-center py-4">Select a grade to view and manage its subjects</p>
+                                )}
                             </Card>
                         </div>
                     </TabsContent>
@@ -840,7 +972,7 @@ export default function AdminPanel() {
                     {/* Members Tab */}
                     <TabsContent value="members">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card className="glass-card p-6">
+                            <Card className="glass-card p-4 sm:p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <UserPlus className="w-5 h-5 text-primary" /> Add New Member
                                 </h2>
@@ -875,7 +1007,7 @@ export default function AdminPanel() {
                                 </div>
                             </Card>
 
-                            <Card className="glass-card p-6">
+                            <Card className="glass-card p-4 sm:p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <Users className="w-5 h-5 text-primary" /> Members List
                                 </h2>
@@ -892,7 +1024,7 @@ export default function AdminPanel() {
                                             <select
                                                 value={teacherClassFilter}
                                                 onChange={(e) => setTeacherClassFilter(e.target.value)}
-                                                className="bg-background/50 border border-input rounded-md h-10 px-3 min-w-40"
+                                                className="bg-muted border border-border rounded-md h-10 px-3 min-w-40"
                                             >
                                                 <option value="all">All Classes</option>
                                                 <option value="unassigned">Unassigned</option>
@@ -932,7 +1064,7 @@ export default function AdminPanel() {
                                             <select
                                                 value={studentClassFilter}
                                                 onChange={(e) => setStudentClassFilter(e.target.value)}
-                                                className="bg-background/50 border border-input rounded-md h-10 px-3 min-w-40"
+                                                className="bg-muted border border-border rounded-md h-10 px-3 min-w-40"
                                             >
                                                 <option value="all">All Classes</option>
                                                 <option value="unassigned">Unassigned</option>
@@ -969,23 +1101,50 @@ export default function AdminPanel() {
                     {/* Assignments Tab */}
                     <TabsContent value="assignments">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card className="glass-card p-6">
+                            <Card className="glass-card p-4 sm:p-6 overflow-hidden">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <UserPlus className="w-5 h-5 text-primary" /> Assign Students to Classes
                                 </h2>
                                 <div className="space-y-4">
+                                    {/* Searchable Student Selection */}
+                                    <div>
+                                        <label className="text-sm text-muted-foreground mb-1 block">Search & Select Student</label>
+                                        <Input
+                                            placeholder="Type to search students..."
+                                            value={studentAssignSearch}
+                                            onChange={(e) => setStudentAssignSearch(e.target.value)}
+                                            className="mb-2"
+                                        />
+                                        <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden bg-muted/50">
+                                            {students
+                                                .filter(s => 
+                                                    s.name?.toLowerCase().includes(studentAssignSearch.toLowerCase()) ||
+                                                    s.email?.toLowerCase().includes(studentAssignSearch.toLowerCase())
+                                                )
+                                                .slice(0, 50) // Limit to 50 results
+                                                .map((s) => (
+                                                    <div 
+                                                        key={s.id} 
+                                                        onClick={() => {
+                                                            setSelectedStudent(s.id);
+                                                            setStudentAssignSearch(s.name);
+                                                        }}
+                                                        className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedStudent === s.id ? 'bg-primary/20' : ''}`}
+                                                    >
+                                                        <p className="font-medium text-sm truncate">{s.name}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">
+                                                            {s.email} • {s.classes?.name || 'Unassigned'}
+                                                        </p>
+                                                    </div>
+                                                ))
+                                            }
+                                            {students.filter(s => s.name?.toLowerCase().includes(studentAssignSearch.toLowerCase())).length === 0 && (
+                                                <p className="p-3 text-sm text-muted-foreground text-center">No students found</p>
+                                            )}
+                                        </div>
+                                    </div>
                                     <select 
-                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
-                                        value={selectedStudent}
-                                        onChange={(e) => setSelectedStudent(e.target.value)}
-                                    >
-                                        <option value="">Select Student</option>
-                                        {students.map((s) => (
-                                            <option key={s.id} value={s.id}>{s.name} {s.classes?.name ? `(${s.classes.name})` : '(Unassigned)'}</option>
-                                        ))}
-                                    </select>
-                                    <select 
-                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                        className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedClassForStudent}
                                         onChange={(e) => setSelectedClassForStudent(e.target.value)}
                                     >
@@ -998,25 +1157,71 @@ export default function AdminPanel() {
                                         Assign Student to Class
                                     </Button>
                                 </div>
+                                {selectedClassForStudent && (
+                                    <div className="mt-4 pt-4 border-t border-border">
+                                        <p className="text-sm text-muted-foreground mb-2">
+                                            Students in {classes.find(c => c.id === selectedClassForStudent)?.name}:
+                                        </p>
+                                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                                            {students.filter(s => s.class_id === selectedClassForStudent).length > 0 ? (
+                                                students.filter(s => s.class_id === selectedClassForStudent).map(s => (
+                                                    <div key={s.id} className="text-sm p-1 px-2 bg-secondary/20 rounded">
+                                                        {s.name}
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className="text-sm text-muted-foreground">No students assigned</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                {!selectedClassForStudent && (
+                                    <p className="text-sm text-muted-foreground text-center py-3 mt-4 border-t border-border">Select a class to see list of students</p>
+                                )}
                             </Card>
 
-                            <Card className="glass-card p-6">
+                            <Card className="glass-card p-4 sm:p-6 overflow-hidden">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <Users className="w-5 h-5 text-primary" /> Assign Teachers to Classes
                                 </h2>
                                 <div className="space-y-4">
+                                    {/* Searchable Teacher Selection */}
+                                    <div>
+                                        <label className="text-sm text-muted-foreground mb-1 block">Search & Select Teacher</label>
+                                        <Input
+                                            placeholder="Type to search teachers..."
+                                            value={teacherAssignSearch}
+                                            onChange={(e) => setTeacherAssignSearch(e.target.value)}
+                                            className="mb-2"
+                                        />
+                                        <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden bg-muted/50">
+                                            {teachers
+                                                .filter(t => 
+                                                    t.name?.toLowerCase().includes(teacherAssignSearch.toLowerCase()) ||
+                                                    t.email?.toLowerCase().includes(teacherAssignSearch.toLowerCase())
+                                                )
+                                                .slice(0, 50) // Limit to 50 results
+                                                .map((t) => (
+                                                    <div 
+                                                        key={t.id} 
+                                                        onClick={() => {
+                                                            setSelectedTeacher(t.id);
+                                                            setTeacherAssignSearch(t.name);
+                                                        }}
+                                                        className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedTeacher === t.id ? 'bg-primary/20' : ''}`}
+                                                    >
+                                                        <p className="font-medium text-sm truncate">{t.name}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{t.email}</p>
+                                                    </div>
+                                                ))
+                                            }
+                                            {teachers.filter(t => t.name?.toLowerCase().includes(teacherAssignSearch.toLowerCase())).length === 0 && (
+                                                <p className="p-3 text-sm text-muted-foreground text-center">No teachers found</p>
+                                            )}
+                                        </div>
+                                    </div>
                                     <select 
-                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
-                                        value={selectedTeacher}
-                                        onChange={(e) => setSelectedTeacher(e.target.value)}
-                                    >
-                                        <option value="">Select Teacher</option>
-                                        {teachers.map((t) => (
-                                            <option key={t.id} value={t.id}>{t.name}</option>
-                                        ))}
-                                    </select>
-                                    <select 
-                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                        className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedClass}
                                         onChange={(e) => setSelectedClass(e.target.value)}
                                     >
@@ -1029,26 +1234,157 @@ export default function AdminPanel() {
                                         Assign Teacher to Class
                                     </Button>
                                 </div>
+                                {selectedClass && (
+                                    <div className="mt-4 pt-4 border-t border-border">
+                                        <p className="text-sm text-muted-foreground mb-2">
+                                            Teachers in {classes.find(c => c.id === selectedClass)?.name}:
+                                        </p>
+                                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                                            {(() => {
+                                                const assignedTeacherIds = teacherClasses
+                                                    .filter(tc => tc.class_id === selectedClass)
+                                                    .map(tc => tc.teacher_id);
+                                                const assignedTeachers = teachers.filter(t => assignedTeacherIds.includes(t.id));
+                                                return assignedTeachers.length > 0 ? (
+                                                    assignedTeachers.map(t => (
+                                                        <div key={t.id} className="text-sm p-1 px-2 bg-secondary/20 rounded">
+                                                            {t.name}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-sm text-muted-foreground">No teachers assigned</p>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
+                                {!selectedClass && (
+                                    <p className="text-sm text-muted-foreground text-center py-3 mt-4 border-t border-border">Select a class to see list of teachers</p>
+                                )}
+                            </Card>
+
+                            {/* Teacher-Subject Assignment Card */}
+                            <Card className="glass-card p-4 sm:p-6 lg:col-span-2">
+                                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                                    <BookOpen className="w-5 h-5 text-primary" /> Assign Subjects to Teachers
+                                </h2>
+                                <div className="space-y-4">
+                                    <select 
+                                        className="w-full bg-muted border border-border rounded-md h-10 px-3"
+                                        value={selectedTeacherForSubject}
+                                        onChange={(e) => {
+                                            setSelectedTeacherForSubject(e.target.value);
+                                            setSelectedSubjectsForTeacher([]);
+                                        }}
+                                    >
+                                        <option value="">Select Teacher</option>
+                                        {teachers.map((t) => (
+                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                        ))}
+                                    </select>
+                                    
+                                    {selectedTeacherForSubject && (
+                                        <>
+                                            <div className="border border-input rounded-md p-3 max-h-48 overflow-y-auto bg-background/30">
+                                                <p className="text-sm text-muted-foreground mb-2">Select subjects to assign:</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {subjects.map((s) => {
+                                                        // Check if ANY grade_subject with this subject_master is assigned
+                                                        const relatedGradeSubjectIds = gradeSubjects
+                                                            .filter(gs => gs.subject_master_id === s.id)
+                                                            .map(gs => gs.id);
+                                                        const isAssigned = teacherSubjects.some(
+                                                            ts => ts.teacher_id === selectedTeacherForSubject && relatedGradeSubjectIds.includes(ts.grade_subject_id)
+                                                        );
+                                                        return (
+                                                            <label 
+                                                                key={s.id} 
+                                                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? 'opacity-50' : ''}`}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    disabled={isAssigned}
+                                                                    checked={selectedSubjectsForTeacher.includes(s.id)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setSelectedSubjectsForTeacher([...selectedSubjectsForTeacher, s.id]);
+                                                                        } else {
+                                                                            setSelectedSubjectsForTeacher(selectedSubjectsForTeacher.filter(id => id !== s.id));
+                                                                        }
+                                                                    }}
+                                                                    className="w-4 h-4 rounded border-input"
+                                                                />
+                                                                <span className={isAssigned ? 'line-through' : ''}>{s.name}</span>
+                                                                {isAssigned && <span className="text-xs text-muted-foreground">(assigned)</span>}
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <Button 
+                                                onClick={assignSubjectsToTeacher} 
+                                                className="w-full"
+                                                disabled={selectedSubjectsForTeacher.length === 0}
+                                            >
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Assign {selectedSubjectsForTeacher.length > 0 ? `${selectedSubjectsForTeacher.length} Subject(s)` : 'Subjects'} to Teacher
+                                            </Button>
+                                            
+                                            {/* Display currently assigned subjects */}
+                                            <div className="mt-4 pt-4 border-t border-border">
+                                                <p className="text-sm text-muted-foreground mb-2">
+                                                    Subjects taught by {teachers.find(t => t.id === selectedTeacherForSubject)?.name}:
+                                                </p>
+                                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                    {teacherSubjects.filter(ts => ts.teacher_id === selectedTeacherForSubject).length > 0 ? (
+                                                        teacherSubjects.filter(ts => ts.teacher_id === selectedTeacherForSubject).map(ts => (
+                                                            <div key={ts.id} className="flex items-center justify-between text-sm p-1 px-2 bg-secondary/20 rounded">
+                                                                <span>{ts.grade_subjects?.subjects_master?.name} ({ts.grade_subjects?.grade_levels?.name})</span>
+                                                                <Button size="sm" variant="destructive" onClick={() => deleteItem('teacher_subjects', ts.id, 'assignment')}>
+                                                                    <Trash2 className="w-3 h-3" />
+                                                                </Button>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <p className="text-sm text-muted-foreground">No subjects assigned</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    {!selectedTeacherForSubject && (
+                                        <p className="text-sm text-muted-foreground text-center py-3">Select a teacher to assign subjects</p>
+                                    )}
+                                </div>
                             </Card>
                         </div>
                     </TabsContent>
 
                     {/* Exam Types Tab */}
                     <TabsContent value="examtypes">
-                        <Card className="glass-card p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                                    <FileText className="w-6 h-6 text-primary" /> Exam Types
+                        <Card className="glass-card p-4 sm:p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+                                    <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Exam Types
                                 </h2>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                     <Input
-                                        placeholder="e.g. Mid-Term Exam"
+                                        placeholder="e.g. Mid-Term"
                                         value={newExamType}
                                         onChange={(e) => setNewExamType(e.target.value)}
-                                        className="w-48"
+                                        className="flex-1 sm:w-36"
                                     />
-                                    <Button onClick={addExamType}>
-                                        <Plus className="w-4 h-4 mr-2" /> Add Exam Type
+                                    <select
+                                        className="bg-muted border border-border rounded-md h-10 px-2 text-sm flex-1 sm:flex-none"
+                                        value={newExamTypeCategory}
+                                        onChange={(e) => setNewExamTypeCategory(e.target.value as "Internal Assessment" | "School Exam")}
+                                    >
+                                        <option value="Internal Assessment">Internal</option>
+                                        <option value="School Exam">School Exam</option>
+                                    </select>
+                                    <Button onClick={addExamType} className="shrink-0">
+                                        <Plus className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Add</span>
                                     </Button>
                                 </div>
                             </div>
@@ -1057,6 +1393,7 @@ export default function AdminPanel() {
                                     <thead>
                                         <tr className="border-b border-border">
                                             <th className="text-left p-2">Exam Type Name</th>
+                                            <th className="text-left p-2">Type</th>
                                             <th className="text-left p-2">Created</th>
                                             <th className="text-right p-2">Actions</th>
                                         </tr>
@@ -1074,6 +1411,11 @@ export default function AdminPanel() {
                                                     ) : (
                                                         examType.name
                                                     )}
+                                                </td>
+                                                <td className="p-2">
+                                                    <Badge variant={examType.type === 'School Exam' ? 'default' : 'secondary'}>
+                                                        {examType.type || 'N/A'}
+                                                    </Badge>
                                                 </td>
                                                 <td className="p-2 text-muted-foreground">
                                                     {new Date(examType.created_at).toLocaleDateString()}
@@ -1116,20 +1458,21 @@ export default function AdminPanel() {
 
                     {/* File Categories Tab */}
                     <TabsContent value="files">
-                        <Card className="glass-card p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                                    <Folder className="w-6 h-6 text-primary" /> File Categories
+                        <Card className="glass-card p-4 sm:p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+                                    <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> File Categories
                                 </h2>
                                 <div className="flex gap-2">
                                     <Input
                                         placeholder="e.g. Assignments"
                                         value={newFileCategory}
                                         onChange={(e) => setNewFileCategory(e.target.value)}
-                                        className="w-48"
+                                        className="flex-1 sm:w-48"
                                     />
-                                    <Button onClick={addFileCategory}>
-                                        <Plus className="w-4 h-4 mr-2" /> Add Category
+                                    <Button onClick={addFileCategory} className="shrink-0">
+                                        <Plus className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Add</span>
                                     </Button>
                                 </div>
                             </div>
@@ -1197,14 +1540,14 @@ export default function AdminPanel() {
 
                     {/* Timetable Tab */}
                     <TabsContent value="timetable">
-                        <Card className="glass-card p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                                    <Clock className="w-6 h-6 text-primary" /> Class Timetable
+                        <Card className="glass-card p-4 sm:p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+                                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Class Timetable
                                 </h2>
                                 <div className="flex gap-2">
                                     <select
-                                        className="bg-background/50 border border-input rounded-md h-10 px-3"
+                                        className="bg-muted border border-border rounded-md h-10 px-3 text-sm flex-1 sm:flex-none"
                                         value={selectedTimetableClass}
                                         onChange={(e) => {
                                             setSelectedTimetableClass(e.target.value);
@@ -1213,7 +1556,7 @@ export default function AdminPanel() {
                                     >
                                         <option value="">Select Class</option>
                                         {classes.map((c) => (
-                                            <option key={c.id} value={c.id}>{c.name} ({c.grade_levels?.name})</option>
+                                            <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -1309,7 +1652,7 @@ export default function AdminPanel() {
                                                 <div>
                                                     <label className="text-sm text-muted-foreground">Subject *</label>
                                                     <select
-                                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                                        className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                                         value={periodForm.subject_id}
                                                         onChange={(e) => setPeriodForm({ ...periodForm, subject_id: e.target.value })}
                                                     >
@@ -1322,7 +1665,7 @@ export default function AdminPanel() {
                                                 <div>
                                                     <label className="text-sm text-muted-foreground">Teacher *</label>
                                                     <select
-                                                        className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
+                                                        className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                                         value={periodForm.teacher_id}
                                                         onChange={(e) => setPeriodForm({ ...periodForm, teacher_id: e.target.value })}
                                                     >
@@ -1335,19 +1678,89 @@ export default function AdminPanel() {
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div>
                                                         <label className="text-sm text-muted-foreground">Start Time</label>
-                                                        <Input
-                                                            type="time"
-                                                            value={periodForm.start_time}
-                                                            onChange={(e) => setPeriodForm({ ...periodForm, start_time: e.target.value })}
-                                                        />
+                                                        <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="w-full justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
+                                                                >
+                                                                    <Clock className="mr-2 h-4 w-4 text-primary" />
+                                                                    {periodForm.start_time || "Select time"}
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-auto p-3 bg-background border-border" align="start">
+                                                                <div className="flex gap-2">
+                                                                    <select
+                                                                        className="bg-muted border border-border rounded-md p-2 text-sm"
+                                                                        value={periodForm.start_time.split(':')[0] || '09'}
+                                                                        onChange={(e) => {
+                                                                            const mins = periodForm.start_time.split(':')[1] || '00';
+                                                                            setPeriodForm({ ...periodForm, start_time: `${e.target.value}:${mins}` });
+                                                                        }}
+                                                                    >
+                                                                        {Array.from({ length: 11 }, (_, i) => (i + 8).toString().padStart(2, '0')).map(h => (
+                                                                            <option key={h} value={h}>{h}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                    <span className="text-xl">:</span>
+                                                                    <select
+                                                                        className="bg-muted border border-border rounded-md p-2 text-sm"
+                                                                        value={periodForm.start_time.split(':')[1] || '00'}
+                                                                        onChange={(e) => {
+                                                                            const hrs = periodForm.start_time.split(':')[0] || '09';
+                                                                            setPeriodForm({ ...periodForm, start_time: `${hrs}:${e.target.value}` });
+                                                                        }}
+                                                                    >
+                                                                        {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => (
+                                                                            <option key={m} value={m}>{m}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
                                                     </div>
                                                     <div>
                                                         <label className="text-sm text-muted-foreground">End Time</label>
-                                                        <Input
-                                                            type="time"
-                                                            value={periodForm.end_time}
-                                                            onChange={(e) => setPeriodForm({ ...periodForm, end_time: e.target.value })}
-                                                        />
+                                                        <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="w-full justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
+                                                                >
+                                                                    <Clock className="mr-2 h-4 w-4 text-primary" />
+                                                                    {periodForm.end_time || "Select time"}
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-auto p-3 bg-background border-border" align="start">
+                                                                <div className="flex gap-2">
+                                                                    <select
+                                                                        className="bg-muted border border-border rounded-md p-2 text-sm"
+                                                                        value={periodForm.end_time.split(':')[0] || '10'}
+                                                                        onChange={(e) => {
+                                                                            const mins = periodForm.end_time.split(':')[1] || '00';
+                                                                            setPeriodForm({ ...periodForm, end_time: `${e.target.value}:${mins}` });
+                                                                        }}
+                                                                    >
+                                                                        {Array.from({ length: 11 }, (_, i) => (i + 8).toString().padStart(2, '0')).map(h => (
+                                                                            <option key={h} value={h}>{h}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                    <span className="text-xl">:</span>
+                                                                    <select
+                                                                        className="bg-muted border border-border rounded-md p-2 text-sm"
+                                                                        value={periodForm.end_time.split(':')[1] || '30'}
+                                                                        onChange={(e) => {
+                                                                            const hrs = periodForm.end_time.split(':')[0] || '10';
+                                                                            setPeriodForm({ ...periodForm, end_time: `${hrs}:${e.target.value}` });
+                                                                        }}
+                                                                    >
+                                                                        {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => (
+                                                                            <option key={m} value={m}>{m}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2">

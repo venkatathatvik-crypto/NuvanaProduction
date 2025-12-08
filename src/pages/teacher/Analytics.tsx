@@ -281,20 +281,20 @@ const AnalyticsDashboard = () => {
     const currentTopicChapterData = topicChapterData[selectedStudent] || {};
 
     return (
-        <div className="min-h-screen p-6 space-y-8 bg-background">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/teacher")}>
-                        <ArrowLeft className="w-6 h-6" />
+        <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8 bg-background">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <Button variant="ghost" size="icon" onClick={() => navigate("/teacher")} className="shrink-0">
+                        <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                     </Button>
-                    <div>
-                        <h1 className="text-4xl font-bold mb-2">Analytics Dashboard 📊</h1>
-                        <p className="text-muted-foreground">Deep insights into student performance</p>
+                    <div className="min-w-0">
+                        <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 truncate">Analytics Dashboard 📊</h1>
+                        <p className="text-muted-foreground text-sm sm:text-base">Deep insights into student performance</p>
                     </div>
                 </div>
 
                 <Select value={selectedClass?.class_id} onValueChange={(id) => setSelectedClass(classes.find((c) => c.class_id === id))}>
-                    <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {classes.map((cls) => (
                             <SelectItem key={cls.class_id} value={cls.class_id}>{cls.class_name}</SelectItem>
@@ -303,12 +303,24 @@ const AnalyticsDashboard = () => {
                 </Select>
             </motion.div>
 
-            <Tabs defaultValue="class" className="space-y-6">
-                <TabsList className="grid grid-cols-4 w-full max-w-xl">
-                    <TabsTrigger value="class">Class Insights</TabsTrigger>
-                    <TabsTrigger value="topics">Chapter & Topics</TabsTrigger>
-                    <TabsTrigger value="student">Student Analysis</TabsTrigger>
-                    <TabsTrigger value="test">Test Metrics</TabsTrigger>
+            <Tabs defaultValue="class" className="space-y-4 sm:space-y-6">
+                <TabsList className="grid grid-cols-4 w-full max-w-xl h-auto">
+                    <TabsTrigger value="class" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                        <span className="hidden sm:inline">Class Insights</span>
+                        <span className="sm:hidden">Class</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="topics" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                        <span className="hidden sm:inline">Chapter & Topics</span>
+                        <span className="sm:hidden">Topics</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="student" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                        <span className="hidden sm:inline">Student Analysis</span>
+                        <span className="sm:hidden">Students</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="test" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                        <span className="hidden sm:inline">Test Metrics</span>
+                        <span className="sm:hidden">Tests</span>
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* ---------------- CLASS LEVEL INSIGHTS ---------------- */}
