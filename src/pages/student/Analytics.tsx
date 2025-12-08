@@ -18,7 +18,7 @@ import {
     Cell
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { TrendingUp, AlertCircle, Award, Target, BookOpen, Loader2 } from "lucide-react";
+import { TrendingUp, AlertCircle, Award, Target, BookOpen, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
@@ -123,18 +123,20 @@ const StudentAnalytics = () => {
     }));
 
     return (
-        <div className="min-h-screen p-6 space-y-8">
+        <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8">
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex justify-between items-center"
+                className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
             >
-                <div>
-                    <h1 className="text-4xl font-bold neon-text mb-2">My Performance 📈</h1>
-                    <p className="text-muted-foreground">Track your academic progress</p>
+                <div className="min-w-0">
+                    <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">My Performance 📈</h1>
+                    <p className="text-muted-foreground text-sm sm:text-base">Track your academic progress</p>
                 </div>
-                <Button variant="outline" className="glass" onClick={() => navigate("/student")}>
-                    Back to Dashboard
+                <Button variant="outline" className="glass shrink-0" onClick={() => navigate("/student")}>
+                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Back to Dashboard</span>
+                    <span className="sm:hidden">Back</span>
                 </Button>
             </motion.div>
 

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Upload, Save, Award, CheckCircle, Users, FileText } from "lucide-react";
+import { ArrowLeft, Upload, Save, Award, CheckCircle, Users, FileText, Edit } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ import {
   getTestSubmissionsForGrading,
   gradeStudentAnswer,
   finalizeSubmissionGrading,
+  createNotification,
+  sendGradeEmail,
   GradingQueueItem,
   SubmissionToGrade,
   getStudentsInClass,
@@ -202,6 +204,35 @@ const TeacherMarks = () => {
       // Finalize the submission
       await finalizeSubmissionGrading(selectedSubmissionId);
 
+      // Send notification to the student
+      const gradedSubmission = submissions.find(s => s.submissionId === selectedSubmissionId);
+      if (gradedSubmission && profile) {
+        const selectedTest = gradingQueue.find(t => t.testId === selectedTestId);
+        const testTitle = selectedTest?.testTitle || 'a test';
+
+        try {
+          await createNotification({
+            recipient_id: gradedSubmission.studentId,
+            school_id: profile.school_id,
+            title: "Test Graded",
+            message: `Your submission for "${testTitle}" has been graded.`,
+            notification_type: "grade",
+            target_url: "/student/marks",
+          });
+        } catch (notifError) {
+          console.error("Failed to send notification:", notifError);
+        }
+
+        // Send email notification
+        try {
+          if (gradedSubmission.studentEmail) {
+            await sendGradeEmail(gradedSubmission.studentEmail, testTitle);
+          }
+        } catch (emailError) {
+          console.error("Failed to send email:", emailError);
+        }
+      }
+
       toast.success("Grades saved successfully!");
 
       // Refresh submissions
@@ -278,24 +309,33 @@ const TeacherMarks = () => {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/teacher")}>
-            <ArrowLeft className="w-6 h-6" />
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/teacher")} className="shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-            <h1 className="text-4xl font-bold neon-text">Grade Tests</h1>
-            <p className="text-muted-foreground">Grade student test submissions</p>
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="min-w-0">
+            <h1 className="text-xl sm:text-4xl font-bold neon-text truncate">Grade Tests</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Grade student test submissions</p>
           </motion.div>
         </div>
 
         <Tabs defaultValue="questionwise" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="questionwise">Question-wise Grading</TabsTrigger>
-            <TabsTrigger value="manual">Manual Entry</TabsTrigger>
-            <TabsTrigger value="bulk">Bulk Upload</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 h-auto">
+            <TabsTrigger value="questionwise" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+              <span className="hidden sm:inline">Question-wise Grading</span>
+              <span className="sm:hidden">Grade</span>
+            </TabsTrigger>
+            <TabsTrigger value="manual" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+              <span className="hidden sm:inline">Manual Entry</span>
+              <span className="sm:hidden">Manual</span>
+            </TabsTrigger>
+            <TabsTrigger value="bulk" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+              <span className="hidden sm:inline">Bulk Upload</span>
+              <span className="sm:hidden">Bulk</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Question-wise Grading Tab - Main Grading Flow */}
@@ -353,15 +393,20 @@ const TeacherMarks = () => {
             {selectedTestId && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                 <Card className="glass-card p-6">
-                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-primary" />
-                    Student Submissions
-                    {selectedTest && (
-                      <span className="text-sm font-normal text-muted-foreground ml-2">
-                        - {selectedTest.testTitle}
-                      </span>
-                    )}
-                  </h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                      <Users className="w-5 h-5 text-primary" />
+                      Student Submissions
+                      {selectedTest && (
+                        <span className="text-sm font-normal text-muted-foreground ml-2">
+                          - {selectedTest.testTitle}
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Click any student to grade or edit their marks
+                    </p>
+                  </div>
 
                   {gradingLoading ? (
                     <div className="flex justify-center py-8">
@@ -390,9 +435,14 @@ const TeacherMarks = () => {
                           </div>
                           <p className="text-sm font-medium truncate">{sub.studentName}</p>
                           {sub.isGraded ? (
-                            <Badge className="mt-1 bg-green-500/20 text-green-500 text-xs">
-                              {sub.totalMarksObtained} pts
-                            </Badge>
+                            <div className="space-y-1">
+                              <Badge className="bg-green-500/20 text-green-500 text-xs">
+                                {sub.totalMarksObtained} pts
+                              </Badge>
+                              <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                                <Edit className="w-3 h-3" /> Click to edit
+                              </p>
+                            </div>
                           ) : (
                             <Badge className="mt-1 bg-yellow-500/20 text-yellow-500 text-xs">
                               Pending

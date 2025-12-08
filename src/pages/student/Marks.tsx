@@ -131,18 +131,19 @@ const Marks = () => {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/student")}>
-            <ArrowLeft className="w-6 h-6" />
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/student")} className="shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            className="min-w-0"
           >
-            <h1 className="text-4xl font-bold neon-text">Marks & Performance</h1>
-            <p className="text-muted-foreground">Track your academic progress</p>
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text truncate">Marks & Performance</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Track your academic progress</p>
           </motion.div>
         </div>
 
@@ -151,8 +152,8 @@ const Marks = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="glass-card p-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="glass-card p-4 sm:p-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
               <div className="text-center">
                 <Award className="w-12 h-12 text-primary mx-auto mb-2 neon-glow" />
                 <p className="text-5xl font-bold neon-text">{overallPerformance.average}%</p>
