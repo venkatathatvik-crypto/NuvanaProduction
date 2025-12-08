@@ -16,10 +16,7 @@ export function registerServiceWorker() {
               ) {
                 // New service worker available
                 console.log("New content is available; please refresh.");
-                // Optionally show a notification to the user
-                if (confirm("New version available! Reload to update?")) {
-                  window.location.reload();
-                }
+                
               }
             });
           });
