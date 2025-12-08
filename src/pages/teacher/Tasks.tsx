@@ -112,11 +112,11 @@ const TeacherTasks = () => {
                                 <div className="mt-4 flex justify-end">
                                     <Button
                                         size="sm"
-                                        className="neon-glow"
+                                        className={task.pendingCount > 0 ? "neon-glow" : "glass"}
+                                        variant={task.pendingCount > 0 ? "default" : "outline"}
                                         onClick={() => navigate(`/teacher/marks?testId=${task.testId}`)}
-                                        disabled={task.pendingCount === 0}
                                     >
-                                        {task.pendingCount > 0 ? "Grade Now" : "View"} <ArrowRight className="ml-2 w-4 h-4" />
+                                        {task.pendingCount > 0 ? "Grade Now" : "Edit Marks"} <ArrowRight className="ml-2 w-4 h-4" />
                                     </Button>
                                 </div>
                             </Card>

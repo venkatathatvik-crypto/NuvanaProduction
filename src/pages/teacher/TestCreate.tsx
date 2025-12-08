@@ -73,18 +73,19 @@ const TestCreate = () => {
     };
 
     return (
-        <div className="min-h-screen p-6 space-y-8">
+        <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8">
             <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
             >
-                <Button variant="ghost" onClick={() => navigate("/teacher/tests")} className="mb-4">
-                    <ArrowLeft className="w-4 h-4 mr-2" /> Back to Tests
+                <Button variant="ghost" onClick={() => navigate("/teacher/tests")} className="mb-2 sm:mb-4">
+                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Back to Tests</span>
                 </Button>
-                <h1 className="text-4xl font-bold neon-text mb-2">
+                <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">
                     {defaultType === "Assignment" ? "Create New Assignment" : "Create New Test"}
                 </h1>
-                <p className="text-muted-foreground mb-8">
+                <p className="text-muted-foreground text-sm sm:text-base mb-4 sm:mb-8">
                     {defaultType === "Assignment" ? "Design your assignment and set marks" : "Design your assessment"}
                 </p>
 

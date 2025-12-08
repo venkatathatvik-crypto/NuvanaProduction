@@ -14,6 +14,10 @@ import {
   getTeacherAnnouncements,
   createTeacherAnnouncement,
   deleteTeacherAnnouncement,
+  createNotificationsForClass,
+  getStudentIdsInClass,
+  getStudentEmailsInClass,
+  sendAnnouncementEmail,
   type TeacherAnnouncement,
 } from "@/services/academic";
 import type { FlattenedClass } from "@/schemas/academic";
@@ -135,6 +139,40 @@ const TeacherAnnouncements = () => {
       });
       setAnnouncements((prev) => [newAnnouncement, ...prev]);
       toast.success("Announcement sent successfully!");
+
+      // Send notifications to students in all selected classes
+      try {
+        const allStudentIds: string[] = [];
+        for (const classId of classIds) {
+          const studentIds = await getStudentIdsInClass(classId);
+          allStudentIds.push(...studentIds);
+        }
+        const uniqueStudentIds = [...new Set(allStudentIds)];
+        await createNotificationsForClass(uniqueStudentIds, {
+          school_id: profile.school_id,
+          title: isUrgent ? "🚨 Urgent Announcement" : "New Announcement",
+          message: `${title}`,
+          notification_type: "announcement",
+          is_urgent: isUrgent,
+          target_url: "/student",
+        });
+      } catch (notifError) {
+        console.error("Failed to send notifications:", notifError);
+      }
+
+      // Send email notifications
+      try {
+        const allStudentEmails: string[] = [];
+        for (const classId of classIds) {
+          const emails = await getStudentEmailsInClass(classId);
+          allStudentEmails.push(...emails);
+        }
+        const uniqueEmails = [...new Set(allStudentEmails)];
+        await sendAnnouncementEmail(uniqueEmails, title, message, isUrgent);
+      } catch (emailError) {
+        console.error("Failed to send emails:", emailError);
+      }
+
       setTitle("");
       setMessage("");
       setIsUrgent(false);

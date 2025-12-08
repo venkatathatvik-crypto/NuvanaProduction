@@ -57,22 +57,24 @@ const Attendance = () => {
   }, [profile?.id]);
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate("/student")}
+            className="shrink-0"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            className="min-w-0"
           >
-            <h1 className="text-4xl font-bold neon-text">Attendance</h1>
-            <p className="text-muted-foreground">Track your class attendance</p>
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text truncate">Attendance</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Track your class attendance</p>
           </motion.div>
         </div>
 
@@ -87,7 +89,7 @@ const Attendance = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="glass-card p-8">
+              <Card className="glass-card p-4 sm:p-8">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="flex-1 text-center md:text-left">
                     <p className="text-lg text-muted-foreground mb-2">

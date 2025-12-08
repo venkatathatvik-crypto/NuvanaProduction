@@ -38,20 +38,20 @@ const TeacherProfile = () => {
             const classes = classesData?.map((tc: any) => tc.classes) || [];
             setAssignedClasses(classes);
 
-            // Get unique grade_level_ids from assigned classes
-            const gradeLevelIds = [...new Set(classes.map((c: any) => c?.grade_levels?.id).filter(Boolean))];
+            // Fetch subjects from teacher_subjects table
+            const { data: teacherSubjectsData, error: subjectsError } = await supabase
+                .from('teacher_subjects')
+                .select('grade_subjects(subjects_master(name))')
+                .eq('teacher_id', profile?.id);
 
-            if (gradeLevelIds.length > 0) {
-                // Fetch subjects for those grade levels
-                const { data: gradeSubjectsData, error: subjectsError } = await supabase
-                    .from('grade_subjects')
-                    .select('subjects_master(name)')
-                    .in('grade_level_id', gradeLevelIds);
-
-                if (!subjectsError && gradeSubjectsData) {
-                    const subjectNames = [...new Set(gradeSubjectsData.map((gs: any) => gs.subjects_master?.name).filter(Boolean))];
-                    setSubjects(subjectNames);
-                }
+            if (!subjectsError && teacherSubjectsData) {
+                // Get unique subject names
+                const subjectNames = [...new Set(
+                    teacherSubjectsData
+                        .map((ts: any) => ts.grade_subjects?.subjects_master?.name)
+                        .filter(Boolean)
+                )];
+                setSubjects(subjectNames);
             }
         } catch (error) {
             console.error("Error fetching teacher data:", error);

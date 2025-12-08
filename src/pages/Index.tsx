@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { getClasses, getExamTypes, getSubjects } from "@/services/academic";
 import { useTheme } from "next-themes";
 
 const Index = () => {
@@ -15,27 +14,6 @@ const Index = () => {
     // Force dark mode on index page
     setTheme("dark");
   }, [setTheme]);
-
-  useEffect(() => {
-    const fetchClasses = async () => {
-      const response = await getClasses();
-      console.log("Fetched classes:", response);
-    };
-
-    const fetchExamTypes = async () => {
-      // const response = await getExamTypes();
-      console.log("Fetched exam types: skipped - needs school_id");
-    };
-
-    const fetchSubjects = async () => {
-      const response = await getSubjects(1);
-      console.log("Fetched subjects:", response);
-    };
-
-    fetchSubjects();
-    fetchExamTypes();
-    fetchClasses();
-  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 relative z-10">
