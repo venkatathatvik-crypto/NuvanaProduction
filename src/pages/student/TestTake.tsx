@@ -11,6 +11,7 @@ import {
     getTestResult,
     getStudentSubmission,
     submitStudentTest,
+    createNotification,
     StudentTestWithQuestions,
     TestResult,
     StudentSubmission,
@@ -96,6 +97,22 @@ const TestTake = () => {
                 answers,
                 timeTakenSeconds,
             });
+
+            // Send notification to the teacher
+            if (test?.teacherId) {
+                try {
+                    await createNotification({
+                        recipient_id: test.teacherId,
+                        school_id: profile.school_id,
+                        title: "New Test Submission",
+                        message: `${profile.name} has submitted "${test.title}".`,
+                        notification_type: "submission",
+                        target_url: "/teacher/marks",
+                    });
+                } catch (notifError) {
+                    console.error("Failed to send notification:", notifError);
+                }
+            }
 
             // Show pending submission screen (not graded yet)
             setPendingSubmission(submission);

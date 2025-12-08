@@ -54,14 +54,7 @@ const Login = () => {
       const userRole = authData.profile.role;
       const selectedRole = activeTab;
 
-      console.log("🔐 Role Check:", {
-        selectedTab: selectedRole,
-        databaseRole: userRole,
-        email: data.email
-      });
-
       if (userRole !== selectedRole) {
-        console.warn(`❌ Role mismatch! User is '${userRole}' but tried to login as '${selectedRole}'`);
         await authService.logout();
         throw new Error(
           `Access Denied: You are registered as a "${userRole}". Please use the "${userRole}" login tab.`
@@ -78,8 +71,6 @@ const Login = () => {
         throw new Error("Unknown user role in profile.");
       }
     } catch (error) {
-      console.error("Login Error:", error);
-
       const message =
         error instanceof Error
           ? error.message

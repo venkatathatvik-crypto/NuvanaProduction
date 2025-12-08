@@ -41,7 +41,6 @@ export const authService = {
       return null;
     }
 
-    console.log("Login Data:", data);
 
     const profile = await authService.getProfile(data.user.id);
 
@@ -71,10 +70,8 @@ export const authService = {
 
       if (signUpError) throw signUpError;
 
-      console.log(data);
       alert("Check your email for the confirmation link!");
     } catch (error) {
-      console.error("Sign Up Error:", error.message);
       throw new Error(error.message);
     }
   },
@@ -92,8 +89,6 @@ export const authService = {
       .select("*, user_roles(role)")
       .eq("id", userId)
       .maybeSingle(); // Use maybeSingle to avoid error when no row found
-
-    console.log("Fetched profile : ", profileData, userId);
 
     if (error) {
       // Handle RLS or database errors

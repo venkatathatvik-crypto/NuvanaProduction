@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Check, X, Calendar } from "lucide-react";
+import { ArrowLeft, Users, Check, X, Calendar as CalendarIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -12,10 +12,17 @@ import {
   getAttendanceForDate,
   saveAttendance,
   type StudentAttendance,
+  createNotificationsForClass,
+  getStudentIdsInClass,
+  getStudentEmailsInClass,
+  sendAttendanceEmail,
 } from "@/services/academic";
 import type { FlattenedClass } from "@/schemas/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useAuth } from "@/auth/AuthContext";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 const TeacherAttendance = () => {
   const navigate = useNavigate();
@@ -25,7 +32,7 @@ const TeacherAttendance = () => {
   const [selectedClass, setSelectedClass] = useState<FlattenedClass | null>(
     null
   );
-  const [selectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(true);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -151,6 +158,32 @@ const TeacherAttendance = () => {
       toast.success(
         `Attendance submitted! ${presentCount}/${students.length} students present`
       );
+
+      // Send notifications to students
+      try {
+        const studentIds = await getStudentIdsInClass(selectedClass.class_id);
+        await createNotificationsForClass(studentIds, {
+          school_id: profile.school_id,
+          title: "Attendance Posted",
+          message: `Attendance for ${format(new Date(selectedDate), 'MMM dd, yyyy')} has been updated.`,
+          notification_type: "attendance",
+          target_url: "/student/attendance",
+        });
+      } catch (notifError) {
+        console.error("Failed to send notifications:", notifError);
+      }
+
+      // Send email notifications
+      try {
+        const studentEmails = await getStudentEmailsInClass(selectedClass.class_id);
+        await sendAttendanceEmail(
+          studentEmails,
+          format(new Date(selectedDate), 'MMM dd, yyyy'),
+          selectedClass.class_name
+        );
+      } catch (emailError) {
+        console.error("Failed to send emails:", emailError);
+      }
     } catch (error) {
       console.error("Error submitting attendance:", error);
       toast.error("Failed to submit attendance. Please try again.");
@@ -177,22 +210,24 @@ const TeacherAttendance = () => {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate("/teacher")}
+            className="shrink-0"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            className="min-w-0"
           >
-            <h1 className="text-4xl font-bold neon-text">Post Attendance</h1>
-            <p className="text-muted-foreground">Mark student attendance</p>
+            <h1 className="text-xl sm:text-4xl font-bold neon-text truncate">Post Attendance</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Mark student attendance</p>
           </motion.div>
         </div>
 
@@ -201,8 +236,8 @@ const TeacherAttendance = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="glass-card p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="glass-card p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
               <div>
                 <label
                   htmlFor="class-select"
@@ -225,18 +260,37 @@ const TeacherAttendance = () => {
               </div>
               <div>
                 <label
-                  htmlFor="date-display"
                   className="text-sm text-muted-foreground mb-2 block"
                 >
                   Date
                 </label>
-                <div
-                  id="date-display"
-                  className="flex items-center gap-2 p-3 rounded-lg bg-muted border border-border"
-                >
-                  <Calendar className="w-5 h-5 text-primary" />
-                  <span>{selectedDate}</span>
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                      {format(new Date(selectedDate + 'T00:00:00'), "PPP")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-background border-border" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={new Date(selectedDate + 'T00:00:00')}
+                      onSelect={(date) => {
+                        if (date) {
+                          const year = date.getFullYear();
+                          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                          const day = date.getDate().toString().padStart(2, '0');
+                          setSelectedDate(`${year}-${month}-${day}`);
+                        }
+                      }}
+                      disabled={(date) => date > new Date() || date.getDay() === 0}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground mb-2">

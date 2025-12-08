@@ -42,14 +42,11 @@ const Signup = () => {
   const onSubmit = async (data: SignupFormValues) => {
     setIsLoading(true);
     try {
-      console.log(data, activeTab);
-
       await authService.signup(data.name, data.email, activeTab, data.password);
 
       navigate("/login?message=confirm_email");
     } catch (error) {
-      // 4. Handle error from authService
-      console.error("Signup failed:", error);
+      // Handle error from authService
       const errorMessage =
         error instanceof Error
           ? error.message.includes("User already registered")

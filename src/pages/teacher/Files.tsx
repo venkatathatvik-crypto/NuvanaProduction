@@ -16,6 +16,10 @@ import {
   uploadTeacherFile,
   deleteTeacherFile,
   incrementFileDownload,
+  createNotificationsForClass,
+  getStudentIdsInClass,
+  getStudentEmailsInClass,
+  sendFileUploadEmail,
   type TeacherFileItem,
   type FileCategoryOption,
   type GradeSubjectOption,
@@ -23,7 +27,7 @@ import {
 import type { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 
-const MAX_PDF_SIZE = 5 * 1024 * 1024;
+const MAX_PDF_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
 const TeacherFiles = () => {
@@ -52,6 +56,7 @@ const TeacherFiles = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [classFilter, setClassFilter] = useState("All Classes");
   const [subjectFilter, setSubjectFilter] = useState("All Subjects");
+  const [fileTypeFilter, setFileTypeFilter] = useState<"All Types" | "pdf" | "video">("All Types");
 
   const subjectFilterOptions = useMemo(() => {
     const set = new Set<string>();
@@ -192,7 +197,7 @@ const TeacherFiles = () => {
         return;
       }
       if (file.size > MAX_PDF_SIZE) {
-        toast.error("PDF file size must be 5MB or less.");
+        toast.error("PDF file size must be 10MB or less.");
         event.target.value = "";
         return;
       }
@@ -244,6 +249,33 @@ const TeacherFiles = () => {
 
       setUploadedFiles((prev) => [newFile, ...prev]);
       toast.success(`${uploadFileType === 'pdf' ? 'File' : 'Video'} uploaded successfully!`);
+
+      // Send notifications to students in the class
+      try {
+        const studentIds = await getStudentIdsInClass(uploadClass.class_id);
+        await createNotificationsForClass(studentIds, {
+          school_id: profile.school_id,
+          title: uploadFileType === 'pdf' ? "New File Uploaded" : "New Video Uploaded",
+          message: `"${fileTitle.trim()}" has been uploaded by your teacher.`,
+          notification_type: "file",
+          target_url: "/student/files",
+        });
+      } catch (notifError) {
+        console.error("Failed to send notifications:", notifError);
+      }
+
+      // Send email notifications
+      try {
+        const studentEmails = await getStudentEmailsInClass(uploadClass.class_id);
+        await sendFileUploadEmail(
+          studentEmails,
+          fileTitle.trim(),
+          uploadFileType,
+          uploadClass.class_name
+        );
+      } catch (emailError) {
+        console.error("Failed to send emails:", emailError);
+      }
 
       setFileTitle("");
       setSelectedFile(null);
@@ -319,7 +351,9 @@ const TeacherFiles = () => {
       classFilter === "All Classes" || file.class === classFilter;
     const subjectMatch =
       subjectFilter === "All Subjects" || file.subject === subjectFilter;
-    return classMatch && subjectMatch;
+    const typeMatch =
+      fileTypeFilter === "All Types" || file.fileType === fileTypeFilter;
+    return classMatch && subjectMatch && typeMatch;
   });
 
   if (loadingClasses || loadingFiles) {
@@ -342,22 +376,24 @@ const TeacherFiles = () => {
   const subjectCount = Math.max(subjectFilterOptions.length - 1, 0);
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate("/teacher")}
+            className="shrink-0"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            className="min-w-0"
           >
-            <h1 className="text-4xl font-bold neon-text">Upload Files</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl sm:text-4xl font-bold neon-text truncate">Upload Files</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
               Share books, notes, and materials
             </p>
           </motion.div>
@@ -368,8 +404,8 @@ const TeacherFiles = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="glass-card p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+          <Card className="glass-card p-4 sm:p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
                 <p className="text-3xl font-bold text-primary">
                   {uploadedFiles.length}
@@ -532,7 +568,7 @@ const TeacherFiles = () => {
                 Click to upload or drag and drop
               </p>
               <p className="text-sm text-muted-foreground">
-                {uploadFileType === 'pdf' ? 'PDF only (max. 5MB)' : 'Video files - MP4, WebM, OGG, MOV, AVI, WMV (max. 100MB)'}
+                {uploadFileType === 'pdf' ? 'PDF only (max. 10MB)' : 'Video files - MP4, WebM, OGG, MOV, AVI, WMV (max. 100MB)'}
               </p>
               {selectedFile && (
                 <p className="text-sm text-primary mt-2">
@@ -589,6 +625,15 @@ const TeacherFiles = () => {
                   </option>
                 ))}
               </select>
+              <select
+                className="p-2 rounded-lg bg-muted border border-border"
+                value={fileTypeFilter}
+                onChange={(e) => setFileTypeFilter(e.target.value as "All Types" | "pdf" | "video")}
+              >
+                <option value="All Types">All Types</option>
+                <option value="pdf">PDF</option>
+                <option value="video">Video</option>
+              </select>
             </div>
           </div>
 
@@ -621,7 +666,6 @@ const TeacherFiles = () => {
                           <Badge variant={file.fileType === 'video' ? 'default' : 'outline'} className={file.fileType === 'video' ? 'bg-neon-purple/20 text-neon-purple' : ''}>
                             {file.fileType === 'video' ? 'Video' : 'PDF'}
                           </Badge>
-                          <Badge variant="outline">{file.size ?? "—"}</Badge>
                           <Badge variant="outline">
                             {file.downloads} downloads
                           </Badge>

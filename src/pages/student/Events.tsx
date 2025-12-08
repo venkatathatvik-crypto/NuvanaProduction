@@ -38,8 +38,8 @@ const Events = () => {
         // Fetch all tests
         const testsData = await getStudentTests(studentData.class_id, profile.id);
         
-        // Filter only Internal Assessments (exam_type_id = 4)
-        const assessments = testsData.filter(test => test.examTypeId === 4);
+        // Filter only Internal Assessments
+        const assessments = testsData.filter(test => test.examTypeCategory === 'Internal Assessment');
         setInternalAssessments(assessments);
         
         // Set all tests and sort by due date (closest deadline first)
@@ -149,26 +149,33 @@ const Events = () => {
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/student")}>
-            <ArrowLeft className="w-6 h-6" />
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/student")} className="shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            className="min-w-0"
           >
-            <h1 className="text-4xl font-bold neon-text">Assignments & Deadlines</h1>
-            <p className="text-muted-foreground">Stay on track with your academics</p>
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text truncate">Assignments & Deadlines</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">Stay on track with your academics</p>
           </motion.div>
         </div>
 
         <Tabs defaultValue="assessments" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="assessments">Internal Assessments</TabsTrigger>
-            <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
-            <TabsTrigger value="past">Past Events</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 h-auto">
+            <TabsTrigger value="assessments" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+              <span className="hidden sm:inline">Internal Assessments</span>
+              <span className="sm:hidden">Assess.</span>
+            </TabsTrigger>
+            <TabsTrigger value="deadlines" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Deadlines</TabsTrigger>
+            <TabsTrigger value="past" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+              <span className="hidden sm:inline">Past Events</span>
+              <span className="sm:hidden">Past</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Internal Assessments Tab */}
@@ -323,41 +330,43 @@ const Events = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 + index * 0.05 }}
               >
-                <Card className={`glass-card p-6 hover:neon-glow transition-all ${deadline.submitted ? 'opacity-75' : ''}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-2">{deadline.task}</h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                <Card className={`glass-card p-4 sm:p-6 hover:neon-glow transition-all ${deadline.submitted ? 'opacity-75' : ''}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base sm:text-lg font-semibold mb-2 truncate">{deadline.task}</h3>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
                         <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          Due: {format(new Date(deadline.dueDate), 'MMM dd, yyyy')}
+                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <span className="truncate">Due: {format(new Date(deadline.dueDate), 'MMM dd')}</span>
                         </div>
                         {deadline.examType && (
-                          <Badge variant="outline">{deadline.examType}</Badge>
+                          <Badge variant="outline" className="text-xs">{deadline.examType}</Badge>
                         )}
                         {deadline.subject && (
-                          <span className="text-xs px-2 py-1 bg-secondary rounded">{deadline.subject}</span>
+                          <span className="text-xs px-2 py-0.5 bg-secondary rounded truncate max-w-[100px] sm:max-w-none">{deadline.subject}</span>
                         )}
                       </div>
                       {deadline.submitted && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-green-500">
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 shrink-0" />
+                          <span className="text-green-500 truncate">
                             Submitted {deadline.marksObtained !== undefined ? `- Score: ${deadline.marksObtained}` : ''}
                           </span>
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={deadline.priority === "high" ? "destructive" : "secondary"}>
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <Badge variant={deadline.priority === "high" ? "destructive" : "secondary"} className="text-xs">
                         {deadline.priority.toUpperCase()}
                       </Badge>
                       {!deadline.submitted && deadline.testId && (
                         <Button 
                           size="sm" 
                           onClick={() => navigate(`/student/tests/take/${deadline.testId}`)}
+                          className="text-xs sm:text-sm"
                         >
-                          Take Test
+                          <span className="hidden sm:inline">Take Test</span>
+                          <span className="sm:hidden">Take</span>
                         </Button>
                       )}
                       {deadline.submitted && deadline.testId && (

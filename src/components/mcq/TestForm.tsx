@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Plus, Trash2, Save, Upload } from "lucide-react";
+import { Plus, Trash2, Save, Upload, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,9 +27,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 import { Test } from "@/lib/mcq-store";
-import { getTeacherClasses, getExamTypes, getSubjects, FlattenedClass } from "@/services/academic";
+import { getTeacherClasses, getExamTypesWithCategory, ExamTypeWithCategory, getSubjects, FlattenedClass } from "@/services/academic";
 import { useAuth } from "@/auth/AuthContext";
 
 const questionSchema = z
@@ -85,7 +88,8 @@ interface TestFormProps {
 export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormProps) => {
     const { profile, profileLoading } = useAuth();
     const [classes, setClasses] = useState<FlattenedClass[]>([]);
-    const [examTypes, setExamTypes] = useState<string[]>([]);
+    const [allExamTypes, setAllExamTypes] = useState<ExamTypeWithCategory[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState<"Internal Assessment" | "School Exam">("School Exam");
     const [subjects, setSubjects] = useState<string[]>([]);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -121,18 +125,19 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
             try {
                 const [classesData, examTypesData] = await Promise.all([
                     getTeacherClasses(profile.id, profile.school_id),
-                    getExamTypes(profile.school_id),
+                    getExamTypesWithCategory(profile.school_id),
                 ]);
 
-                console.log("Classes data loaded:", classesData);
                 setClasses(classesData || []);
+                setAllExamTypes(examTypesData || []);
 
-                // Add defaultExamType to options if not present
-                let types = examTypesData || [];
-                if (defaultExamType && !types.includes(defaultExamType)) {
-                    types = [...types, defaultExamType];
+                // Determine initial category based on defaultExamType
+                if (defaultExamType && examTypesData) {
+                    const matchingType = examTypesData.find(et => et.name === defaultExamType);
+                    if (matchingType) {
+                        setSelectedCategory(matchingType.type);
+                    }
                 }
-                setExamTypes(types);
 
                 if (initialData) {
                     const initialClassId = (initialData as any).classId || "";
@@ -168,12 +173,10 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                         );
                         if (selectedClass) {
                             try {
-                                console.log("Fetching subjects for grade_id:", selectedClass.grade_id);
                                 const subjectsData = await getSubjects(selectedClass.grade_id);
-                                console.log("Subjects data received:", subjectsData);
                                 setSubjects(subjectsData || []);
                             } catch (error) {
-                                console.error("Failed to fetch subjects for initial class", error);
+                                // Failed to fetch subjects for initial class
                             }
                         }
                     }
@@ -190,18 +193,16 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                     // Set default exam type if provided
                     if (defaultExamType) {
                         form.setValue("examType", defaultExamType);
-                    } else if (
-                        types &&
-                        types.length > 0 &&
-                        !form.getValues("examType")
-                    ) {
-                        form.setValue("examType", types[0]);
+                    } else {
+                        // Set first exam type from selected category
+                        const categoryTypes = (examTypesData || []).filter(et => et.type === "School Exam");
+                        if (categoryTypes.length > 0 && !form.getValues("examType")) {
+                            form.setValue("examType", categoryTypes[0].name);
+                        }
                     }
 
                 }
             } catch (error) {
-                console.error("Failed to fetch initial data:", error);
-                console.error("Error details:", error);
                 toast.error("Failed to load form data");
             }
         };
@@ -229,9 +230,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
             }
 
             try {
-                console.log("Class changed - fetching subjects for grade_id:", selectedClass.grade_id);
                 const subjectsData = await getSubjects(selectedClass.grade_id);
-                console.log("Subjects data received for class change:", subjectsData);
                 setSubjects(subjectsData || []);
 
                 if (initialData && (initialData as any).subject) {
@@ -249,7 +248,6 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                     form.setValue("subject", subjectsData[0]);
                 }
             } catch (error) {
-                console.error("Failed to fetch subjects", error);
                 toast.error("Failed to load subjects");
                 setSubjects([]);
             }
@@ -405,6 +403,36 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                             </FormItem>
                                         )}
                                     />
+                                </div>
+
+                                {/* Exam Type Category and Exam Type */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormItem>
+                                        <FormLabel>Exam Category</FormLabel>
+                                        <Select
+                                            value={selectedCategory}
+                                            onValueChange={(value: "Internal Assessment" | "School Exam") => {
+                                                setSelectedCategory(value);
+                                                // Reset exam type when category changes
+                                                const categoryTypes = allExamTypes.filter(et => et.type === value);
+                                                if (categoryTypes.length > 0) {
+                                                    form.setValue("examType", categoryTypes[0].name);
+                                                } else {
+                                                    form.setValue("examType", "");
+                                                }
+                                            }}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select Category" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="School Exam">School Exam</SelectItem>
+                                                <SelectItem value="Internal Assessment">Internal Assessment</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormItem>
 
                                     <FormField
                                         control={form.control}
@@ -414,7 +442,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                                 <FormLabel>Exam Type</FormLabel>
                                                 <Select
                                                     onValueChange={field.onChange}
-                                                    defaultValue={field.value}
+                                                    value={field.value}
                                                 >
                                                     <FormControl>
                                                         <SelectTrigger>
@@ -422,11 +450,13 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        {examTypes.map((type) => (
-                                                            <SelectItem key={type} value={type}>
-                                                                {type}
-                                                            </SelectItem>
-                                                        ))}
+                                                        {allExamTypes
+                                                            .filter(et => et.type === selectedCategory)
+                                                            .map((et) => (
+                                                                <SelectItem key={et.id} value={et.name}>
+                                                                    {et.name}
+                                                                </SelectItem>
+                                                            ))}
                                                     </SelectContent>
                                                 </Select>
                                                 <FormMessage />
@@ -455,22 +485,105 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                 <FormField
                                     control={form.control}
                                     name="dueDate"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Due Date & Time (Optional)</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    type="datetime-local"
-                                                    {...field}
-                                                    className="w-full"
-                                                />
-                                            </FormControl>
-                                            <FormDescription>
-                                                Set a deadline for students to complete this test
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
+                                    render={({ field }) => {
+                                        // Parse the datetime string to extract date and time
+                                        const dateValue = field.value ? new Date(field.value) : null;
+                                        const timeValue = field.value ? field.value.split('T')[1]?.substring(0, 5) || '09:00' : '09:00';
+                                        
+                                        return (
+                                            <FormItem>
+                                                <FormLabel>Due Date & Time (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <div className="flex gap-2">
+                                                        <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    className="flex-1 justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
+                                                                >
+                                                                    <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                                                                    {dateValue ? format(dateValue, "PPP") : "Select date"}
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-auto p-0 bg-background border-border" align="start">
+                                                                <Calendar
+                                                                    mode="single"
+                                                                    selected={dateValue || undefined}
+                                                                    onSelect={(date) => {
+                                                                        if (date) {
+                                                                            const year = date.getFullYear();
+                                                                            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                                                            const day = date.getDate().toString().padStart(2, '0');
+                                                                            field.onChange(`${year}-${month}-${day}T${timeValue}`);
+                                                                        }
+                                                                    }}
+                                                                    initialFocus
+                                                                />
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                        <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    className="w-32 justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
+                                                                >
+                                                                    <Clock className="mr-2 h-4 w-4 text-primary" />
+                                                                    {timeValue}
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-auto p-3 bg-background border-border" align="start">
+                                                                <div className="flex gap-2">
+                                                                    <select
+                                                                        className="bg-muted border border-border rounded-md p-2 text-sm"
+                                                                        value={timeValue.split(':')[0]}
+                                                                        onChange={(e) => {
+                                                                            const mins = timeValue.split(':')[1] || '00';
+                                                                            const newTime = `${e.target.value}:${mins}`;
+                                                                            if (dateValue) {
+                                                                                const year = dateValue.getFullYear();
+                                                                                const month = (dateValue.getMonth() + 1).toString().padStart(2, '0');
+                                                                                const day = dateValue.getDate().toString().padStart(2, '0');
+                                                                                field.onChange(`${year}-${month}-${day}T${newTime}`);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {Array.from({ length: 11 }, (_, i) => (i + 8).toString().padStart(2, '0')).map(h => (
+                                                                            <option key={h} value={h}>{h}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                    <span className="text-xl">:</span>
+                                                                    <select
+                                                                        className="bg-muted border border-border rounded-md p-2 text-sm"
+                                                                        value={timeValue.split(':')[1] || '00'}
+                                                                        onChange={(e) => {
+                                                                            const hrs = timeValue.split(':')[0] || '09';
+                                                                            const newTime = `${hrs}:${e.target.value}`;
+                                                                            if (dateValue) {
+                                                                                const year = dateValue.getFullYear();
+                                                                                const month = (dateValue.getMonth() + 1).toString().padStart(2, '0');
+                                                                                const day = dateValue.getDate().toString().padStart(2, '0');
+                                                                                field.onChange(`${year}-${month}-${day}T${newTime}`);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map(m => (
+                                                                            <option key={m} value={m}>{m}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                    </div>
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Set a deadline for students to complete this test
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        );
+                                    }}
                                 />
 
                                 <div className="grid grid-cols-2 gap-4">
@@ -515,8 +628,8 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                         </Card>
 
                         {/* Questions header + actions */}
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-bold">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                            <h2 className="text-xl sm:text-2xl font-bold">
                                 Questions ({fields.length})
                             </h2>
                             <div className="flex gap-2">
@@ -527,12 +640,14 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                         onChange={handleFileUpload}
                                     />
-                                    <Button type="button" variant="outline">
-                                        <Upload className="w-4 h-4 mr-2" /> Import CSV
+                                    <Button type="button" variant="outline" size="sm">
+                                        <Upload className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Import CSV</span>
                                     </Button>
                                 </div>
                                 <Button
                                     type="button"
+                                    size="sm"
                                     onClick={() =>
                                         append({
                                             text: "",
@@ -546,7 +661,8 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                         })
                                     }
                                 >
-                                    <Plus className="w-4 h-4 mr-2" /> Add Question
+                                    <Plus className="w-4 h-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">Add Question</span>
                                 </Button>
                             </div>
                         </div>
@@ -825,7 +941,9 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                     <span className="font-bold">{totalMarks}</span>
                                 </div>
                                 <Button type="submit" className="w-full mt-4">
-                                    <Save className="w-4 h-4 mr-2" /> Save Test
+                                    <Save className="w-4 h-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">Save Test</span>
+                                    <span className="sm:hidden">Save</span>
                                 </Button>
                             </CardContent>
                         </Card>
