@@ -40,7 +40,7 @@ serve(async (req) => {
     }
 
     // Parse request
-    const { email, password, role, name, school_id, class_id } = await req.json()
+    const { email, password, role, name, school_id, class_id, roll_number } = await req.json()
 
     let targetSchoolId = school_id;
 
@@ -80,7 +80,8 @@ serve(async (req) => {
         name,
         role_id: roleId,
         school_id: targetSchoolId,
-        class_id: class_id || null // Optional for students
+        class_id: class_id || null, // Optional for students
+        roll_number: roll_number || null // Optional for students
       })
 
     if (profileError) {

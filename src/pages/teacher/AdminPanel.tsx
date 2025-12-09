@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Shield, BookOpen, Users, School, Save, Plus, Trash2, Key, CheckCircle, Calendar, Mail, UserPlus, Ban, Loader2, LogOut, Edit, FileText, Folder, Clock } from "lucide-react";
+import { Shield, BookOpen, Users, School, Save, Plus, Trash2, Key, CheckCircle, Calendar, Mail, UserPlus, Ban, Loader2, LogOut, Edit, FileText, Folder, Clock, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,8 +64,20 @@ export default function AdminPanel() {
     const [newMemberName, setNewMemberName] = useState("");
     const [newMemberEmail, setNewMemberEmail] = useState("");
     const [newMemberPassword, setNewMemberPassword] = useState("");
+    const [newMemberRollNo, setNewMemberRollNo] = useState("");
     const [newMemberType, setNewMemberType] = useState<"teacher" | "student">("teacher");
     const [isCreatingMember, setIsCreatingMember] = useState(false);
+
+    // CSV Import
+    const [csvImportType, setCsvImportType] = useState<"teacher" | "student">("student");
+    const [isImporting, setIsImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState<{
+        total: number;
+        current: number;
+        success: number;
+        failed: number;
+        errors: Array<{ row: number; email: string; error: string }>;
+    } | null>(null);
 
     // Edit states
     const [editingItem, setEditingItem] = useState<any>(null);
@@ -436,25 +448,37 @@ export default function AdminPanel() {
 
         setIsCreatingMember(true);
         try {
-            const { error } = await supabase.functions.invoke('create-user', {
+            const { data, error } = await supabase.functions.invoke('create-user', {
                 body: {
                     email: newMemberEmail,
                     password: newMemberPassword,
                     name: newMemberName,
                     role: newMemberType,
-                    school_id: profile?.school_id
+                    school_id: profile?.school_id,
+                    roll_number: newMemberType === 'student' && newMemberRollNo ? newMemberRollNo : undefined
                 }
             });
 
-            if (error) throw error;
+            if (error) {
+                console.error("Edge Function Error:", error);
+                throw error;
+            }
+            
+            // Check if the response contains an error
+            if (data?.error) {
+                console.error("Edge Function returned error:", data.error);
+                throw new Error(data.error);
+            }
             
             toast.success(`${newMemberType === 'teacher' ? 'Teacher' : 'Student'} created successfully`);
             setNewMemberName("");
             setNewMemberEmail("");
             setNewMemberPassword("");
+            setNewMemberRollNo("");
             fetchSchoolData();
         } catch (error: any) {
-            toast.error(error.message);
+            console.error("Full error:", error);
+            toast.error(error.message || "Failed to create user");
         } finally {
             setIsCreatingMember(false);
         }
@@ -476,6 +500,135 @@ export default function AdminPanel() {
         } catch (error: any) {
             console.error("Error deleting member:", error);
             toast.error("Failed to delete member");
+        }
+    };
+
+    const handleCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        // Reset file input
+        event.target.value = '';
+
+        if (!file.name.endsWith('.csv')) {
+            toast.error("Please upload a CSV file");
+            return;
+        }
+
+        setIsImporting(true);
+        setImportProgress(null);
+
+        try {
+            const text = await file.text();
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+            
+            if (lines.length < 2) {
+                toast.error("CSV file is empty or has no data rows");
+                setIsImporting(false);
+                return;
+            }
+
+            // Parse header
+            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const nameIndex = header.findIndex(h => h === 'name');
+            const emailIndex = header.findIndex(h => h === 'email');
+            const passwordIndex = header.findIndex(h => h === 'password');
+            const rollNumberIndex = header.findIndex(h => h === 'roll_number' || h === 'roll number' || h === 'rollnumber');
+
+            if (nameIndex === -1 || emailIndex === -1 || passwordIndex === -1) {
+                toast.error("CSV must have 'name', 'email', and 'password' columns");
+                setIsImporting(false);
+                return;
+            }
+
+            if (csvImportType === 'student' && rollNumberIndex === -1) {
+                toast.warning("No 'roll_number' column found. Students will be created without roll numbers.");
+            }
+
+            // Parse data rows
+            const users = lines.slice(1).map((line, index) => {
+                const values = line.split(',').map(v => v.trim());
+                return {
+                    row: index + 2, // +2 because index 0 is header and we're 0-indexed
+                    name: values[nameIndex] || '',
+                    email: values[emailIndex] || '',
+                    password: values[passwordIndex] || '',
+                    roll_number: rollNumberIndex !== -1 ? values[rollNumberIndex] : undefined
+                };
+            }).filter(user => user.name && user.email && user.password); // Filter out empty rows
+
+            if (users.length === 0) {
+                toast.error("No valid user data found in CSV");
+                setIsImporting(false);
+                return;
+            }
+
+            // Initialize progress
+            setImportProgress({
+                total: users.length,
+                current: 0,
+                success: 0,
+                failed: 0,
+                errors: []
+            });
+
+            // Create users one by one
+            let successCount = 0;
+            let failedCount = 0;
+            const errors: Array<{ row: number; email: string; error: string }> = [];
+
+            for (let i = 0; i < users.length; i++) {
+                const user = users[i];
+                try {
+                    const { error } = await supabase.functions.invoke('create-user', {
+                        body: {
+                            email: user.email,
+                            password: user.password,
+                            name: user.name,
+                            role: csvImportType,
+                            school_id: profile?.school_id,
+                            roll_number: csvImportType === 'student' && user.roll_number ? user.roll_number : undefined
+                        }
+                    });
+
+                    if (error) throw error;
+                    successCount++;
+                } catch (error: any) {
+                    failedCount++;
+                    errors.push({
+                        row: user.row,
+                        email: user.email,
+                        error: error.message || 'Unknown error'
+                    });
+                }
+
+                // Update progress
+                setImportProgress({
+                    total: users.length,
+                    current: i + 1,
+                    success: successCount,
+                    failed: failedCount,
+                    errors
+                });
+
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            // Show final results
+            if (successCount > 0) {
+                toast.success(`Successfully created ${successCount} ${csvImportType}(s)`);
+            }
+            if (failedCount > 0) {
+                toast.error(`Failed to create ${failedCount} ${csvImportType}(s). Check details below.`);
+            }
+
+            fetchSchoolData();
+        } catch (error: any) {
+            console.error("CSV Import Error:", error);
+            toast.error("Failed to process CSV file");
+        } finally {
+            setIsImporting(false);
         }
     };
 
@@ -641,13 +794,7 @@ export default function AdminPanel() {
                             teacher.classes?.id === teacherClassFilter ||
                             (teacherClassFilter === "unassigned" && !teacher.classes?.id);
         
-        console.log("Teacher filter check:", {
-            teacher: teacher.name,
-            classId: teacher.classes?.id,
-            filter: teacherClassFilter,
-            matchesSearch,
-            matchesClass
-        });
+        
         
         return matchesSearch && matchesClass;
     });
@@ -661,13 +808,7 @@ export default function AdminPanel() {
                             student.classes?.id === studentClassFilter ||
                             (studentClassFilter === "unassigned" && !student.classes?.id);
         
-        console.log("Student filter check:", {
-            student: student.name,
-            classId: student.classes?.id,
-            filter: studentClassFilter,
-            matchesSearch,
-            matchesClass
-        });
+        
         
         return matchesSearch && matchesClass;
     });
@@ -971,7 +1112,7 @@ export default function AdminPanel() {
 
                     {/* Members Tab */}
                     <TabsContent value="members">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <Card className="glass-card p-4 sm:p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                     <UserPlus className="w-5 h-5 text-primary" /> Add New Member
@@ -996,6 +1137,9 @@ export default function AdminPanel() {
                                     <Input placeholder="Name" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} />
                                     <Input placeholder="Email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
                                     <Input placeholder="Password" type="password" value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} />
+                                    {newMemberType === "student" && (
+                                        <Input placeholder="Roll Number (Optional)" value={newMemberRollNo} onChange={(e) => setNewMemberRollNo(e.target.value)} />
+                                    )}
                                     <Button 
                                         className="w-full" 
                                         onClick={handleCreateMember}
@@ -1004,6 +1148,86 @@ export default function AdminPanel() {
                                         {isCreatingMember ? <Loader2 className="animate-spin mr-2"/> : <Plus className="w-4 h-4 mr-2" />}
                                         Create {newMemberType === "teacher" ? "Teacher" : "Student"}
                                     </Button>
+                                </div>
+                            </Card>
+
+                            <Card className="glass-card p-4 sm:p-6">
+                                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                                    <Upload className="w-5 h-5 text-primary" /> Import from CSV
+                                </h2>
+                                <div className="space-y-4">
+                                    <div className="flex gap-2 p-1 bg-secondary/20 rounded-lg">
+                                        <Button
+                                            variant={csvImportType === "teacher" ? "default" : "ghost"}
+                                            onClick={() => setCsvImportType("teacher")}
+                                            className="flex-1"
+                                        >
+                                            Teachers
+                                        </Button>
+                                        <Button
+                                            variant={csvImportType === "student" ? "default" : "ghost"}
+                                            onClick={() => setCsvImportType("student")}
+                                            className="flex-1"
+                                        >
+                                            Students
+                                        </Button>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">
+                                            CSV Format: name, email, password{csvImportType === 'student' ? ', roll_number (optional)' : ''}
+                                        </p>
+                                        <label className="block">
+                                            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-secondary/20 transition">
+                                                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                                                <p className="text-sm font-medium">Click to upload CSV</p>
+                                                <p className="text-xs text-muted-foreground mt-1">or drag and drop</p>
+                                            </div>
+                                            <input
+                                                type="file"
+                                                accept=".csv"
+                                                onChange={handleCsvImport}
+                                                disabled={isImporting}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    </div>
+
+                                    {isImporting && importProgress && (
+                                        <div className="space-y-2 p-3 bg-secondary/10 rounded-lg">
+                                            <div className="flex justify-between text-sm">
+                                                <span>Progress:</span>
+                                                <span>{importProgress.current} / {importProgress.total}</span>
+                                            </div>
+                                            <div className="w-full bg-secondary rounded-full h-2">
+                                                <div 
+                                                    className="bg-primary h-2 rounded-full transition-all" 
+                                                    style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                                                />
+                                            </div>
+                                            <div className="flex justify-between text-xs text-muted-foreground">
+                                                <span className="text-green-500">✓ {importProgress.success}</span>
+                                                <span className="text-red-500">✗ {importProgress.failed}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!isImporting && importProgress && importProgress.errors.length > 0 && (
+                                        <div className="space-y-2 max-h-48 overflow-y-auto p-3 bg-destructive/10 rounded-lg">
+                                            <p className="text-sm font-medium text-destructive">Errors:</p>
+                                            {importProgress.errors.slice(0, 10).map((err, idx) => (
+                                                <div key={idx} className="text-xs p-2 bg-background rounded">
+                                                    <p className="font-medium">Row {err.row}: {err.email}</p>
+                                                    <p className="text-muted-foreground">{err.error}</p>
+                                                </div>
+                                            ))}
+                                            {importProgress.errors.length > 10 && (
+                                                <p className="text-xs text-muted-foreground text-center">
+                                                    ... and {importProgress.errors.length - 10} more errors
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </Card>
 

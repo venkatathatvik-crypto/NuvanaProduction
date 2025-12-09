@@ -10,21 +10,27 @@ import {
   Mic,
   LogOut,
   CheckSquare,
+  AlertCircle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
 import NotificationBell from "@/components/NotificationBell";
+import { supabase } from "@/supabase/client";
+import { formatDistanceToNow } from "date-fns";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
   const { logout, profile } = useAuth();
   const [classes, setClasses] = useState<FlattenedClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -47,6 +53,34 @@ const TeacherDashboard = () => {
     fetchClasses();
   }, [profile?.id]);
 
+  useEffect(() => {
+    const fetchRecentNotifications = async () => {
+      if (!profile?.id) {
+        setLoadingNotifications(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('recipient_id', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) throw error;
+        setNotifications(data || []);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+        setNotifications([]);
+      } finally {
+        setLoadingNotifications(false);
+      }
+    };
+
+    fetchRecentNotifications();
+  }, [profile?.id]);
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -62,12 +96,11 @@ const TeacherDashboard = () => {
     { label: "My Tasks", icon: CheckSquare, color: "text-green-500", path: "/teacher/tasks" },
   ];
 
-  const recentActivity = [
-    { action: "Uploaded marks for Mathematics midterm", time: "1 hour ago" },
-    { action: "Posted attendance for Class 10A", time: "3 hours ago" },
-    { action: "Uploaded lecture notes - Chapter 5", time: "5 hours ago" },
-    { action: "Announced test schedule", time: "1 day ago" },
-  ];
+  const handleNotificationClick = (notification: any) => {
+    if (notification.target_url) {
+      navigate(notification.target_url);
+    }
+  };
 
   return (
     <div className="min-h-screen p-3 sm:p-6 relative overflow-hidden">
@@ -166,15 +199,49 @@ const TeacherDashboard = () => {
                 <h2 className="text-xl sm:text-2xl font-semibold">Recent Activity</h2>
               </div>
               <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div
-                    key={activity.action}
-                    className="p-4 rounded-lg bg-muted/50 border border-border hover:border-primary transition-colors"
-                  >
-                    <p className="font-medium">{activity.action}</p>
-                    <p className="text-xs text-muted-foreground mt-2">{activity.time}</p>
-                  </div>
-                ))}
+                {loadingNotifications ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    Loading notifications...
+                  </p>
+                ) : notifications.length > 0 ? (
+                  notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      onClick={() => handleNotificationClick(notification)}
+                      className={`p-4 rounded-lg bg-muted/50 border border-border hover:border-primary transition-colors ${
+                        notification.target_url ? 'cursor-pointer' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{notification.title}</p>
+                            {!notification.is_read && (
+                              <Badge variant="secondary" className="text-xs h-5">
+                                New
+                              </Badge>
+                            )}
+                            {notification.is_urgent && (
+                              <AlertCircle className="w-4 h-4 text-destructive" />
+                            )}
+                          </div>
+                          {notification.message && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {notification.message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-muted-foreground text-center py-8">
+                    No recent notifications
+                  </p>
+                )}
               </div>
             </Card>
           </motion.div>
