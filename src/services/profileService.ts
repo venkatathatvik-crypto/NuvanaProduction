@@ -1,4 +1,4 @@
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 
 /**
  * Upload a profile photo to Supabase storage and update the profile

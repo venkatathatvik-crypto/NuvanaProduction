@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { toast } from "sonner";
 
 export default function AdminLogin() {
@@ -16,7 +16,7 @@ export default function AdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error("Please enter email and password");
       return;
@@ -55,7 +55,7 @@ export default function AdminLogin() {
       // Success - redirect to admin panel
       toast.success("Welcome, School Administrator!");
       navigate("/admin");
-      
+
     } catch (error: any) {
       console.error("Login error:", error);
       toast.error(error.message || "Failed to login");
@@ -67,7 +67,7 @@ export default function AdminLogin() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/10" />
-      
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

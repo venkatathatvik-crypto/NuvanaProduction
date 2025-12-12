@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { useAuth } from "@/auth/AuthContext";
 import { getTimetableForClass, getOrCreateTimetableDay, saveTimetablePeriod, deleteTimetablePeriod, DAY_NAMES, WeeklyTimetable } from "@/services/timetableService";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,23 +26,23 @@ export default function AdminPanel() {
     const [examTypes, setExamTypes] = useState<any[]>([]);
     const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
     const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
-    
+
     // Teacher-Subject Assignment
     const [selectedTeacherForSubject, setSelectedTeacherForSubject] = useState<string>("");
     const [selectedSubjectsForTeacher, setSelectedSubjectsForTeacher] = useState<string[]>([]);
-    
+
     // Form States
     const [newClass, setNewClass] = useState("");
     const [newGrade, setNewGrade] = useState("");
     const [selectedGrade, setSelectedGrade] = useState<string>("");
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [selectedTeacher, setSelectedTeacher] = useState<string>("");
-    
+
     // Student-Class Assignment
     const [selectedStudent, setSelectedStudent] = useState<string>("");
     const [selectedClassForStudent, setSelectedClassForStudent] = useState<string>("");
     const [studentAssignSearch, setStudentAssignSearch] = useState("");
-    
+
     // Teacher-Class Assignment
     const [teacherAssignSearch, setTeacherAssignSearch] = useState("");
     // Subject-Grade Assignment
@@ -136,12 +136,12 @@ export default function AdminPanel() {
             if (gradesRes.error) throw gradesRes.error;
             if (fileCategoriesRes.error) throw fileCategoriesRes.error;
             if (examTypesRes.error) throw examTypesRes.error;
-            
+
             console.log("File Categories Response:", fileCategoriesRes);
             console.log("Teachers data:", teachersRes.data);
             console.log("Students data:", studentsRes.data);
             console.log("Teacher classes data:", teacherClassesRes.data);
-            
+
             // Attach class information to teachers
             const teachersWithClasses = (teachersRes.data || []).map(teacher => {
                 const teacherClass = (teacherClassesRes.data || []).find(tc => tc.teacher_id === teacher.id);
@@ -150,7 +150,7 @@ export default function AdminPanel() {
                     classes: teacherClass?.classes || null
                 };
             });
-            
+
             setTeachers(teachersWithClasses);
             setStudents(studentsRes.data || []);
             setClasses(classesRes.data || []);
@@ -214,19 +214,19 @@ export default function AdminPanel() {
             toast.error("Please select both teacher and class");
             return;
         }
-        
+
         // Check if teacher is already assigned to this class
         console.log("Checking assignment for teacher:", selectedTeacher, "class:", selectedClass, "school:", profile?.school_id);
-        
+
         const { data: existingAssignment, error: checkError } = await supabase
             .from('teacher_classes')
             .select('*')
             .eq('teacher_id', selectedTeacher)
             .eq('class_id', selectedClass)
             .eq('school_id', profile?.school_id);
-            
+
         console.log("Assignment check result:", { data: existingAssignment, error: checkError });
-            
+
         if (checkError) {
             console.error("Check error:", checkError);
             if (checkError.code !== 'PGRST116') { // PGRST116 is "not found" error
@@ -234,20 +234,20 @@ export default function AdminPanel() {
                 return;
             }
         }
-        
+
         if (existingAssignment && existingAssignment.length > 0) {
             console.log("Found existing assignment:", existingAssignment);
             toast.error("Teacher is already assigned to this class");
             return;
         }
-        
+
         try {
             const { error } = await supabase.from('teacher_classes').insert({
                 teacher_id: selectedTeacher,
                 class_id: selectedClass,
                 school_id: profile?.school_id
             });
-            
+
             if (error) throw error;
             toast.success("Teacher assigned to class");
             setSelectedTeacher("");
@@ -263,30 +263,30 @@ export default function AdminPanel() {
             toast.error("Select both student and class");
             return;
         }
-        
+
         // Check if student is already assigned to this class
         const { data: currentStudent, error: checkError } = await supabase
             .from('profiles')
             .select('class_id, classes(id, name)')
             .eq('id', selectedStudent)
             .single();
-            
+
         if (checkError) {
             toast.error("Error checking student assignment");
             return;
         }
-        
+
         if (currentStudent.class_id === selectedClassForStudent) {
             toast.error("Student is already assigned to this class");
             return;
         }
-        
+
         try {
             const { error } = await supabase
                 .from('profiles')
                 .update({ class_id: selectedClassForStudent })
                 .eq('id', selectedStudent);
-            
+
             if (error) throw error;
             toast.success("Student assigned to class");
             setSelectedStudent("");
@@ -306,34 +306,34 @@ export default function AdminPanel() {
             // selectedSubjectsForTeacher now contains subject_master IDs
             // Find all grade_subjects for these subject_master IDs
             const gradeSubjectIdsToAssign: string[] = [];
-            
+
             for (const subjectMasterId of selectedSubjectsForTeacher) {
                 const matchingGradeSubjects = gradeSubjects.filter(gs => gs.subject_master_id === subjectMasterId);
                 gradeSubjectIdsToAssign.push(...matchingGradeSubjects.map(gs => gs.id));
             }
-            
+
             // Get already assigned grade_subject IDs for this teacher
             const alreadyAssigned = teacherSubjects
                 .filter(ts => ts.teacher_id === selectedTeacherForSubject)
                 .map(ts => ts.grade_subject_id);
-            
+
             // Filter out already assigned
             const newGradeSubjectIds = gradeSubjectIdsToAssign.filter(id => !alreadyAssigned.includes(id));
-            
+
             if (newGradeSubjectIds.length === 0) {
                 toast.error("Selected subjects are already assigned to this teacher");
                 return;
             }
-            
+
             // Insert all grade_subject entries
             const insertData = newGradeSubjectIds.map(gradeSubjectId => ({
                 teacher_id: selectedTeacherForSubject,
                 grade_subject_id: gradeSubjectId,
                 school_id: profile?.school_id
             }));
-            
+
             const { error } = await supabase.from('teacher_subjects').insert(insertData);
-            
+
             if (error) throw error;
             toast.success(`${selectedSubjectsForTeacher.length} subject(s) assigned to teacher`);
             setSelectedSubjectsForTeacher([]);
@@ -353,23 +353,23 @@ export default function AdminPanel() {
             const alreadyAssigned = gradeSubjects
                 .filter(gs => gs.grade_level_id === parseInt(selectedGradeForSubject))
                 .map(gs => gs.subject_master_id);
-            
+
             // Filter out already assigned subjects
             const newSubjects = selectedSubjects.filter(subjectId => !alreadyAssigned.includes(subjectId));
-            
+
             if (newSubjects.length === 0) {
                 toast.error("Selected subjects are already assigned to this grade");
                 return;
             }
-            
+
             // Insert all selected subjects
             const insertData = newSubjects.map(subjectId => ({
                 grade_level_id: parseInt(selectedGradeForSubject),
                 subject_master_id: subjectId
             }));
-            
+
             const { error } = await supabase.from('grade_subjects').insert(insertData);
-            
+
             if (error) throw error;
             toast.success(`${newSubjects.length} subject(s) added to grade`);
             setSelectedSubjects([]);
@@ -388,7 +388,7 @@ export default function AdminPanel() {
             const { error } = await supabase.from('subjects_master').insert({
                 name: newSubject.trim()
             });
-            
+
             if (error) throw error;
             toast.success("Subject created");
             setNewSubject("");
@@ -408,7 +408,7 @@ export default function AdminPanel() {
                 name: newFileCategory.trim(),
                 school_id: profile?.school_id
             });
-            
+
             if (error) throw error;
             toast.success("File category created");
             setNewFileCategory("");
@@ -429,7 +429,7 @@ export default function AdminPanel() {
                 school_id: profile?.school_id,
                 type: newExamTypeCategory
             });
-            
+
             if (error) throw error;
             toast.success("Exam type created");
             setNewExamType("");
@@ -463,13 +463,13 @@ export default function AdminPanel() {
                 console.error("Edge Function Error:", error);
                 throw error;
             }
-            
+
             // Check if the response contains an error
             if (data?.error) {
                 console.error("Edge Function returned error:", data.error);
                 throw new Error(data.error);
             }
-            
+
             toast.success(`${newMemberType === 'teacher' ? 'Teacher' : 'Student'} created successfully`);
             setNewMemberName("");
             setNewMemberEmail("");
@@ -494,7 +494,7 @@ export default function AdminPanel() {
                 .eq('id', id);
 
             if (error) throw error;
-            
+
             toast.success("Member deleted successfully");
             fetchSchoolData();
         } catch (error: any) {
@@ -521,7 +521,7 @@ export default function AdminPanel() {
         try {
             const text = await file.text();
             const lines = text.split('\n').map(line => line.trim()).filter(line => line);
-            
+
             if (lines.length < 2) {
                 toast.error("CSV file is empty or has no data rows");
                 setIsImporting(false);
@@ -642,7 +642,7 @@ export default function AdminPanel() {
                 .eq('id', id);
 
             if (error) throw error;
-            
+
             toast.success(`${name} deleted successfully`);
             fetchSchoolData();
         } catch (error: any) {
@@ -670,7 +670,7 @@ export default function AdminPanel() {
                 .eq('id', editingItem.id);
 
             if (error) throw error;
-            
+
             toast.success("Updated successfully");
             cancelEdit();
             fetchSchoolData();
@@ -787,36 +787,36 @@ export default function AdminPanel() {
     // Filter teachers and students based on search and class
     const filteredTeachers = teachers.filter(teacher => {
         const matchesSearch = teacher.name?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
-                              teacher.email?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
-                              teacher.classes?.name?.toLowerCase().includes(teacherSearch.toLowerCase());
-        
-        const matchesClass = teacherClassFilter === "all" || 
-                            teacher.classes?.id === teacherClassFilter ||
-                            (teacherClassFilter === "unassigned" && !teacher.classes?.id);
-        
-        
-        
+            teacher.email?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
+            teacher.classes?.name?.toLowerCase().includes(teacherSearch.toLowerCase());
+
+        const matchesClass = teacherClassFilter === "all" ||
+            teacher.classes?.id === teacherClassFilter ||
+            (teacherClassFilter === "unassigned" && !teacher.classes?.id);
+
+
+
         return matchesSearch && matchesClass;
     });
 
     const filteredStudents = students.filter(student => {
         const matchesSearch = student.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-                              student.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-                              student.classes?.name?.toLowerCase().includes(studentSearch.toLowerCase());
-        
-        const matchesClass = studentClassFilter === "all" || 
-                            student.classes?.id === studentClassFilter ||
-                            (studentClassFilter === "unassigned" && !student.classes?.id);
-        
-        
-        
+            student.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+            student.classes?.name?.toLowerCase().includes(studentSearch.toLowerCase());
+
+        const matchesClass = studentClassFilter === "all" ||
+            student.classes?.id === studentClassFilter ||
+            (studentClassFilter === "unassigned" && !student.classes?.id);
+
+
+
         return matchesSearch && matchesClass;
     });
 
     // Get subjects for the selected timetable class's grade
     // Note: subject_id in timetable_periods references grade_subjects.id, not subjects_master.id
     const selectedClassData = classes.find(c => c.id === selectedTimetableClass);
-    const filteredSubjectsForClass = selectedClassData 
+    const filteredSubjectsForClass = selectedClassData
         ? gradeSubjects
             .filter(gs => gs.grade_level_id === selectedClassData.grade_level_id)
             .map(gs => ({ id: gs.id, name: gs.subjects_master?.name })) // Use gs.id (grade_subjects.id)
@@ -936,7 +936,7 @@ export default function AdminPanel() {
                                     <School className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Classes
                                 </h2>
                                 <div className="flex flex-wrap gap-2">
-                                    <select 
+                                    <select
                                         className="bg-muted border border-border rounded-md h-10 px-3 text-sm flex-1 sm:flex-none"
                                         value={selectedGrade}
                                         onChange={(e) => setSelectedGrade(e.target.value)}
@@ -1021,7 +1021,7 @@ export default function AdminPanel() {
                                     <BookOpen className="w-5 h-5 text-primary" /> Grade Subjects
                                 </h2>
                                 <div className="space-y-4 mb-4">
-                                    <select 
+                                    <select
                                         className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedGradeForSubject}
                                         onChange={(e) => {
@@ -1034,7 +1034,7 @@ export default function AdminPanel() {
                                             <option key={g.id} value={g.id}>{g.name}</option>
                                         ))}
                                     </select>
-                                    
+
                                     {selectedGradeForSubject && (
                                         <>
                                             <div className="border border-input rounded-md p-3 max-h-48 overflow-y-auto bg-background/30">
@@ -1046,8 +1046,8 @@ export default function AdminPanel() {
                                                             gs => gs.grade_level_id === parseInt(selectedGradeForSubject) && gs.subject_master_id === s.id
                                                         );
                                                         return (
-                                                            <label 
-                                                                key={s.id} 
+                                                            <label
+                                                                key={s.id}
                                                                 className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? 'opacity-50' : ''}`}
                                                             >
                                                                 <input
@@ -1070,8 +1070,8 @@ export default function AdminPanel() {
                                                     })}
                                                 </div>
                                             </div>
-                                            <Button 
-                                                onClick={addSubjectToGrade} 
+                                            <Button
+                                                onClick={addSubjectToGrade}
                                                 className="w-full"
                                                 disabled={selectedSubjects.length === 0}
                                             >
@@ -1140,12 +1140,12 @@ export default function AdminPanel() {
                                     {newMemberType === "student" && (
                                         <Input placeholder="Roll Number (Optional)" value={newMemberRollNo} onChange={(e) => setNewMemberRollNo(e.target.value)} />
                                     )}
-                                    <Button 
-                                        className="w-full" 
+                                    <Button
+                                        className="w-full"
                                         onClick={handleCreateMember}
                                         disabled={isCreatingMember}
                                     >
-                                        {isCreatingMember ? <Loader2 className="animate-spin mr-2"/> : <Plus className="w-4 h-4 mr-2" />}
+                                        {isCreatingMember ? <Loader2 className="animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                                         Create {newMemberType === "teacher" ? "Teacher" : "Student"}
                                     </Button>
                                 </div>
@@ -1172,7 +1172,7 @@ export default function AdminPanel() {
                                             Students
                                         </Button>
                                     </div>
-                                    
+
                                     <div className="space-y-2">
                                         <p className="text-sm text-muted-foreground">
                                             CSV Format: name, email, password{csvImportType === 'student' ? ', roll_number (optional)' : ''}
@@ -1200,8 +1200,8 @@ export default function AdminPanel() {
                                                 <span>{importProgress.current} / {importProgress.total}</span>
                                             </div>
                                             <div className="w-full bg-secondary rounded-full h-2">
-                                                <div 
-                                                    className="bg-primary h-2 rounded-full transition-all" 
+                                                <div
+                                                    className="bg-primary h-2 rounded-full transition-all"
                                                     style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
                                                 />
                                             </div>
@@ -1341,14 +1341,14 @@ export default function AdminPanel() {
                                         />
                                         <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden bg-muted/50">
                                             {students
-                                                .filter(s => 
+                                                .filter(s =>
                                                     s.name?.toLowerCase().includes(studentAssignSearch.toLowerCase()) ||
                                                     s.email?.toLowerCase().includes(studentAssignSearch.toLowerCase())
                                                 )
                                                 .slice(0, 50) // Limit to 50 results
                                                 .map((s) => (
-                                                    <div 
-                                                        key={s.id} 
+                                                    <div
+                                                        key={s.id}
                                                         onClick={() => {
                                                             setSelectedStudent(s.id);
                                                             setStudentAssignSearch(s.name);
@@ -1367,7 +1367,7 @@ export default function AdminPanel() {
                                             )}
                                         </div>
                                     </div>
-                                    <select 
+                                    <select
                                         className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedClassForStudent}
                                         onChange={(e) => setSelectedClassForStudent(e.target.value)}
@@ -1420,14 +1420,14 @@ export default function AdminPanel() {
                                         />
                                         <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden bg-muted/50">
                                             {teachers
-                                                .filter(t => 
+                                                .filter(t =>
                                                     t.name?.toLowerCase().includes(teacherAssignSearch.toLowerCase()) ||
                                                     t.email?.toLowerCase().includes(teacherAssignSearch.toLowerCase())
                                                 )
                                                 .slice(0, 50) // Limit to 50 results
                                                 .map((t) => (
-                                                    <div 
-                                                        key={t.id} 
+                                                    <div
+                                                        key={t.id}
                                                         onClick={() => {
                                                             setSelectedTeacher(t.id);
                                                             setTeacherAssignSearch(t.name);
@@ -1444,7 +1444,7 @@ export default function AdminPanel() {
                                             )}
                                         </div>
                                     </div>
-                                    <select 
+                                    <select
                                         className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedClass}
                                         onChange={(e) => setSelectedClass(e.target.value)}
@@ -1493,7 +1493,7 @@ export default function AdminPanel() {
                                     <BookOpen className="w-5 h-5 text-primary" /> Assign Subjects to Teachers
                                 </h2>
                                 <div className="space-y-4">
-                                    <select 
+                                    <select
                                         className="w-full bg-muted border border-border rounded-md h-10 px-3"
                                         value={selectedTeacherForSubject}
                                         onChange={(e) => {
@@ -1506,7 +1506,7 @@ export default function AdminPanel() {
                                             <option key={t.id} value={t.id}>{t.name}</option>
                                         ))}
                                     </select>
-                                    
+
                                     {selectedTeacherForSubject && (
                                         <>
                                             <div className="border border-input rounded-md p-3 max-h-48 overflow-y-auto bg-background/30">
@@ -1521,8 +1521,8 @@ export default function AdminPanel() {
                                                             ts => ts.teacher_id === selectedTeacherForSubject && relatedGradeSubjectIds.includes(ts.grade_subject_id)
                                                         );
                                                         return (
-                                                            <label 
-                                                                key={s.id} 
+                                                            <label
+                                                                key={s.id}
                                                                 className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? 'opacity-50' : ''}`}
                                                             >
                                                                 <input
@@ -1545,15 +1545,15 @@ export default function AdminPanel() {
                                                     })}
                                                 </div>
                                             </div>
-                                            <Button 
-                                                onClick={assignSubjectsToTeacher} 
+                                            <Button
+                                                onClick={assignSubjectsToTeacher}
                                                 className="w-full"
                                                 disabled={selectedSubjectsForTeacher.length === 0}
                                             >
                                                 <Plus className="w-4 h-4 mr-2" />
                                                 Assign {selectedSubjectsForTeacher.length > 0 ? `${selectedSubjectsForTeacher.length} Subject(s)` : 'Subjects'} to Teacher
                                             </Button>
-                                            
+
                                             {/* Display currently assigned subjects */}
                                             <div className="mt-4 pt-4 border-t border-border">
                                                 <p className="text-sm text-muted-foreground mb-2">

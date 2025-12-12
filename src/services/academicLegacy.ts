@@ -1,4 +1,4 @@
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { NestedClass, FlattenedClass } from "@/schemas/academic";
 export type { FlattenedClass, NestedClass };
 
@@ -132,7 +132,7 @@ export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> =>
       name
     )
   `)
-  .eq("school_id", schoolId);
+    .eq("school_id", schoolId);
 
   if (error) {
     console.error("Error fetching classes:", error);
@@ -2470,10 +2470,10 @@ export const getChapterTopicAnalytics = async (
 
     submissions.forEach(submission => {
       const testQuestions = questionsByTest[submission.test_id] || [];
-      
+
       testQuestions.forEach((question: any) => {
         const key = `${question.chapter || 'Unknown'}-${question.topic || 'Unknown'}`;
-        
+
         if (!questionPerformance[key]) {
           questionPerformance[key] = {
             chapter: question.chapter || 'Unknown',
@@ -2483,16 +2483,16 @@ export const getChapterTopicAnalytics = async (
             count: 0
           };
         }
-        
+
         questionPerformance[key].totalMarks += question.marks || 0;
         questionPerformance[key].count += 1;
       });
-      
+
       // Distribute obtained marks proportionally across questions
       const totalTestMarks = testQuestions.reduce((sum: number, q: any) => sum + (q.marks || 0), 0);
       if (totalTestMarks > 0) {
         const marksPerPoint = (submission.total_marks_obtained || 0) / totalTestMarks;
-        
+
         testQuestions.forEach((question: any) => {
           const key = `${question.chapter || 'Unknown'}-${question.topic || 'Unknown'}`;
           if (questionPerformance[key]) {
@@ -2504,7 +2504,7 @@ export const getChapterTopicAnalytics = async (
 
     // Aggregate by chapter
     const chapterMap: Record<string, { totalScore: number; totalMarks: number; count: number }> = {};
-    
+
     // Aggregate by topic
     const topicMap: Record<string, { totalScore: number; totalMarks: number; count: number; chapters: Set<string> }> = {};
 
@@ -2846,7 +2846,7 @@ export const uploadTeacherVoiceNote = async (
   // Determine file extension and content type
   let fileExtension = "webm";
   let contentType = "audio/webm";
-  
+
   if (file instanceof File) {
     fileExtension = file.name.split(".").pop() || "webm";
     contentType = file.type || "audio/webm";
@@ -2864,7 +2864,7 @@ export const uploadTeacherVoiceNote = async (
       fileExtension = "webm";
     }
   }
-  
+
   const fileName = `voice-${Date.now()}.${fileExtension}`;
   const filePath = `${teacherId}/${fileName}`;
 
@@ -3711,7 +3711,7 @@ export const getStudentStrengthsWeaknesses = async (
       .forEach(s => {
         strengths.push({
           subject: s.subject,
-          desc: s.percentage >= 90 
+          desc: s.percentage >= 90
             ? `Excellent performance - ${s.percentage}% average`
             : `Strong understanding - ${s.percentage}% average`
         });
@@ -3724,7 +3724,7 @@ export const getStudentStrengthsWeaknesses = async (
       .forEach(s => {
         weaknesses.push({
           subject: s.subject,
-          desc: s.percentage < 40 
+          desc: s.percentage < 40
             ? `Needs significant improvement - ${s.percentage}% average`
             : `Room for improvement - ${s.percentage}% average`
         });
@@ -3829,19 +3829,19 @@ export const getClassPerformanceTrend = async (
 
     // Group submissions by month
     const monthlyScores: Record<string, { totalScore: number; totalMarks: number; count: number }> = {};
-    
+
     for (const sub of submissionsData) {
       const date = new Date(sub.submitted_at);
       const monthKey = date.toLocaleString("en-US", { month: "short" });
-      
+
       // Get total marks for this test
       const { data: questionsData } = await supabase
         .from("questions")
         .select("marks")
         .eq("test_id", sub.test_id);
-      
+
       const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
-      
+
       if (!monthlyScores[monthKey]) {
         monthlyScores[monthKey] = { totalScore: 0, totalMarks: 0, count: 0 };
       }
@@ -3856,7 +3856,7 @@ export const getClassPerformanceTrend = async (
       attendanceData.forEach(a => {
         const date = new Date(a.attendance_date);
         const monthKey = date.toLocaleString("en-US", { month: "short" });
-        
+
         if (!monthlyAttendance[monthKey]) {
           monthlyAttendance[monthKey] = { present: 0, total: 0 };
         }
@@ -3871,8 +3871,8 @@ export const getClassPerformanceTrend = async (
     return Object.entries(monthlyScores).map(([month, data]) => ({
       month,
       avgScore: data.totalMarks > 0 ? Math.round((data.totalScore / data.totalMarks) * 100) : 0,
-      attendance: monthlyAttendance[month]?.total > 0 
-        ? Math.round((monthlyAttendance[month].present / monthlyAttendance[month].total) * 100) 
+      attendance: monthlyAttendance[month]?.total > 0
+        ? Math.round((monthlyAttendance[month].present / monthlyAttendance[month].total) * 100)
         : 0
     }));
   } catch (error) {
@@ -3926,7 +3926,7 @@ export const getClassStudentsWithScores = async (
             .from("questions")
             .select("marks")
             .eq("test_id", sub.test_id);
-          
+
           const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
           totalScore += sub.total_marks_obtained || 0;
           totalMarks += testMaxMarks;
@@ -4003,7 +4003,7 @@ export const getRecentTestsMetrics = async (
       const testMaxMarks = questionsData?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
       if (testMaxMarks === 0) continue;
 
-      const scores = submissionsData.map(s => 
+      const scores = submissionsData.map(s =>
         Math.round(((s.total_marks_obtained || 0) / testMaxMarks) * 100)
       );
 
@@ -4112,7 +4112,7 @@ export const getAttendanceVsMarksData = async (
 ): Promise<AttendanceVsMarks[]> => {
   try {
     const students = await getClassStudentsWithScores(classId);
-    
+
     return students.map((s, idx) => ({
       attendance: s.attendancePercentage,
       marks: s.avgScore,
@@ -4186,7 +4186,7 @@ export const getStudentAnalyticsForTeacher = async (
   try {
     // Get student's subject performance
     const studentSubjects = await getStudentSubjectPerformance(studentId);
-    
+
     // Get class average for comparison
     const classSubjects = await getClassSubjectAverages(classId);
     const classAvgMap: Record<string, number> = {};
@@ -4204,7 +4204,7 @@ export const getStudentAnalyticsForTeacher = async (
 
     // Get strengths and weaknesses
     const { strengths: strengthItems, weaknesses: weaknessItems } = await getStudentStrengthsWeaknesses(studentId);
-    
+
     const strengths = strengthItems.map(s => ({
       subject: s.subject,
       desc: s.desc

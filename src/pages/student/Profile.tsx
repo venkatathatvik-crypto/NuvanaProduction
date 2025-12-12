@@ -8,7 +8,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { getStudentData } from "@/services/academic";
 import { uploadProfilePhoto } from "@/services/profileService";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { toast } from "sonner";
 
 const StudentProfile = () => {

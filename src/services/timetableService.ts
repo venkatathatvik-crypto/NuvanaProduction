@@ -1,4 +1,4 @@
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 
 // Types
 export interface TimetableDay {
@@ -251,7 +251,7 @@ export const getStudentTimetable = async (
 }>>> => {
   try {
     const weeklyTimetable = await getTimetableForClass(classId, schoolId);
-    
+
     const formattedTimetable: Record<string, Array<{
       time: string;
       subject: string;

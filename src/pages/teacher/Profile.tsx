@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { uploadProfilePhoto } from "@/services/profileService";
 import { toast } from "sonner";
 

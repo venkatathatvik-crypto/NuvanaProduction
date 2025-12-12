@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -35,7 +35,7 @@ export default function SuperAdminDashboard() {
   const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolData[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Create School Form
   const [newSchoolName, setNewSchoolName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -121,7 +121,7 @@ export default function SuperAdminDashboard() {
             Manage schools and platform settings
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -129,72 +129,72 @@ export default function SuperAdminDashboard() {
                 <Plus className="w-4 h-4 mr-2" /> Onboard School
               </Button>
             </DialogTrigger>
-          <DialogContent className="glass-card sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-blue-400" /> Onboard New School
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateSchool} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">School Name</label>
-                <Input
-                  className="bg-secondary/20"
-                  placeholder="e.g. Springfield High"
-                  value={newSchoolName}
-                  onChange={(e) => setNewSchoolName(e.target.value)}
-                  disabled={isCreating}
-                />
-              </div>
-              
-              <div className="space-y-2 pt-2 border-t border-white/10">
-                <label className="text-sm font-medium text-blue-400 flex items-center gap-2">
-                  <UserPlus className="w-4 h-4" /> First Admin Details
-                </label>
-                <Input
-                  className="bg-secondary/20"
-                  placeholder="Admin Name"
-                  value={adminName}
-                  onChange={(e) => setAdminName(e.target.value)}
-                  disabled={isCreating}
-                />
-                <Input
-                  className="bg-secondary/20"
-                  placeholder="Admin Email"
-                  type="email"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  disabled={isCreating}
-                />
-                <Input
-                  className="bg-secondary/20"
-                  placeholder="Password"
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  disabled={isCreating}
-                />
-              </div>
+            <DialogContent className="glass-card sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-blue-400" /> Onboard New School
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreateSchool} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">School Name</label>
+                  <Input
+                    className="bg-secondary/20"
+                    placeholder="e.g. Springfield High"
+                    value={newSchoolName}
+                    onChange={(e) => setNewSchoolName(e.target.value)}
+                    disabled={isCreating}
+                  />
+                </div>
 
-              <Button 
-                type="submit" 
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600"
-                disabled={isCreating}
-              >
-                {isCreating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...
-                  </>
-                ) : (
-                  "Create School & Admin"
-                )}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-        
-          <Button 
-            variant="outline" 
+                <div className="space-y-2 pt-2 border-t border-white/10">
+                  <label className="text-sm font-medium text-blue-400 flex items-center gap-2">
+                    <UserPlus className="w-4 h-4" /> First Admin Details
+                  </label>
+                  <Input
+                    className="bg-secondary/20"
+                    placeholder="Admin Name"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    disabled={isCreating}
+                  />
+                  <Input
+                    className="bg-secondary/20"
+                    placeholder="Admin Email"
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    disabled={isCreating}
+                  />
+                  <Input
+                    className="bg-secondary/20"
+                    placeholder="Password"
+                    type="password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    disabled={isCreating}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600"
+                  disabled={isCreating}
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...
+                    </>
+                  ) : (
+                    "Create School & Admin"
+                  )}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Button
+            variant="outline"
             onClick={handleLogout}
             className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
           >
@@ -208,7 +208,7 @@ export default function SuperAdminDashboard() {
           <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
             <School className="w-5 h-5 text-blue-400" /> Active Schools
           </h2>
-          
+
           {loading ? (
             <div className="flex justify-center p-8">
               <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -241,7 +241,7 @@ export default function SuperAdminDashboard() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" onClick={() => {
-                             toast.info(`Managing ${school.name} (Coming Soon)`);
+                            toast.info(`Managing ${school.name} (Coming Soon)`);
                           }}>
                             Manage
                           </Button>

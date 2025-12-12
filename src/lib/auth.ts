@@ -1,4 +1,4 @@
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 export type UserRole = "student" | "teacher" | "school_admin" | "super_admin";
 
 export interface User {
@@ -108,8 +108,8 @@ export const authService = {
     }
 
     const profile: UserProfile = {
-        ...profileData,
-        role: userRole
+      ...profileData,
+      role: userRole
     };
 
     return profile;

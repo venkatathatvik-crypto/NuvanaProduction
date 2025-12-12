@@ -21,7 +21,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
 import NotificationBell from "@/components/NotificationBell";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { formatDistanceToNow } from "date-fns";
 
 const TeacherDashboard = () => {
@@ -208,9 +208,8 @@ const TeacherDashboard = () => {
                     <div
                       key={notification.id}
                       onClick={() => handleNotificationClick(notification)}
-                      className={`p-4 rounded-lg bg-muted/50 border border-border hover:border-primary transition-colors ${
-                        notification.target_url ? 'cursor-pointer' : ''
-                      }`}
+                      className={`p-4 rounded-lg bg-muted/50 border border-border hover:border-primary transition-colors ${notification.target_url ? 'cursor-pointer' : ''
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
