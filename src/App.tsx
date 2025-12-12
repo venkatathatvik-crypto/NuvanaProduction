@@ -40,6 +40,7 @@ import TestTake from "./pages/student/TestTake";
 import StudentProfile from "./pages/student/Profile";
 import StudentFeedback from "./pages/student/Feedback";
 import StudentAnalytics from "./pages/student/Analytics";
+import AiTutorPage from "./pages/student/AiTutorPage";
 import TeacherProfile from "./pages/teacher/Profile";
 import TeacherTasks from "./pages/teacher/Tasks";
 import NotFound from "./pages/NotFound";
@@ -199,6 +200,14 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="/student/ai-tutor"
+                  element={
+                    <ProtectedRoute role="student">
+                      <AiTutorPage />
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* Teacher Protected Routes */}
                 <Route
@@ -305,7 +314,7 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                
+
                 {/* Super Admin Protected Route */}
                 <Route
                   path="/super-admin"

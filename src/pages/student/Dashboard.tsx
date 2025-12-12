@@ -9,6 +9,7 @@ import {
   StickyNote,
   LogOut,
   BarChart2,
+  Brain,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,7 +84,7 @@ const Dashboard = () => {
 
         if (studentData && studentData.class_id) {
           setStudentClassId(studentData.class_id);
-          
+
           // Fetch announcements and timetable in parallel (they depend on class_id)
           const [announcementsData, timetableData] = await Promise.all([
             getStudentAnnouncements(studentData.class_id),
@@ -95,7 +96,7 @@ const Dashboard = () => {
           // Get today's classes from timetable
           const jsDay = new Date().getDay();
           const dayName = jsDay === 0 ? null : DAY_NAMES[jsDay - 1];
-          
+
           if (dayName && timetableData[dayName]) {
             setTodayClasses(timetableData[dayName].map((p: any) => ({
               subject: p.subject,
@@ -123,6 +124,13 @@ const Dashboard = () => {
   }, [profile, profileLoading]);
 
   const quickActions = [
+    {
+      label: "AI Tutor",
+      value: "Ask Now",
+      icon: Brain,
+      color: "text-neon-purple animate-pulse",
+      path: "/student/ai-tutor",
+    },
     {
       label: "Attendance",
       value: loadingAttendance ? "..." : `${attendancePercentage}%`,
