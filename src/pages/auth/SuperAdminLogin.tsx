@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { toast } from "sonner";
 
 export default function SuperAdminLogin() {
@@ -16,7 +16,7 @@ export default function SuperAdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error("Please enter email and password");
       return;
@@ -55,7 +55,7 @@ export default function SuperAdminLogin() {
       // Success - redirect to super admin panel
       toast.success("Welcome, Super Administrator!");
       navigate("/super-admin");
-      
+
     } catch (error: any) {
       console.error("Login error:", error);
       toast.error(error.message || "Failed to login");
@@ -68,7 +68,7 @@ export default function SuperAdminLogin() {
     <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
       {/* Gradient background with purple theme for super admin */}
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-purple-900/20" />
-      
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { toast } from "sonner";
 
 export default function SuperAdminSignup() {
@@ -18,7 +18,7 @@ export default function SuperAdminSignup() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!name || !email || !password || !accessCode) {
       toast.error("Please fill in all fields");
       return;
@@ -42,14 +42,14 @@ export default function SuperAdminSignup() {
       });
 
       if (error) throw error;
-      
+
       if (data?.error) {
         throw new Error(data.error);
       }
 
       toast.success("Super Admin account created! You can now login.");
       navigate("/super-admin-login");
-      
+
     } catch (error: any) {
       console.error("Signup error:", error);
       if (error.message.includes("User already registered") || error.message.includes("already been registered")) {
@@ -66,7 +66,7 @@ export default function SuperAdminSignup() {
     <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
       {/* Gradient background with purple theme for super admin */}
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-purple-900/20" />
-      
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

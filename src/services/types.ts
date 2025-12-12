@@ -1,5 +1,5 @@
 // Shared types and utilities for all service modules
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 
 // Re-export schema types
 export type { NestedClass, FlattenedClass } from "@/schemas/academic";

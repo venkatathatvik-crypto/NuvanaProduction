@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 import { useAuth } from "@/auth/AuthContext";
 
 export default function AdminPanel() {
@@ -21,18 +21,18 @@ export default function AdminPanel() {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [grades, setGrades] = useState<any[]>([]);
     const [fileCategories, setFileCategories] = useState<any[]>([]);
-    
+
     // Form States
     const [newClass, setNewClass] = useState("");
     const [newGrade, setNewGrade] = useState("");
     const [selectedGrade, setSelectedGrade] = useState<string>("");
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [selectedTeacher, setSelectedTeacher] = useState<string>("");
-    
+
     // Student-Class Assignment
     const [selectedStudent, setSelectedStudent] = useState<string>("");
     const [selectedClassForStudent, setSelectedClassForStudent] = useState<string>("");
-    
+
     // Subject-Grade Assignment
     const [selectedGradeForSubject, setSelectedGradeForSubject] = useState<string>("");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -71,7 +71,7 @@ export default function AdminPanel() {
             if (studentsRes.error) throw studentsRes.error;
             if (classesRes.error) throw classesRes.error;
             if (gradesRes.error) throw gradesRes.error;
-            
+
             setTeachers(teachersRes.data || []);
             setStudents(studentsRes.data || []);
             setClasses(classesRes.data || []);
@@ -95,7 +95,7 @@ export default function AdminPanel() {
                 name: newGrade,
                 school_id: profile?.school_id
             });
-            
+
             if (error) throw error;
             toast.success("Grade Level added");
             setNewGrade("");
@@ -116,7 +116,7 @@ export default function AdminPanel() {
                 school_id: profile?.school_id,
                 grade_level_id: parseInt(selectedGrade)
             });
-            
+
             if (error) throw error;
             toast.success("Class added");
             setNewClass("");
@@ -128,8 +128,8 @@ export default function AdminPanel() {
 
     const assignTeacher = async () => {
         if (!selectedTeacher || !selectedClass) {
-             toast.error("Select both teacher and class");
-             return;
+            toast.error("Select both teacher and class");
+            return;
         }
         try {
             const { error } = await supabase.from('teacher_classes').insert({
@@ -154,7 +154,7 @@ export default function AdminPanel() {
                 .from('profiles')
                 .update({ class_id: selectedClassForStudent })
                 .eq('id', selectedStudent);
-            
+
             if (error) throw error;
             toast.success("Student assigned to class");
             setSelectedStudent("");
@@ -175,7 +175,7 @@ export default function AdminPanel() {
                 grade_level_id: parseInt(selectedGradeForSubject),
                 subject_master_id: selectedSubject
             });
-            
+
             if (error) throw error;
             toast.success("Subject added to grade");
             setSelectedSubject("");
@@ -194,7 +194,7 @@ export default function AdminPanel() {
             const { error } = await supabase.from('subjects_master').insert({
                 name: newSubject.trim()
             });
-            
+
             if (error) throw error;
             toast.success("Subject created");
             setNewSubject("");
@@ -214,7 +214,7 @@ export default function AdminPanel() {
                 name: newFileCategory.trim(),
                 school_id: profile?.school_id
             });
-            
+
             if (error) throw error;
             toast.success("File category created");
             setNewFileCategory("");
@@ -266,7 +266,7 @@ export default function AdminPanel() {
                 .eq('id', id);
 
             if (error) throw error;
-            
+
             toast.success("Member deleted successfully");
             fetchSchoolData();
         } catch (error: any) {
@@ -304,7 +304,7 @@ export default function AdminPanel() {
                     {/* Structure Tab */}
                     <TabsContent value="structure">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            
+
                             {/* Grade Levels */}
                             <Card className="glass-card p-6">
                                 <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
@@ -334,7 +334,7 @@ export default function AdminPanel() {
                                     <School className="w-5 h-5 text-neon-cyan" /> Classes
                                 </h2>
                                 <div className="space-y-4 mb-6">
-                                    <select 
+                                    <select
                                         className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                         value={selectedGrade}
                                         onChange={(e) => setSelectedGrade(e.target.value)}
@@ -371,7 +371,7 @@ export default function AdminPanel() {
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <label className="text-sm text-muted-foreground">Select Teacher</label>
-                                        <select 
+                                        <select
                                             className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                             value={selectedTeacher}
                                             onChange={(e) => setSelectedTeacher(e.target.value)}
@@ -382,10 +382,10 @@ export default function AdminPanel() {
                                             ))}
                                         </select>
                                     </div>
-                                    
+
                                     <div className="space-y-2">
                                         <label className="text-sm text-muted-foreground">Select Class</label>
-                                        <select 
+                                        <select
                                             className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                             value={selectedClass}
                                             onChange={(e) => setSelectedClass(e.target.value)}
@@ -411,7 +411,7 @@ export default function AdminPanel() {
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <label className="text-sm text-muted-foreground">Select Student</label>
-                                        <select 
+                                        <select
                                             className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                             value={selectedStudent}
                                             onChange={(e) => setSelectedStudent(e.target.value)}
@@ -422,10 +422,10 @@ export default function AdminPanel() {
                                             ))}
                                         </select>
                                     </div>
-                                    
+
                                     <div className="space-y-2">
                                         <label className="text-sm text-muted-foreground">Select Class</label>
-                                        <select 
+                                        <select
                                             className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                             value={selectedClassForStudent}
                                             onChange={(e) => setSelectedClassForStudent(e.target.value)}
@@ -474,7 +474,7 @@ export default function AdminPanel() {
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <label className="text-sm text-muted-foreground">Select Grade</label>
-                                        <select 
+                                        <select
                                             className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                             value={selectedGradeForSubject}
                                             onChange={(e) => setSelectedGradeForSubject(e.target.value)}
@@ -485,10 +485,10 @@ export default function AdminPanel() {
                                             ))}
                                         </select>
                                     </div>
-                                    
+
                                     <div className="space-y-2">
                                         <label className="text-sm text-muted-foreground">Select Subject</label>
-                                        <select 
+                                        <select
                                             className="w-full bg-background/50 border border-input rounded-md h-10 px-3"
                                             value={selectedSubject}
                                             onChange={(e) => setSelectedSubject(e.target.value)}
@@ -504,7 +504,7 @@ export default function AdminPanel() {
                                         Add Subject to Grade
                                     </Button>
                                 </div>
-                                
+
                                 {/* Display existing grade-subject mappings */}
                                 <div className="mt-4 pt-4 border-t border-white/10">
                                     <p className="text-sm text-muted-foreground mb-2">Current Mappings:</p>
@@ -564,12 +564,12 @@ export default function AdminPanel() {
                                         onChange={(e) => setNewMemberPassword(e.target.value)}
                                         className="glass"
                                     />
-                                    <Button 
-                                        className="w-full neon-glow" 
+                                    <Button
+                                        className="w-full neon-glow"
                                         onClick={handleCreateMember}
                                         disabled={isCreatingMember}
                                     >
-                                        {isCreatingMember ? <Loader2 className="animate-spin mr-2"/> : <Plus className="w-4 h-4 mr-2" />}
+                                        {isCreatingMember ? <Loader2 className="animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                                         Create {newMemberType === "teacher" ? "Teacher" : "Student"}
                                     </Button>
                                 </div>

@@ -1,4 +1,4 @@
-import { supabase } from "@/supabase/client";
+import { supabase } from "@/lib/mockBackend";
 
 interface SendEmailParams {
   to: string | string[];

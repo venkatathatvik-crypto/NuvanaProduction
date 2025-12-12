@@ -1,4 +1,3 @@
-// context/AuthContext.tsx
 
 import {
   createContext,
@@ -7,11 +6,13 @@ import {
   useState,
   ReactNode,
 } from "react";
-import { supabase } from "@/supabase/client";
-import { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/mockBackend";
+// Mock Session type
+type Session = any;
 import { UserProfile } from "@/lib/auth";
 
 interface AuthContextType {
+
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
@@ -94,7 +95,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Transform to UserProfile type
     // @ts-ignore
     const userRole = data.user_roles?.role as UserRole;
-    
+
     const formattedProfile: UserProfile = {
       ...data,
       role: userRole
