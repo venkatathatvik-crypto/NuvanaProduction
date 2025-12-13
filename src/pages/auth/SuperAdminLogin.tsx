@@ -5,11 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/mockBackend";
+import { useAuth } from "@/auth/AuthContext";
+import { ApiError } from "@/lib/apiClient";
 import { toast } from "sonner";
 
 export default function SuperAdminLogin() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,33 +26,8 @@ export default function SuperAdminLogin() {
 
     setLoading(true);
     try {
-      // Sign in with Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      // Fetch user profile to check role
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("*, user_roles(role)")
-        .eq("id", data.user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
-      // @ts-ignore
-      const userRole = profileData.user_roles?.role;
-
-      // Check if user is super_admin
-      if (userRole !== "super_admin") {
-        // Not a super admin, logout and show error
-        await supabase.auth.signOut();
-        toast.error("Access denied. Only Super Administrators can access this portal.");
-        return;
-      }
+      // Use useAuth login which handles state update
+      await login(email, password, 'super_admin');
 
       // Success - redirect to super admin panel
       toast.success("Welcome, Super Administrator!");
@@ -58,7 +35,24 @@ export default function SuperAdminLogin() {
 
     } catch (error: any) {
       console.error("Login error:", error);
-      toast.error(error.message || "Failed to login");
+      
+      // Check for password reset requirement
+      if (error instanceof ApiError && error.data?.code === 'RESET_REQUIRED') {
+        const userId = error.data.userId;
+        navigate("/reset-password", { state: { userId } });
+        return;
+      }
+
+      const message = error.message || "Failed to login";
+      
+      // Handle role mismatch with specific message
+      if (message.includes("You are registered as")) {
+        toast.error(`Access denied. ${message}`);
+      } else if (message.includes("Invalid credentials")) {
+        toast.error("Invalid email or password. Please check your credentials.");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }

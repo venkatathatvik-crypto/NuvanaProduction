@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -6,17 +5,23 @@ import {
   useState,
   ReactNode,
 } from "react";
-import { supabase } from "@/lib/mockBackend";
-// Mock Session type
-type Session = any;
-import { UserProfile } from "@/lib/auth";
+import { UserProfile, authService, UserRole } from "@/lib/auth";
+
+// Session type - simplified to just contain user data
+interface Session {
+  user: {
+    id: string;
+    email: string;
+  };
+  access_token: string | null;
+}
 
 interface AuthContextType {
-
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
   profileLoading: boolean;
+  login: (email: string, password: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -34,82 +39,96 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data, error }) => {
-      if (error) {
-        // Session error - user likely not authenticated
-      }
+    const initializeAuth = async () => {
+      try {
+        // Check if we have JWT tokens
+        const accessToken = authService.getAccessToken();
+        console.log(
+          "[AuthProvider] Initializing auth, token present:",
+          !!accessToken
+        );
 
-      setSession(data.session);
-
-      if (data.session?.user) {
-        setProfileLoading(true);
-        await fetchUserProfile(data.session.user.id);
-        setProfileLoading(false);
-      } else {
-        setProfileLoading(false);
-      }
-
-      setLoading(false);
-    });
-
-    // Listen to login/logout/session refresh
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        setSession(newSession);
-
-        if (newSession?.user) {
-          setProfileLoading(true);
-          fetchUserProfile(newSession.user.id).finally(() => {
-            setProfileLoading(false);
-          });
-        } else {
+        if (!accessToken) {
+          // No token, user is not authenticated
+          console.log("[AuthProvider] No access token found");
+          setSession(null);
           setProfile(null);
-          setProfileLoading(false);
+          setLoading(false);
+          return;
         }
-      }
-    );
 
-    return () => {
-      listener.subscription.unsubscribe();
+        // Validate session with backend
+        console.log("[AuthProvider] Validating session with backend...");
+        setProfileLoading(true);
+        const userProfile = await authService.validateSession();
+
+        if (userProfile) {
+          // Session is valid, set session and profile
+          console.log(
+            "[AuthProvider] Session valid, user:",
+            userProfile.email,
+            "role:",
+            userProfile.role
+          );
+          setSession({
+            user: {
+              id: userProfile.id,
+              email: userProfile.email || "",
+            },
+            access_token: accessToken,
+          });
+          setProfile(userProfile);
+        } else {
+          // Session validation failed, clear everything
+          console.log(
+            "[AuthProvider] Session validation returned null, clearing auth"
+          );
+          setSession(null);
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error(
+          "[AuthProvider] Error during auth initialization:",
+          error
+        );
+        setSession(null);
+        setProfile(null);
+      } finally {
+        setProfileLoading(false);
+        setLoading(false);
+      }
     };
+
+    initializeAuth();
   }, []);
 
-  // Fetch profile from Supabase
-  const fetchUserProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*, user_roles(role)")
-      .eq("id", userId)
-      .single();
+  // Login function
+  const login = async (email: string, password: string, role?: UserRole) => {
+    setProfileLoading(true);
+    try {
+      const data = await authService.login(email, password, role);
 
-    if (error) {
-      setProfile(null);
-      return;
+      if (data) {
+        // Set session and profile from login response
+        const newSession: Session = {
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+          },
+          access_token: authService.getAccessToken(),
+        };
+
+        setSession(newSession);
+        setProfile(data.profile);
+      }
+    } finally {
+      setProfileLoading(false);
     }
-
-    if (!data) {
-      setProfile(null);
-      return;
-    }
-
-    // Transform to UserProfile type
-    // @ts-ignore
-    const userRole = data.user_roles?.role as UserRole;
-
-    const formattedProfile: UserProfile = {
-      ...data,
-      role: userRole
-    };
-
-    setProfile(formattedProfile);
   };
 
   // Logout function
   const logout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      throw new Error(error.message);
-    }
+    await authService.logout();
     setSession(null);
     setProfile(null);
   };
@@ -117,13 +136,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Refresh profile function (for after avatar upload, etc.)
   const refreshProfile = async () => {
     if (session?.user) {
-      await fetchUserProfile(session.user.id);
+      const userProfile = await authService.getCurrentSession();
+      if (userProfile) {
+        setProfile(userProfile);
+      }
     }
   };
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, profileLoading, logout, refreshProfile }}
+      value={{
+        session,
+        profile,
+        loading,
+        profileLoading,
+        login,
+        logout,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

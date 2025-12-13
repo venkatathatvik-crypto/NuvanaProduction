@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/mockBackend";
+import { authService } from "@/lib/auth";
 import { toast } from "sonner";
 
 export default function SuperAdminSignup() {
@@ -31,29 +31,18 @@ export default function SuperAdminSignup() {
 
     setLoading(true);
     try {
-      // Call the edge function to create super admin (creates both auth user and profile)
-      const { data, error } = await supabase.functions.invoke("create-super-admin", {
-        body: {
-          name,
-          email,
-          password,
-          access_code: accessCode,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      // Use auth service to call backend API
+      await authService.registerSuperAdmin(name, email, password, accessCode);
 
       toast.success("Super Admin account created! You can now login.");
       navigate("/super-admin-login");
 
     } catch (error: any) {
       console.error("Signup error:", error);
-      if (error.message.includes("User already registered") || error.message.includes("already been registered")) {
+      if (error.message.includes("Email already registered")) {
         toast.error("This email is already registered.");
+      } else if (error.message.includes("Invalid super admin secret")) {
+        toast.error("Invalid access code. Please contact the administrator.");
       } else {
         toast.error(error.message || "Failed to create account");
       }

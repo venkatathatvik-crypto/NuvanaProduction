@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/mockBackend";
+import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -60,16 +60,11 @@ export default function SuperAdminDashboard() {
 
   const fetchSchools = async () => {
     try {
-      const { data, error } = await supabase
-        .from("schools")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
+      const data = await apiClient.get<SchoolData[]>("/schools");
       setSchools(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching schools:", error);
-      toast.error("Failed to load schools");
+      toast.error(error.message || "Failed to load schools");
     } finally {
       setLoading(false);
     }
@@ -77,23 +72,19 @@ export default function SuperAdminDashboard() {
 
   const handleCreateSchool = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSchoolName || !adminEmail || !adminPassword) {
+    if (!newSchoolName || !adminEmail || !adminPassword || !adminName) {
       toast.error("Please fill all fields");
       return;
     }
 
     setIsCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-school", {
-        body: {
-          name: newSchoolName,
-          admin_email: adminEmail,
-          admin_password: adminPassword,
-          admin_name: adminName,
-        },
+      await apiClient.post("/schools/onboard", {
+        name: newSchoolName,
+        admin_email: adminEmail,
+        admin_password: adminPassword,
+        admin_name: adminName,
       });
-
-      if (error) throw error;
 
       toast.success("School and Admin created successfully!");
       setNewSchoolName("");

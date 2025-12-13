@@ -1,6 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AiModule } from './ai/ai.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { TestModule } from './test/test.module';
+import { AuthModule } from './auth/auth.module';
+import { SchoolsModule } from './schools/schools.module';
+import { UsersModule } from './users/users.module';
+import { AcademicModule } from './academic/academic.module';
 import openaiConfig from './config/openai.config';
 
 @Module({
@@ -9,7 +15,13 @@ import openaiConfig from './config/openai.config';
             isGlobal: true,
             load: [openaiConfig],
         }),
+        PrismaModule,
+        AuthModule,
+        SchoolsModule,
+        UsersModule,
+        AcademicModule,
         AiModule,
+        TestModule,
     ],
     controllers: [],
     providers: [],

@@ -35,6 +35,7 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
   // If role is required but profile doesn't exist or role doesn't match
   if (role) {
     if (!profile) {
+      console.log('[ProtectedRoute] Profile is null, redirecting to login');
       // Profile failed to load, redirect to appropriate login
       if (role === "super_admin") {
         return <Navigate to="/super-admin-login" />;
@@ -44,8 +45,17 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
       }
       return <Navigate to="/login" />;
     }
+    
+    // Debug logging
+    console.log('[ProtectedRoute] Role check:', {
+      requiredRole: role,
+      profileRole: profile.role,
+      match: profile.role === role
+    });
+    
     if (profile.role !== role) {
-      return <Navigate to="/NotFound" />;
+      console.warn('[ProtectedRoute] Role mismatch! Required:', role, 'Got:', profile.role);
+      return <Navigate to="/not-found" replace />;
     }
   }
 

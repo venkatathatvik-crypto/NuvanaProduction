@@ -11,6 +11,7 @@ import Login from "./pages/auth/Login";
 import AdminLogin from "./pages/auth/AdminLogin";
 import SuperAdminLogin from "./pages/auth/SuperAdminLogin";
 import SuperAdminSignup from "./pages/auth/SuperAdminSignup";
+import ResetPassword from "./pages/auth/ResetPassword";
 
 import Index from "./pages/Index";
 
@@ -89,19 +90,38 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/reset-password"
+                  element={
+                    <AuthRedirect>
+                      <ResetPassword />
+                    </AuthRedirect>
+                  }
+                />
+
+                <Route
                   path="/admin-login"
-                  element={<AdminLogin />}
+                  element={
+                    <AuthRedirect>
+                      <AdminLogin />
+                    </AuthRedirect>
+                  }
                 />
                 <Route
                   path="/super-admin-login"
-                  element={<SuperAdminLogin />}
+                  element={
+                    <AuthRedirect>
+                      <SuperAdminLogin />
+                    </AuthRedirect>
+                  }
                 />
                 <Route
                   path="/super-admin-signup"
-                  element={<SuperAdminSignup />}
+                  element={
+                    <AuthRedirect>
+                      <SuperAdminSignup />
+                    </AuthRedirect>
+                  }
                 />
-
-
 
                 {/* Student Protected Routes */}
                 <Route

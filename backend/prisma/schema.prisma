@@ -1,0 +1,394 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model announcement_classes {
+  announcement_id String        @db.Uuid
+  class_id        String        @db.Uuid
+  announcements   announcements @relation(fields: [announcement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  classes         classes       @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([announcement_id, class_id])
+}
+
+model announcements {
+  id                   String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id            String                 @db.Uuid
+  title                String
+  message              String
+  is_urgent            Boolean?               @default(false)
+  teacher_id           String                 @db.Uuid
+  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  announcement_classes announcement_classes[]
+  schools              schools                @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles             profiles               @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model attendance {
+  id                                       String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id                                String                 @db.Uuid
+  student_id                               String                 @db.Uuid
+  attendance_date                          DateTime               @db.Date
+  status                                   attendance_status_enum
+  taken_by                                 String                 @db.Uuid
+  recorded_at                              DateTime?              @default(now()) @db.Timestamptz(6)
+  schools                                  schools                @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles_attendance_student_idToprofiles profiles               @relation("attendance_student_idToprofiles", fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles_attendance_taken_byToprofiles   profiles               @relation("attendance_taken_byToprofiles", fields: [taken_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([school_id, attendance_date], map: "idx_attendance_tenant_date")
+}
+
+model classes {
+  id                   String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id            String                 @db.Uuid
+  name                 String
+  grade_level_id       Int
+  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  announcement_classes announcement_classes[]
+  grade_levels         grade_levels           @relation(fields: [grade_level_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools              schools                @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  files                files[]
+  student_details      student_details[]
+  teacher_classes      teacher_classes[]
+  tests                tests[]
+  timetable_days       timetable_days[]
+  voice_notes          voice_notes[]
+}
+
+model documents {
+  id        Int                    @id @default(autoincrement())
+  content   String?
+  metadata  Json?
+  embedding Unsupported("vector")?
+}
+
+model exam_types {
+  id         Int            @id @default(autoincrement())
+  school_id  String         @db.Uuid
+  name       String
+  type       exam_type_enum
+  created_at DateTime?      @default(now()) @db.Timestamptz(6)
+  schools    schools        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tests      tests[]
+}
+
+model file_categories {
+  id         Int       @id @default(autoincrement())
+  school_id  String    @db.Uuid
+  name       String
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  schools    schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  files      files[]
+}
+
+model files {
+  id               String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id        String           @db.Uuid
+  file_title       String
+  category_id      Int?
+  class_id         String           @db.Uuid
+  grade_subject_id String           @db.Uuid
+  storage_url      String
+  teacher_id       String           @db.Uuid
+  download_count   Int?             @default(0)
+  file_type        String?          @default("pdf")
+  created_at       DateTime?        @default(now()) @db.Timestamptz(6)
+  file_categories  file_categories? @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  classes          classes          @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects   grade_subjects   @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools          schools          @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles         @relation(fields: [teacher_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_files_tenant")
+}
+
+model grade_levels {
+  id             Int              @id @default(autoincrement())
+  school_id      String           @db.Uuid
+  name           String
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  classes        classes[]
+  schools        schools          @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects grade_subjects[]
+}
+
+model grade_subjects {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id         String              @db.Uuid
+  grade_level_id    Int
+  subject_master_id String              @db.Uuid
+  files             files[]
+  grade_levels      grade_levels        @relation(fields: [grade_level_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools           schools             @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subjects_master   subjects_master     @relation(fields: [subject_master_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teacher_subjects  teacher_subjects[]
+  tests             tests[]
+  timetable_periods timetable_periods[]
+  voice_notes       voice_notes[]
+}
+
+model notifications {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id         String?   @db.Uuid
+  recipient_id      String    @db.Uuid
+  title             String
+  message           String
+  notification_type String?
+  source_id         String?   @db.Uuid
+  target_url        String?
+  is_read           Boolean?  @default(false)
+  is_urgent         Boolean?  @default(false)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  profiles          profiles  @relation(fields: [recipient_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools           schools?  @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model profiles {
+  id                                         String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id                                  String?             @db.Uuid
+  email                                      String              @unique
+  password_hash                              String
+  role_id                                    Int                 @db.SmallInt
+  name                                       String?
+  avatar_url                                 String?
+  is_verified                                Boolean?            @default(false)
+  is_first_login                             Boolean?            @default(false)
+  verification_token                         String?
+  created_at                                 DateTime?           @default(now()) @db.Timestamptz(6)
+  announcements                              announcements[]
+  attendance_attendance_student_idToprofiles attendance[]        @relation("attendance_student_idToprofiles")
+  attendance_attendance_taken_byToprofiles   attendance[]        @relation("attendance_taken_byToprofiles")
+  files                                      files[]
+  notifications                              notifications[]
+  user_roles                                 user_roles          @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schools                                    schools?            @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_details                            student_details?
+  teacher_classes                            teacher_classes[]
+  teacher_details                            teacher_details?
+  teacher_subjects                           teacher_subjects[]
+  test_submissions                           test_submissions[]
+  tests                                      tests[]
+  timetable_periods                          timetable_periods[]
+  voice_notes                                voice_notes[]
+
+  @@index([school_id], map: "idx_profiles_school")
+}
+
+model question_options {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  question_id  String    @db.Uuid
+  option_index Int
+  option_text  String
+  questions    questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model questions {
+  id                   String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  test_id              String             @db.Uuid
+  question_text        String
+  marks                Int
+  chapter              String?
+  topic                String?
+  correct_option_index Int?
+  question_type        question_type_enum @default(MCQ)
+  expected_answer_text String?
+  created_at           DateTime?          @default(now()) @db.Timestamptz(6)
+  question_options     question_options[]
+  tests                tests              @relation(fields: [test_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_answers      student_answers[]
+}
+
+model schools {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name              String
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  admin_profile_id  String?             @db.Uuid
+  announcements     announcements[]
+  attendance        attendance[]
+  classes           classes[]
+  exam_types        exam_types[]
+  file_categories   file_categories[]
+  files             files[]
+  grade_levels      grade_levels[]
+  grade_subjects    grade_subjects[]
+  notifications     notifications[]
+  profiles          profiles[]
+  subjects_master   subjects_master[]
+  teacher_classes   teacher_classes[]
+  teacher_subjects  teacher_subjects[]
+  tests             tests[]
+  timetable_days    timetable_days[]
+  timetable_periods timetable_periods[]
+  voice_notes       voice_notes[]
+}
+
+model student_answers {
+  id                            String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  submission_id                 String           @db.Uuid
+  question_id                   String           @db.Uuid
+  student_selected_option_index Int?
+  subjective_answer_text        String?
+  marks_awarded                 Int?
+  questions                     questions        @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  test_submissions              test_submissions @relation(fields: [submission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_details {
+  profile_id     String    @id @db.Uuid
+  roll_number    String?
+  admission_date DateTime? @db.Date
+  parent_contact String?
+  class_id       String?   @db.Uuid
+  classes        classes?  @relation(fields: [class_id], references: [id], onUpdate: NoAction, map: "fk_student_class")
+  profiles       profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model subjects_master {
+  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id      String           @db.Uuid
+  name           String
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  grade_subjects grade_subjects[]
+  schools        schools          @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model teacher_classes {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id  String    @db.Uuid
+  teacher_id String    @db.Uuid
+  class_id   String    @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  classes    classes   @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools    schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles   profiles  @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model teacher_details {
+  profile_id     String    @id @db.Uuid
+  bio            String?
+  specialization String?
+  joining_date   DateTime? @db.Date
+  profiles       profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model teacher_subjects {
+  id               String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id        String         @db.Uuid
+  teacher_id       String         @db.Uuid
+  grade_subject_id String         @db.Uuid
+  assigned_at      DateTime?      @default(now()) @db.Timestamptz(6)
+  grade_subjects   grade_subjects @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools          schools        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles       @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model test_submissions {
+  id                   String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  test_id              String            @db.Uuid
+  student_id           String            @db.Uuid
+  submitted_at         DateTime?         @default(now()) @db.Timestamptz(6)
+  is_graded            Boolean?          @default(false)
+  total_marks_obtained Int?
+  student_answers      student_answers[]
+  profiles             profiles          @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tests                tests             @relation(fields: [test_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model tests {
+  id               String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id        String             @db.Uuid
+  title            String
+  description      String?
+  duration_minutes Int
+  is_published     Boolean?           @default(false)
+  class_id         String             @db.Uuid
+  grade_subject_id String             @db.Uuid
+  exam_type_id     Int
+  teacher_id       String             @db.Uuid
+  due_date         DateTime?          @db.Timestamptz(6)
+  created_at       DateTime?          @default(now()) @db.Timestamptz(6)
+  questions        questions[]
+  test_submissions test_submissions[]
+  classes          classes            @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  exam_types       exam_types         @relation(fields: [exam_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects   grade_subjects     @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools          schools            @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles           @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_tests_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model timetable_days {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id         String              @db.Uuid
+  class_id          String              @db.Uuid
+  day_of_week       Int                 @db.SmallInt
+  classes           classes             @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools           schools             @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timetable_periods timetable_periods[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model timetable_periods {
+  id               String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id        String         @db.Uuid
+  timetable_day_id String         @db.Uuid
+  period_number    Int            @db.SmallInt
+  subject_id       String         @db.Uuid
+  teacher_id       String         @db.Uuid
+  start_time       DateTime       @db.Time(6)
+  end_time         DateTime       @db.Time(6)
+  room             String?
+  schools          schools        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects   grade_subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles       @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timetable_days   timetable_days @relation(fields: [timetable_day_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model user_roles {
+  id       Int        @id @db.SmallInt
+  role     String     @unique
+  profiles profiles[]
+}
+
+model voice_notes {
+  id               String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id        String         @db.Uuid
+  title            String
+  storage_url      String
+  duration_seconds Int
+  file_size_bytes  BigInt
+  class_id         String         @db.Uuid
+  grade_subject_id String         @db.Uuid
+  teacher_id       String         @db.Uuid
+  created_at       DateTime?      @default(now()) @db.Timestamptz(6)
+  classes          classes        @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects   grade_subjects @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools          schools        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles       @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+enum attendance_status_enum {
+  present
+  absent
+  late
+}
+
+enum exam_type_enum {
+  Internal_Assessment @map("Internal Assessment")
+  School_Exam         @map("School Exam")
+}
+
+enum question_type_enum {
+  MCQ
+  Essay
+  Short_Answer      @map("Short Answer")
+  Very_Short_Answer @map("Very Short Answer")
+}
