@@ -27,13 +27,12 @@ import {
 } from "@/components/ui/select";
 import {
   getTeacherClasses,
-  getSubjects,
-  getGradeSubjectIdBySubjectName,
   getTeacherVoiceNotes,
   uploadTeacherVoiceNote,
   deleteTeacherVoiceNote,
   TeacherVoiceNote,
 } from "@/services/academic";
+import { getTeacherSubjectsForClass, GradeSubjectOption } from "@/services/classService";
 import { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -64,11 +63,11 @@ const VoiceUpload = () => {
 
   // Dropdown states
   const [classes, setClasses] = useState<FlattenedClass[]>([]);
-  const [subjects, setSubjects] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<GradeSubjectOption[]>([]);
   const [selectedClass, setSelectedClass] = useState<
     FlattenedClass | undefined
   >(undefined);
-  const [selectedSubject, setSelectedSubject] = useState<string>("");
+  const [selectedSubject, setSelectedSubject] = useState<GradeSubjectOption | null>(null);
   const [loading, setLoading] = useState(true);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -109,34 +108,44 @@ const VoiceUpload = () => {
 
   // --- EFFECT 2: DYNAMIC SUBJECT LOAD (DEPENDS ON selectedClass) ---
   useEffect(() => {
-    if (selectedClass) {
-      const fetchSubjectsByGrade = async () => {
+    if (selectedClass && profile) {
+      const fetchSubjectsForClass = async () => {
         const gradeId = selectedClass.grade_id;
+        const classId = selectedClass.class_id;
 
         try {
-          const subjectResponse = await getSubjects(gradeId);
-          if (subjectResponse) {
-            setSubjects(subjectResponse);
-            // Set the default subject based on the new class's curriculum
-            if (subjectResponse.length > 0) {
-              setSelectedSubject(subjectResponse[0]);
-            } else {
-              setSelectedSubject(""); // Clear if no subjects found
-            }
+          // Get teacher's assigned subjects for this class
+          const subjectOptions = await getTeacherSubjectsForClass(
+            profile.id,
+            classId,
+            gradeId
+          );
+          
+          if (subjectOptions.length > 0) {
+            setSubjects(subjectOptions);
+            // Set the default subject
+            setSelectedSubject(subjectOptions[0]);
+          } else {
+            setSubjects([]);
+            setSelectedSubject(null);
+            toast.warning("No subjects assigned to you for this class.");
           }
         } catch (error) {
           console.error(
-            `Error fetching subjects for Grade ID ${gradeId}:`,
+            `Error fetching subjects for class ${classId}, grade ${gradeId}:`,
             error
           );
           setSubjects([]);
-          setSelectedSubject("");
+          setSelectedSubject(null);
         }
       };
 
-      fetchSubjectsByGrade();
+      fetchSubjectsForClass();
+    } else {
+      setSubjects([]);
+      setSelectedSubject(null);
     }
-  }, [selectedClass]); // Reruns whenever selectedClass object changes
+  }, [selectedClass, profile]); // Reruns whenever selectedClass or profile changes
 
   // Fetch voice notes
   useEffect(() => {
@@ -216,7 +225,7 @@ const VoiceUpload = () => {
         // Set default title if not set
         if (!recordingTitle) {
           setRecordingTitle(
-            `${selectedSubject} - Recording ${new Date().toLocaleTimeString()}`
+            `${selectedSubject?.name || "Unknown"} - Recording ${new Date().toLocaleTimeString()}`
           );
         }
 
@@ -270,21 +279,18 @@ const VoiceUpload = () => {
 
     setIsUploading(true);
     try {
-      // Convert subject name to grade_subject_id
-      const gradeSubjectId = await getGradeSubjectIdBySubjectName(
-        selectedClass.class_id,
-        selectedSubject
-      );
-
-      if (!gradeSubjectId) {
-        toast.error("Failed to find subject. Please try again.");
+      // Use the grade_subject_id directly from selected subject
+      if (!selectedSubject || !selectedSubject.id) {
+        toast.error("Please select a subject.");
         setIsUploading(false);
         return;
       }
 
+      const gradeSubjectId = selectedSubject.id;
+
       const title =
         recordingTitle.trim() ||
-        `${selectedSubject} - Recording ${new Date().toLocaleTimeString()}`;
+        `${selectedSubject.name} - Recording ${new Date().toLocaleTimeString()}`;
 
       const newVoiceNote = await uploadTeacherVoiceNote({
         file: audioBlob,
@@ -366,22 +372,19 @@ const VoiceUpload = () => {
 
       const durationSeconds = await durationPromise;
 
-      // Convert subject name to grade_subject_id
-      const gradeSubjectId = await getGradeSubjectIdBySubjectName(
-        selectedClass.class_id,
-        selectedSubject
-      );
-
-      if (!gradeSubjectId) {
-        toast.error("Failed to find subject. Please try again.");
+      // Use the grade_subject_id directly from selected subject
+      if (!selectedSubject || !selectedSubject.id) {
+        toast.error("Please select a subject.");
         setIsUploading(false);
         return;
       }
 
+      const gradeSubjectId = selectedSubject.id;
+
       const title =
         recordingTitle.trim() ||
         uploadedFileName ||
-        `${selectedSubject} - Upload ${new Date().toLocaleTimeString()}`;
+        `${selectedSubject.name} - Upload ${new Date().toLocaleTimeString()}`;
 
       const newVoiceNote = await uploadTeacherVoiceNote({
         file: uploadedFile,
@@ -566,17 +569,22 @@ const VoiceUpload = () => {
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Subject</label>
                     <Select
-                      value={selectedSubject}
-                      onValueChange={setSelectedSubject}
+                      value={selectedSubject?.id || ""}
+                      onValueChange={(value) => {
+                        const subject = subjects.find(s => s.id === value);
+                        setSelectedSubject(subject || null);
+                      }}
                       disabled={!selectedClass || subjects.length === 0}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select Subject" />
+                        <SelectValue placeholder="Select Subject">
+                          {selectedSubject?.name || "Select Subject"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {subjects.map((subject) => (
-                          <SelectItem key={subject} value={subject}>
-                            {subject}
+                          <SelectItem key={subject.id} value={subject.id}>
+                            {subject.name}
                           </SelectItem>
                         ))}
                         {subjects.length === 0 && (

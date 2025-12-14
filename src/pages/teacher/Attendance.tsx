@@ -186,7 +186,8 @@ const TeacherAttendance = () => {
       }
     } catch (error) {
       console.error("Error submitting attendance:", error);
-      toast.error("Failed to submit attendance. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit attendance. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }

@@ -199,6 +199,72 @@ class ApiClient {
   async delete<T = any>(endpoint: string, options?: ApiClientOptions): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  /**
+   * Upload file with FormData
+   */
+  async uploadFile<T = any>(
+    endpoint: string,
+    formData: FormData,
+    options?: ApiClientOptions
+  ): Promise<T> {
+    const { skipAuth = false, ...fetchOptions } = options || {};
+
+    // Prepare headers (don't set Content-Type, let browser set it with boundary)
+    const headers: HeadersInit = {
+      ...fetchOptions.headers,
+    };
+
+    // Remove Content-Type header if it exists (browser will set it with boundary)
+    delete headers['Content-Type'];
+
+    // Add authorization header if not skipped
+    if (!skipAuth) {
+      const token = this.getAccessToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    // Make the request
+    let response = await fetch(`${API_URL}${endpoint}`, {
+      ...fetchOptions,
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    // Handle 401 - token expired
+    if (response.status === 401 && !skipAuth) {
+      // Try to refresh the token
+      const newToken = await this.refreshAccessToken();
+
+      if (newToken) {
+        // Retry the request with the new token
+        headers['Authorization'] = `Bearer ${newToken}`;
+        response = await fetch(`${API_URL}${endpoint}`, {
+          ...fetchOptions,
+          method: 'POST',
+          headers,
+          body: formData,
+        });
+      } else {
+        // Refresh failed, user will be redirected to login
+        throw new Error('Authentication failed');
+      }
+    }
+
+    // Handle non-OK responses
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({
+        message: 'An error occurred',
+      }));
+      throw new ApiError(errorData.message || `Request failed with status ${response.status}`, errorData, response.status);
+    }
+
+    // Return the response data
+    return response.json();
+  }
 }
 
 // Export a singleton instance

@@ -843,18 +843,17 @@ export default function AdminPanel() {
   });
 
   const filteredStudents = students.filter((student) => {
-    const studentClass = classes.find(
-      (c) => c.id === student.student_details?.class_id
-    );
     const matchesSearch =
       student.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
       student.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-      studentClass?.name?.toLowerCase().includes(studentSearch.toLowerCase());
+      student.classes?.name
+        ?.toLowerCase()
+        .includes(studentSearch.toLowerCase());
 
     const matchesClass =
       studentClassFilter === "all" ||
-      student.student_details?.class_id === studentClassFilter ||
-      (studentClassFilter === "unassigned" && !student.student_details?.class_id);
+      student.classes?.id === studentClassFilter ||
+      (studentClassFilter === "unassigned" && !student.classes?.id);
 
     return matchesSearch && matchesClass;
   });
@@ -965,13 +964,9 @@ export default function AdminPanel() {
                     onChange={(e) => setNewGrade(e.target.value)}
                     className="flex-1 sm:w-48"
                   />
-                  <Button onClick={addGrade} className="shrink-0" disabled={addingGrade}>
-                    {addingGrade ? (
-                      <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4 sm:mr-2" />
-                    )}
-                    <span className="hidden sm:inline">{addingGrade ? "Adding..." : "Add Grade"}</span>
+                  <Button onClick={addGrade} className="shrink-0">
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add Grade</span>
                   </Button>
                 </div>
               </div>
@@ -1079,13 +1074,9 @@ export default function AdminPanel() {
                     onChange={(e) => setNewClass(e.target.value)}
                     className="flex-1 sm:w-32"
                   />
-                  <Button onClick={addClass} className="shrink-0" disabled={addingClass}>
-                    {addingClass ? (
-                      <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4 sm:mr-2" />
-                    )}
-                    <span className="hidden sm:inline">{addingClass ? "Adding..." : "Add"}</span>
+                  <Button onClick={addClass} className="shrink-0">
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add</span>
                   </Button>
                 </div>
               </div>
@@ -1142,12 +1133,8 @@ export default function AdminPanel() {
                     value={newSubject}
                     onChange={(e) => setNewSubject(e.target.value)}
                   />
-                  <Button onClick={addSubject} disabled={addingSubject}>
-                    {addingSubject ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4" />
-                    )}
+                  <Button onClick={addSubject}>
+                    <Plus className="w-4 h-4" />
                   </Button>
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -1252,14 +1239,10 @@ export default function AdminPanel() {
                       <Button
                         onClick={addSubjectToGrade}
                         className="w-full"
-                        disabled={assigningSubjectsToGrade || selectedSubjects.length === 0}
+                        disabled={selectedSubjects.length === 0}
                       >
-                        {assigningSubjectsToGrade ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Plus className="w-4 h-4 mr-2" />
-                        )}
-                        {assigningSubjectsToGrade ? "Assigning..." : "Add"}{" "}
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add{" "}
                         {selectedSubjects.length > 0
                           ? `${selectedSubjects.length} Subject(s)`
                           : "Subjects"}{" "}
@@ -1589,7 +1572,7 @@ export default function AdminPanel() {
                             {s.email}
                           </p>
                           <p className="text-xs">
-                            {classes.find((c) => c.id === s.student_details?.class_id)?.name || "Unassigned"}
+                            {s.classes?.name || "Unassigned"}
                           </p>
                         </div>
                         <Button
@@ -1661,7 +1644,7 @@ export default function AdminPanel() {
                             </p>
                             <p className="text-xs text-muted-foreground truncate">
                               {s.email} •{" "}
-                              {classes.find((c) => c.id === s.student_details?.class_id)?.name || "Unassigned"}
+                              {s.student_details?.classes?.name || "Unassigned"}
                             </p>
                           </div>
                         ))}
@@ -1693,9 +1676,6 @@ export default function AdminPanel() {
                     className="w-full"
                     disabled={assigningStudent}
                   >
-                    {assigningStudent ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : null}
                     {assigningStudent
                       ? "Assigning..."
                       : "Assign Student to Class"}
@@ -1822,9 +1802,6 @@ export default function AdminPanel() {
                     className="w-full"
                     disabled={assigningTeacher}
                   >
-                    {assigningTeacher ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : null}
                     {assigningTeacher
                       ? "Assigning..."
                       : "Assign Teacher to Class"}
@@ -1963,11 +1940,7 @@ export default function AdminPanel() {
                           selectedSubjectsForTeacher.length === 0
                         }
                       >
-                        {assigningSubjects ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Plus className="w-4 h-4 mr-2" />
-                        )}
+                        <Plus className="w-4 h-4 mr-2" />
                         {assigningSubjects
                           ? "Assigning..."
                           : `Assign ${
@@ -2069,13 +2042,9 @@ export default function AdminPanel() {
                     </option>
                     <option value="School_Exam">School Exam</option>
                   </select>
-                  <Button onClick={addExamType} className="shrink-0" disabled={addingExamType}>
-                    {addingExamType ? (
-                      <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4 sm:mr-2" />
-                    )}
-                    <span className="hidden sm:inline">{addingExamType ? "Adding..." : "Add"}</span>
+                  <Button onClick={addExamType} className="shrink-0">
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add</span>
                   </Button>
                 </div>
               </div>
@@ -2198,13 +2167,9 @@ export default function AdminPanel() {
                     onChange={(e) => setNewFileCategory(e.target.value)}
                     className="flex-1 sm:w-48"
                   />
-                  <Button onClick={addFileCategory} className="shrink-0" disabled={addingFileCategory}>
-                    {addingFileCategory ? (
-                      <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4 sm:mr-2" />
-                    )}
-                    <span className="hidden sm:inline">{addingFileCategory ? "Adding..." : "Add"}</span>
+                  <Button onClick={addFileCategory} className="shrink-0">
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add</span>
                   </Button>
                 </div>
               </div>

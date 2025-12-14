@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateSchoolDto } from './dto/create-school.dto';
-import { UpdateSchoolDto } from './dto/update-school.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { CreateSchoolDto } from "./dto/create-school.dto";
+import { UpdateSchoolDto } from "./dto/update-school.dto";
 
 @Injectable()
 export class SchoolsService {
@@ -30,11 +34,11 @@ export class SchoolsService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Admin email already registered');
+      throw new ConflictException("Admin email already registered");
     }
 
     // Use transaction to ensure atomicity
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx: any) => {
       // 1. Create the school
       const school = await tx.schools.create({
         data: {
@@ -43,7 +47,7 @@ export class SchoolsService {
       });
 
       // 2. Hash admin password
-      const bcrypt = require('bcrypt');
+      const bcrypt = require("bcrypt");
       const hashedPassword = await bcrypt.hash(dto.admin_password, 10);
 
       // 3. Create admin user with role_id = 2 (school_admin)
@@ -82,7 +86,7 @@ export class SchoolsService {
     });
 
     return {
-      message: 'School and admin created successfully',
+      message: "School and admin created successfully",
       ...result,
     };
   }
@@ -143,7 +147,7 @@ export class SchoolsService {
         where: { id },
       });
 
-      return { message: 'School deleted successfully' };
+      return { message: "School deleted successfully" };
     } catch (error) {
       throw new NotFoundException(`School with ID ${id} not found`);
     }

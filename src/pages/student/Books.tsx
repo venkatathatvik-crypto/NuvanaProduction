@@ -37,10 +37,14 @@ const Books = () => {
           // Fetch files for this class
           const filesData = await getStudentFiles(studentData.class_id, profile.school_id);
           setFiles(filesData);
+        } else {
+          console.warn("No class_id found for student:", profile.id);
+          setFiles([]);
         }
       } catch (error) {
         console.error("Error fetching student books:", error);
         toast.error("Failed to load books.");
+        setFiles([]);
       } finally {
         setLoadingFiles(false);
       }

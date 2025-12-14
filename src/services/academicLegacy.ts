@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/mockBackend";
+import { apiClient } from "@/lib/apiClient";
 import { NestedClass, FlattenedClass } from "@/schemas/academic";
 export type { FlattenedClass, NestedClass };
 
@@ -366,164 +367,8 @@ const resolveName = (
   return entity.name;
 };
 
-const mapFileRecordToItem = (record: TeacherFileRow): TeacherFileItem => {
-  const { data: publicUrlData } = supabase.storage
-    .from(FILES_BUCKET)
-    .getPublicUrl(record.storage_url);
-
-  const categoryName = resolveName(record.file_categories);
-  const className = resolveName(record.classes);
-
-  let subjectName: string | undefined;
-  if (Array.isArray(record.grade_subjects)) {
-    subjectName = resolveName(record.grade_subjects[0]?.subjects_master);
-  } else {
-    subjectName = resolveName(record.grade_subjects?.subjects_master);
-  }
-
-  return {
-    id: record.id,
-    name: record.file_title,
-    class: className ?? "Unknown Class",
-    subject: subjectName ?? "Unknown Subject",
-    category: categoryName ?? "Unknown Category",
-    storageUrl: publicUrlData.publicUrl,
-    storagePath: record.storage_url,
-    downloads: record.download_count ?? 0,
-    uploadDate: record.created_at,
-    fileType: (record.file_type as 'pdf' | 'video') ?? 'pdf',
-  };
-};
-
-export const getTeacherFiles = async (
-  teacherId: string,
-  schoolId: string
-): Promise<TeacherFileItem[]> => {
-  const { data, error } = await supabase
-    .from("files")
-    .select(
-      `
-      id,
-      file_title,
-      storage_url,
-      download_count,
-      created_at,
-      file_type,
-      class_id,
-      grade_subject_id,
-      category_id,
-      file_categories ( id, name ),
-      classes ( id, name ),
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .eq("teacher_id", teacherId)
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching teacher files:", error);
-    throw new Error("Failed to load uploaded files.");
-  }
-
-  if (!data) {
-    return [];
-  }
-
-  return data.map((record) => mapFileRecordToItem(record as TeacherFileRow));
-};
-
-// Allowed MIME types for videos
-const VIDEO_MIME_TYPES = [
-  'video/mp4',
-  'video/webm',
-  'video/ogg',
-  'video/quicktime',
-  'video/x-msvideo',
-  'video/x-ms-wmv',
-];
-
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB for videos
-const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB for PDFs
-
-export const uploadTeacherFile = async (
-  params: UploadTeacherFileParams
-): Promise<TeacherFileItem> => {
-  const { file, teacherId, classId, gradeSubjectId, categoryId, title, fileType, schoolId } =
-    params;
-
-  // Validate file type
-  if (fileType === 'pdf') {
-    if (file.type !== "application/pdf") {
-      throw new Error("Only PDF files are allowed for documents.");
-    }
-    if (file.size > MAX_PDF_SIZE) {
-      throw new Error("PDF file size must be 10MB or less.");
-    }
-  } else if (fileType === 'video') {
-    if (!VIDEO_MIME_TYPES.includes(file.type)) {
-      throw new Error("Only video files (MP4, WebM, OGG, MOV, AVI, WMV) are allowed.");
-    }
-    if (file.size > MAX_VIDEO_SIZE) {
-      throw new Error("Video file size must be 100MB or less.");
-    }
-  }
-
-  const filePath = `${teacherId}/${Date.now()}-${file.name}`;
-
-  const { data: storageData, error: storageError } = await supabase.storage
-    .from(FILES_BUCKET)
-    .upload(filePath, file, {
-      cacheControl: "3600",
-      contentType: file.type,
-      upsert: false,
-    });
-
-  if (storageError || !storageData) {
-    console.error("Error uploading file to storage:", storageError);
-    throw new Error("Failed to upload file.");
-  }
-
-  const { data, error } = await supabase
-    .from("files")
-    .insert({
-      file_title: title,
-      category_id: categoryId,
-      class_id: classId,
-      grade_subject_id: gradeSubjectId,
-      storage_url: storageData.path,
-      teacher_id: teacherId,
-      school_id: schoolId,
-      file_type: fileType,
-    })
-    .select(
-      `
-      id,
-      file_title,
-      storage_url,
-      download_count,
-      created_at,
-      file_type,
-      file_categories ( id, name ),
-      classes ( id, name ),
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .single();
-
-  if (error || !data) {
-    console.error("Error saving file metadata:", error);
-    throw new Error("Failed to save file information.");
-  }
-
-  const mapped = mapFileRecordToItem(data as TeacherFileRow);
-  mapped.size = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
-  return mapped;
-};
+// getTeacherFiles and uploadTeacherFile are now in fileService.ts using backend APIs
+// Removed Supabase implementations to avoid redundancy
 
 const normalizeStoragePath = (
   rawPath: string | null | undefined
@@ -599,29 +444,16 @@ interface DownloadCountRow {
 export const incrementFileDownload = async (
   fileId: string
 ): Promise<number> => {
-  const { data, error } = await supabase
-    .from("files")
-    .select("download_count")
-    .eq("id", fileId)
-    .single<DownloadCountRow>();
-
-  if (error) {
-    console.error("Error fetching download count:", error);
-    throw new Error("Failed to fetch download count.");
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const data = await apiClient.post<{ downloadCount: number }>(
+      `/file-upload/files/${fileId}/download`
+    );
+    return data.downloadCount;
+  } catch (error: any) {
+    console.error("Error incrementing download count:", error);
+    throw new Error(error.message || "Failed to update download count.");
   }
-
-  const nextCount = (data?.download_count ?? 0) + 1;
-  const { error: updateError } = await supabase
-    .from("files")
-    .update({ download_count: nextCount })
-    .eq("id", fileId);
-
-  if (updateError) {
-    console.error("Error updating download count:", updateError);
-    throw new Error("Failed to update download count.");
-  }
-
-  return nextCount;
 };
 
 const mapAnnouncementRecord = (
@@ -799,6 +631,7 @@ export interface StudentFileItem {
   downloads: number;
   uploadDate: string;
   size?: string;
+  fileType?: 'pdf' | 'video';
 }
 
 export interface StudentAnnouncement {
@@ -810,57 +643,54 @@ export interface StudentAnnouncement {
   class_name: string;
 }
 
-// Get student data including class_id
+// Get student data including class_id from backend API
 export const getStudentData = async (
   studentId: string
 ): Promise<StudentData | null> => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      `
-      id,
-      class_id,
-      roll_number,
-      classes (
-        id,
-        name,
-        grade_levels (
-          id,
-          name
-        )
-      )
-    `
-    )
-    .eq("id", studentId)
-    .eq("role_id", 4)
-    .single();
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const data = await apiClient.get<{
+      id: string;
+      student_details: {
+        class_id: string | null;
+        roll_number: string | null;
+        classes: {
+          id: string;
+          name: string;
+          grade_levels: {
+            id: number;
+            name: string;
+          };
+        } | null;
+      } | null;
+    }>(`/users/${studentId}`);
 
-  if (error) {
+    if (!data) {
+      return null;
+    }
+
+    // Extract student_details
+    const studentDetails = data.student_details;
+
+    if (!studentDetails) {
+      console.warn("No student_details found for student:", studentId);
+      return null;
+    }
+
+    const classData = studentDetails.classes;
+    const gradeData = classData?.grade_levels;
+
+    return {
+      id: data.id,
+      class_id: studentDetails.class_id || null,
+      class_name: classData?.name,
+      grade_name: gradeData?.name,
+      roll_number: studentDetails.roll_number || undefined,
+    };
+  } catch (error: any) {
     console.error("Error fetching student data:", error);
-    throw new Error("Failed to load student data.");
+    throw new Error(error.message || "Failed to load student data.");
   }
-
-  if (!data) {
-    return null;
-  }
-
-  const classData = Array.isArray(data.classes)
-    ? data.classes[0]
-    : data.classes;
-
-  const gradeData = classData?.grade_levels
-    ? Array.isArray(classData.grade_levels)
-      ? classData.grade_levels[0]
-      : classData.grade_levels
-    : null;
-
-  return {
-    id: data.id,
-    class_id: data.class_id,
-    class_name: classData?.name,
-    grade_name: gradeData?.name,
-    roll_number: data.roll_number,
-  };
 };
 
 // Get files filtered by class_id for students
@@ -868,38 +698,39 @@ export const getStudentFiles = async (
   classId: string,
   schoolId: string
 ): Promise<StudentFileItem[]> => {
-  const { data, error } = await supabase
-    .from("files")
-    .select(
-      `
-      id,
-      file_title,
-      storage_url,
-      download_count,
-      created_at,
-      file_type,
-      class_id,
-      file_categories ( id, name ),
-      classes ( id, name ),
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .eq("class_id", classId)
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false });
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const data = await apiClient.get<Array<{
+      id: string;
+      name: string;
+      class: string;
+      subject: string;
+      category: string;
+      storageUrl: string;
+      storagePath: string;
+      downloads: number;
+      uploadDate: string;
+      fileType: string;
+      size?: string;
+    }>>(`/file-upload/files/class/${classId}`);
 
-  if (error) {
+    return data.map((record) => ({
+      id: record.id,
+      name: record.name,
+      class: record.class,
+      subject: record.subject,
+      category: record.category,
+      storageUrl: record.storageUrl,
+      storagePath: record.storagePath,
+      downloads: record.downloads,
+      uploadDate: record.uploadDate,
+      size: record.size,
+      fileType: record.fileType as 'pdf' | 'video',
+    }));
+  } catch (error) {
     console.error("Error fetching student files:", error);
     throw new Error("Failed to load files.");
   }
-
-  if (!data) {
-    return [];
-  }
-
-  return data.map((record) => mapFileRecordToItem(record as TeacherFileRow));
 };
 
 // Get voice notes by class_id for students
@@ -918,56 +749,36 @@ export const getStudentVoiceNotes = async (
   classId: string,
   schoolId: string
 ): Promise<StudentVoiceNote[]> => {
-  const { data, error } = await supabase
-    .from("voice_notes")
-    .select(
-      `
-      id,
-      title,
-      storage_url,
-      duration_seconds,
-      file_size_bytes,
-      grade_subject_id,
-      created_at,
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .eq("class_id", classId)
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false });
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const data = await apiClient.get<Array<{
+      id: string;
+      title: string;
+      storageUrl: string;
+      storagePath: string;
+      durationSeconds: number;
+      duration: number;
+      fileSizeBytes: number;
+      fileSize: number;
+      subject: string;
+      uploadDate: string;
+      createdAt: string;
+    }>>(`/file-upload/voice-notes/class/${classId}`);
 
-  if (error) {
+    return data.map((record) => ({
+      id: record.id,
+      title: record.title,
+      storageUrl: record.storageUrl,
+      duration: record.durationSeconds || record.duration || 0,
+      fileSize: record.fileSizeBytes || record.fileSize || 0,
+      subject: record.subject || "General",
+      gradeSubjectId: "", // Not needed for student view
+      uploadDate: record.uploadDate || record.createdAt,
+    }));
+  } catch (error) {
     console.error("Error fetching student voice notes:", error);
     throw new Error("Failed to load voice notes.");
   }
-
-  if (!data) {
-    return [];
-  }
-
-  return data.map((record: any) => {
-    const subjectMaster = Array.isArray(record.grade_subjects?.subjects_master)
-      ? record.grade_subjects.subjects_master[0]
-      : record.grade_subjects?.subjects_master;
-
-    // Generate public URL from storage path
-    const { data: publicUrlData } = supabase.storage
-      .from(VOICE_NOTES_BUCKET)
-      .getPublicUrl(record.storage_url);
-
-    return {
-      id: record.id,
-      title: record.title,
-      storageUrl: publicUrlData.publicUrl,
-      duration: record.duration_seconds || 0,
-      fileSize: record.file_size_bytes || 0,
-      subject: subjectMaster?.name || "General",
-      gradeSubjectId: record.grade_subject_id,
-      uploadDate: record.created_at,
-    };
-  });
 };
 
 // Get announcements filtered by class_id for students
@@ -2778,145 +2589,90 @@ export const getTeacherVoiceNotes = async (
   teacherId: string,
   schoolId: string
 ): Promise<TeacherVoiceNote[]> => {
-  const { data, error } = await supabase
-    .from("voice_notes")
-    .select(
-      `
-      id,
-      title,
-      storage_url,
-      duration_seconds,
-      file_size_bytes,
-      created_at,
-      class_id,
-      grade_subject_id,
-      classes ( id, name ),
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .eq("teacher_id", teacherId)
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false });
+  try {
+    const data = await apiClient.get<Array<{
+      id: string;
+      title: string;
+      storageUrl: string;
+      storagePath: string;
+      durationSeconds: number;
+      createdAt: string;
+      className: string;
+      subject: string;
+      size: string;
+    }>>("/file-upload/voice-notes");
 
-  if (error) {
+    return data.map((record) => ({
+      id: record.id,
+      title: record.title,
+      storageUrl: record.storageUrl,
+      storagePath: record.storagePath,
+      durationSeconds: record.durationSeconds,
+      fileSizeBytes: 0, // Not returned from backend
+      className: record.className,
+      subjectName: record.subject,
+      createdAt: record.createdAt,
+      size: record.size,
+    }));
+  } catch (error) {
     console.error("Error fetching voice notes:", error);
     throw new Error("Failed to load voice notes.");
   }
-
-  if (!data) {
-    return [];
-  }
-
-  return data.map((record) => mapVoiceNoteRecord(record as VoiceNoteRow));
 };
 
 // Upload voice note
 export const uploadTeacherVoiceNote = async (
   params: UploadVoiceNoteParams
 ): Promise<TeacherVoiceNote> => {
-  const { file, teacherId, classId, gradeSubjectId, title, durationSeconds, schoolId } =
-    params;
+  const { file, teacherId, classId, gradeSubjectId, title, durationSeconds } = params;
 
-  // Validate file type (audio files)
-  const validAudioTypes = [
-    "audio/mpeg",
-    "audio/mp3",
-    "audio/wav",
-    "audio/ogg",
-    "audio/webm",
-    "audio/mp4",
-  ];
-  const isValidAudio =
-    file instanceof File
-      ? validAudioTypes.includes(file.type) || file.type.startsWith("audio/")
-      : true; // Blob from MediaRecorder is usually webm/mp4
-
-  if (!isValidAudio) {
-    throw new Error("Only audio files are allowed.");
+  // Convert Blob to File if needed
+  let fileToUpload: File;
+  if (file instanceof Blob && !(file instanceof File)) {
+    // Create a File from Blob
+    const fileName = `voice-${Date.now()}.webm`;
+    fileToUpload = new File([file], fileName, { type: file.type || "audio/webm" });
+  } else {
+    fileToUpload = file as File;
   }
 
-  // Check file size (max 50MB for audio)
-  const maxSize = 50 * 1024 * 1024; // 50MB
-  if (file.size > maxSize) {
-    throw new Error("File size must be 50MB or less.");
+  // Create FormData
+  const formData = new FormData();
+  formData.append("file", fileToUpload);
+  formData.append("title", title);
+  formData.append("classId", classId);
+  formData.append("gradeSubjectId", gradeSubjectId);
+  formData.append("durationSeconds", durationSeconds.toString());
+
+  try {
+    const data = await apiClient.uploadFile<{
+      id: string;
+      title: string;
+      storageUrl: string;
+      storagePath: string;
+      durationSeconds: number;
+      createdAt: string;
+      className: string;
+      subject: string;
+      size: string;
+    }>("/file-upload/voice-notes", formData);
+
+    return {
+      id: data.id,
+      title: data.title,
+      storageUrl: data.storageUrl,
+      storagePath: data.storagePath,
+      durationSeconds: data.durationSeconds,
+      fileSizeBytes: 0, // Not returned from backend
+      className: data.className,
+      subjectName: data.subject,
+      createdAt: data.createdAt,
+      size: data.size,
+    };
+  } catch (error: any) {
+    console.error("Error uploading voice note:", error);
+    throw new Error(error.message || "Failed to upload voice note.");
   }
-
-  // Determine file extension and content type
-  let fileExtension = "webm";
-  let contentType = "audio/webm";
-
-  if (file instanceof File) {
-    fileExtension = file.name.split(".").pop() || "webm";
-    contentType = file.type || "audio/webm";
-  } else if (file instanceof Blob) {
-    // For recorded blobs, get the actual type
-    contentType = file.type || "audio/webm";
-    // Map MIME type to extension
-    if (contentType.includes("mp4")) {
-      fileExtension = "mp4";
-    } else if (contentType.includes("ogg")) {
-      fileExtension = "ogg";
-    } else if (contentType.includes("mpeg") || contentType.includes("mp3")) {
-      fileExtension = "mp3";
-    } else {
-      fileExtension = "webm";
-    }
-  }
-
-  const fileName = `voice-${Date.now()}.${fileExtension}`;
-  const filePath = `${teacherId}/${fileName}`;
-
-  const { data: storageData, error: storageError } = await supabase.storage
-    .from(VOICE_NOTES_BUCKET)
-    .upload(filePath, file, {
-      cacheControl: "3600",
-      contentType: contentType,
-      upsert: false,
-    });
-
-  if (storageError || !storageData) {
-    console.error("Error uploading voice note to storage:", storageError);
-    throw new Error("Failed to upload voice note.");
-  }
-
-  const { data, error } = await supabase
-    .from("voice_notes")
-    .insert({
-      title,
-      class_id: classId,
-      grade_subject_id: gradeSubjectId,
-      storage_url: storageData.path,
-      duration_seconds: durationSeconds,
-      file_size_bytes: file.size,
-      teacher_id: teacherId,
-      school_id: schoolId,
-    })
-    .select(
-      `
-      id,
-      title,
-      storage_url,
-      duration_seconds,
-      file_size_bytes,
-      created_at,
-      classes ( id, name ),
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .single();
-
-  if (error || !data) {
-    console.error("Error saving voice note metadata:", error);
-    // Try to clean up uploaded file if metadata save fails
-    await supabase.storage.from(VOICE_NOTES_BUCKET).remove([storageData.path]);
-    throw new Error("Failed to save voice note information.");
-  }
-
-  return mapVoiceNoteRecord(data as VoiceNoteRow);
 };
 
 // Delete voice note
@@ -2925,46 +2681,11 @@ export const deleteTeacherVoiceNote = async (
   storagePath: string,
   teacherId: string
 ): Promise<void> => {
-  // Verify the voice note belongs to the teacher
-  const { data: voiceNote, error: verifyError } = await supabase
-    .from("voice_notes")
-    .select("id, storage_url")
-    .eq("id", voiceNoteId)
-    .eq("teacher_id", teacherId)
-    .single();
-
-  if (verifyError || !voiceNote) {
-    throw new Error("Voice note not found or access denied.");
-  }
-
-  const normalizedPath = normalizeStoragePath(
-    storagePath || voiceNote.storage_url
-  );
-
-  if (!normalizedPath) {
-    throw new Error("File path missing; cannot delete from storage.");
-  }
-
-  // Delete from storage
-  const { error: storageError } = await supabase.storage
-    .from(VOICE_NOTES_BUCKET)
-    .remove([normalizedPath]);
-
-  if (storageError) {
-    console.error("Error deleting from storage:", storageError);
-    throw new Error("Failed to delete voice note from storage.");
-  }
-
-  // Delete from database
-  const { error: deleteError } = await supabase
-    .from("voice_notes")
-    .delete()
-    .eq("id", voiceNoteId)
-    .eq("teacher_id", teacherId);
-
-  if (deleteError) {
-    console.error("Error deleting voice note record:", deleteError);
-    throw new Error("Failed to delete voice note record.");
+  try {
+    await apiClient.delete(`/file-upload/voice-notes/${voiceNoteId}`);
+  } catch (error: any) {
+    console.error("Error deleting voice note:", error);
+    throw new Error(error.message || "Failed to delete voice note.");
   }
 };
 

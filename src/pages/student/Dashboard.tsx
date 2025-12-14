@@ -85,11 +85,22 @@ const Dashboard = () => {
         if (studentData && studentData.class_id) {
           setStudentClassId(studentData.class_id);
 
+          console.log('🎓 Student Data:', {
+            studentId: profile.id,
+            classId: studentData.class_id,
+            schoolId: profile.school_id,
+          });
+
           // Fetch announcements and timetable in parallel (they depend on class_id)
           const [announcementsData, timetableData] = await Promise.all([
             getStudentAnnouncements(studentData.class_id),
             profile.school_id ? getStudentTimetable(studentData.class_id, profile.school_id) : Promise.resolve({}),
           ]);
+
+          console.log('📢 Announcements Received:', {
+            count: announcementsData?.length || 0,
+            data: announcementsData,
+          });
 
           setAnnouncements(announcementsData);
 
