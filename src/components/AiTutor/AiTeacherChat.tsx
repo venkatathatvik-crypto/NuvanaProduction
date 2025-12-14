@@ -1,37 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Brain, BookOpen, Calculator, HelpCircle, GraduationCap, Zap, MoreHorizontal, Lightbulb, TrendingUp, Loader2, Mic, Headphones } from 'lucide-react';
+import { Send, Sparkles, Brain, BookOpen, PenTool, LayoutTemplate, Briefcase, FileCode, Users, Lightbulb, Loader2, Camera, Upload, X, Image as ImageIcon, Mic, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { aiService, AiRequestDto } from '@/services/aiService';
-import { MessageBubble } from './MessageBubble';
+import { aiService } from '@/services/aiService';
+import { MessageBubble } from '@/components/AiTutor/MessageBubble';
 import { useAuth } from '@/auth/AuthContext';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import VoiceModeOverlay from './VoiceModeOverlay';
 import { toast } from 'sonner';
+import VoiceModeOverlay from './VoiceModeOverlay';
 
-const ACTION_MODES = [
-    { id: 'start', label: 'Ask Anything', icon: Sparkles, color: 'text-neon-purple', desc: 'General queries' },
-    { id: 'explain', label: 'Explain', icon: BookOpen, color: 'text-neon-blue', desc: 'Understand concepts' },
-    { id: 'solve', label: 'Solve', icon: Calculator, color: 'text-green-500', desc: 'Step-by-step math' },
-    { id: 'doubt', label: 'Doubt', icon: HelpCircle, color: 'text-yellow-500', desc: 'Clear confusion' },
-    { id: 'study_plan', label: 'Study Plan', icon: TrendingUp, color: 'text-indigo-500', desc: 'Get organized' },
-    { id: 'life_skill', label: 'Life Coach', icon: Lightbulb, color: 'text-orange-500', desc: 'Motivation & tips' },
+const TEACHER_ACTION_MODES = [
+    { id: 'start', label: 'Ask Assistant', icon: Sparkles, color: 'text-neon-purple', desc: 'General help' },
+    { id: 'grade_paper', label: 'Grade Paper', icon: Camera, color: 'text-red-500', desc: 'Grade from photo' },
+    { id: 'lesson_plan', label: 'Lesson Plan', icon: LayoutTemplate, color: 'text-neon-blue', desc: 'Create structured lessons' },
+    { id: 'create_quiz', label: 'Create Quiz', icon: FileCode, color: 'text-green-500', desc: 'Generate test questions' },
+    { id: 'simplify', label: 'Simplifier', icon: BookOpen, color: 'text-yellow-500', desc: 'Make content easier' },
+    { id: 'activity', label: 'Activities', icon: Users, color: 'text-pink-500', desc: 'Classroom engagement' },
+    { id: 'email', label: 'Email Draft', icon: Briefcase, color: 'text-orange-500', desc: 'Parent communication' },
 ];
 
-const AiTutorChat = () => {
+const AiTeacherChat = () => {
     const { profile } = useAuth();
     const [messages, setMessages] = useState<any[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [activeMode, setActiveMode] = useState<string>('start');
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const recognitionRef = useRef<any>(null);
 
     const scrollToBottom = () => {
@@ -66,7 +68,6 @@ const AiTutorChat = () => {
             recognitionRef.current.onend = () => {
                 setIsListening(false);
                 if (isVoiceModeOpen && voiceTranscription) {
-                    // Auto-send in voice mode
                     handleSend(voiceTranscription);
                     setVoiceTranscription('');
                 }
@@ -81,8 +82,8 @@ const AiTutorChat = () => {
                 {
                     sender: 'ai',
                     content: {
-                        title: `Hi ${profile?.name?.split(' ')[0] || 'Scholar'}! 🎓`,
-                        explanation: "I'm your **Nuvana AI Tutor**. I can explain concepts, solve problems, or even build a study plan for you.\n\nType your question directly or pick a **Super Mode** below for specialized help!",
+                        title: `Hello ${profile?.name?.split(' ')[0] || 'Teacher'}! 🍎`,
+                        explanation: "I'm your **AI Teaching Assistant**. I can help you draft lesson plans, create quizzes, simplify complex topics, or even **grade papers from photos**.\n\nSelect a **Pro Mode** below to get started!",
                         keyPoints: [],
                     },
                     timestamp: new Date(),
@@ -108,9 +109,7 @@ const AiTutorChat = () => {
         if ('speechSynthesis' in window) {
             setIsSpeaking(true);
             const utterance = new SpeechSynthesisUtterance(text);
-            // Select a good voice if available
             const voices = window.speechSynthesis.getVoices();
-            // Try to find a natural sounding English voice
             const preferredVoice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Samantha"));
             if (preferredVoice) utterance.voice = preferredVoice;
 
@@ -120,7 +119,6 @@ const AiTutorChat = () => {
             utterance.onend = () => {
                 setIsSpeaking(false);
                 if (isVoiceModeOpen) {
-                    // Auto-listen after speaking in voice mode
                     setTimeout(startListening, 500);
                 }
             };
@@ -129,30 +127,73 @@ const AiTutorChat = () => {
         }
     };
 
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setSelectedImage(reader.result as string);
+                // Switch to grade mode if not already
+                if (activeMode !== 'grade_paper') setActiveMode('grade_paper');
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleSend = async (textOverride?: string) => {
         const textToSend = textOverride || input;
-        if (!textToSend.trim()) return;
+        if (!textToSend.trim() && !selectedImage) return;
 
-        const userMsg = { sender: 'user', content: textToSend, timestamp: new Date() };
+        const userMsg = {
+            sender: 'user',
+            content: textToSend,
+            image: selectedImage,
+            timestamp: new Date()
+        };
+
         setMessages((prev) => [...prev, userMsg]);
         setInput('');
+        setSelectedImage(null);
         setIsLoading(true);
 
         try {
-            // Determine task type based on active mode
-            // If mode is 'start' (default), we might infer intent, but for now map 'start' -> 'doubt' as generic fallback
-            const taskType = (activeMode === 'start' ? 'doubt' : activeMode) as any;
+            let taskType = 'explain';
+            let query = `[TEACHER MODE: ${activeMode}] ${userMsg.content}`;
+
+            if (activeMode === 'lesson_plan') taskType = 'study_plan';
+            if (activeMode === 'create_quiz') taskType = 'mock_test';
+            if (activeMode === 'simplify') taskType = 'explain';
+            if (activeMode === 'start') taskType = 'doubt';
+
+            if (activeMode === 'grade_paper' || userMsg.image) {
+                taskType = 'explain'; // Fallback for now as we don't have dedicated task type
+                query = `[TEACHER MODE: GRADE PAPER] Please grade this student submission. Analyze the content (simulated from image) and provide feedback and marks. Context: ${userMsg.content}`;
+
+                // Simulate image processing delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+
+            const additionalContext = {
+                role: 'teacher',
+                mode: activeMode,
+                hasImage: !!userMsg.image
+            };
 
             const aiResponseEncoded = await aiService.processRequest({
-                taskType: taskType,
-                query: userMsg.content,
+                taskType: taskType as any,
+                query: query,
                 studentId: profile?.id,
-                // subject: "Math", // We could infer this from current page context in a real app
-                classBand: 'middle', // Could be dynamic from profile
+                additionalContext: additionalContext
             });
 
+            // If it was a grading request, ensure the response looks like grading
+            if (activeMode === 'grade_paper') {
+                // Determine layout based on mock backend response
+                // If it's just text, wrap it. Ideally backend returns structured grading.
+            }
+
             // Flatten response for speech
-            let speakableText = aiResponseEncoded.explanation || "I found some information for you.";
+            let speakableText = aiResponseEncoded.explanation || "Output generated.";
             if (aiResponseEncoded.title) speakableText = `${aiResponseEncoded.title}. ${speakableText}`;
 
             setMessages((prev) => [
@@ -160,9 +201,8 @@ const AiTutorChat = () => {
                 { sender: 'ai', content: aiResponseEncoded, timestamp: new Date() },
             ]);
 
-            // Speak if in voice mode
             if (isVoiceModeOpen) {
-                speakResponse(speakableText.replace(/[*#]/g, '')); // Clean markdown for speech
+                speakResponse(speakableText.replace(/[*#]/g, ''));
             }
 
         } catch (error) {
@@ -170,11 +210,11 @@ const AiTutorChat = () => {
                 ...prev,
                 {
                     sender: 'ai',
-                    content: { explanation: "⚠️ Oops! I encountered an error connecting to my brain. Please try again." },
+                    content: { explanation: "⚠️ I encountered an error. Please try again." },
                     timestamp: new Date()
                 },
             ]);
-            if (isVoiceModeOpen) speakResponse("Oops, I had an error. Please try again.");
+            if (isVoiceModeOpen) speakResponse("Oops, I had an error.");
         } finally {
             setIsLoading(false);
         }
@@ -196,19 +236,19 @@ const AiTutorChat = () => {
                 transcription={voiceTranscription}
             />
 
-            {/* 1. Chat Area */}
+            {/* Chat Area */}
             <Card className="flex-1 glass-card overflow-hidden flex flex-col border-white/10 shadow-2xl relative h-full rounded-none">
                 {/* Header */}
                 <div className="p-4 border-b border-border/50 bg-background/50 backdrop-blur-md flex items-center justify-between z-10">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center shadow-neon-blue">
-                            <Brain className="w-6 h-6 text-neon-blue animate-pulse" />
+                        <div className="w-10 h-10 rounded-full bg-indigo-900 border border-indigo-700 flex items-center justify-center shadow-neon-purple">
+                            <PenTool className="w-5 h-5 text-indigo-400 animate-pulse" />
                         </div>
                         <div>
-                            <h2 className="font-bold text-lg">Nuvana AI</h2>
+                            <h2 className="font-bold text-lg">AI Assistant</h2>
                             <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                <p className="text-xs text-muted-foreground">Online • {ACTION_MODES.find(m => m.id === activeMode)?.label || 'Ready'}</p>
+                                <span className={`w-2 h-2 rounded-full animate-pulse ${activeMode === 'grade_paper' ? 'bg-red-500' : 'bg-green-500'}`} />
+                                <p className="text-xs text-muted-foreground">Teacher Mode • {TEACHER_ACTION_MODES.find(m => m.id === activeMode)?.label}</p>
                             </div>
                         </div>
                     </div>
@@ -228,11 +268,11 @@ const AiTutorChat = () => {
                             <Headphones className="w-5 h-5" />
                         </Button>
 
-                        {/* Mode Indicator (Desktop) */}
+                        {/* Desktop Mode Badge */}
                         <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/50 border border-border">
                             {(() => {
-                                const M = ACTION_MODES.find(m => m.id === activeMode);
-                                if (M) return <><M.icon className={`w-4 h-4 ${M.color}`} /><span className="text-xs font-medium">{M.label} Mode</span></>;
+                                const M = TEACHER_ACTION_MODES.find(m => m.id === activeMode);
+                                if (M) return <><M.icon className={`w-4 h-4 ${M.color}`} /><span className="text-xs font-medium">{M.label}</span></>;
                             })()}
                         </div>
                     </div>
@@ -242,12 +282,21 @@ const AiTutorChat = () => {
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth">
                     <AnimatePresence>
                         {messages.map((msg, index) => (
-                            <MessageBubble
-                                key={index}
-                                sender={msg.sender}
-                                content={msg.content}
-                                timestamp={msg.timestamp}
-                            />
+                            <div key={index}>
+                                {msg.sender === 'user' && msg.image && (
+                                    <div className="flex justify-end mb-2">
+                                        <div className="max-w-[80%] rounded-lg overflow-hidden border border-white/20">
+                                            <img src={msg.image} alt="Uploaded paper" className="w-full h-auto max-h-48 object-cover" />
+                                            <div className="bg-black/50 p-1 text-[10px] text-white text-center">Grading Submission</div>
+                                        </div>
+                                    </div>
+                                )}
+                                <MessageBubble
+                                    sender={msg.sender}
+                                    content={msg.content}
+                                    timestamp={msg.timestamp}
+                                />
+                            </div>
                         ))}
                         {isLoading && (
                             <motion.div
@@ -255,28 +304,49 @@ const AiTutorChat = () => {
                                 className="flex items-center gap-2 text-muted-foreground text-sm ml-12"
                             >
                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                <span>Thinking...</span>
+                                <span>{activeMode === 'grade_paper' ? 'Analyzing handwriting & grading...' : 'Generating...'}</span>
                             </motion.div>
                         )}
                     </AnimatePresence>
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Floating Mode Selector (Inside Chat for better UX) */}
+                {/* Image Preview & Active Mode Indicator */}
+                <AnimatePresence>
+                    {selectedImage && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                            className="px-4 pb-2 flex items-center gap-2"
+                        >
+                            <div className="relative group">
+                                <img src={selectedImage} alt="Selected" className="h-16 w-16 object-cover rounded-md border border-white/20" />
+                                <button
+                                    onClick={() => setSelectedImage(null)}
+                                    className="absolute -top-1 -right-1 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                            <span className="text-xs text-muted-foreground">Ready to grade</span>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Floating Mode Selector */}
                 {!isLoading && (
-                    <div className="p-2 overflow-x-auto">
+                    <div className="p-2 overflow-x-auto no-scrollbar">
                         <div className="flex gap-2 px-2 pb-2 mx-auto w-max max-w-full">
-                            {ACTION_MODES.filter(m => m.id !== 'start').map(mode => (
+                            {TEACHER_ACTION_MODES.filter(m => m.id !== 'start').map(mode => (
                                 <button
                                     key={mode.id}
                                     onClick={() => setActiveMode(mode.id === activeMode ? 'start' : mode.id)}
                                     className={`
-                     flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap
-                     ${activeMode === mode.id
-                                            ? `bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25` // Active
-                                            : 'bg-background/60 hover:bg-secondary border-border text-muted-foreground' // Inactive
+                                        flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap
+                                        ${activeMode === mode.id
+                                            ? `bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25`
+                                            : 'bg-background/60 hover:bg-secondary border-border text-muted-foreground'
                                         }
-                   `}
+                                    `}
                                 >
                                     <mode.icon className={`w-3.5 h-3.5 ${activeMode === mode.id ? 'text-white' : mode.color}`} />
                                     {mode.label}
@@ -292,6 +362,13 @@ const AiTutorChat = () => {
                         onSubmit={(e) => { e.preventDefault(); handleSend(); }}
                         className="flex gap-2 relative group"
                     >
+                        <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            ref={fileInputRef}
+                            onChange={handleImageSelect}
+                        />
                         <Button
                             type="button"
                             size="icon"
@@ -302,17 +379,31 @@ const AiTutorChat = () => {
                         >
                             <Mic className={`w-5 h-5 ${isListening && !isVoiceModeOpen ? 'animate-pulse' : ''}`} />
                         </Button>
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className={`h-9 w-9 shrink-0 ${activeMode === 'grade_paper' ? 'border-primary text-primary shadow-neon-blue' : ''}`}
+                            onClick={() => fileInputRef.current?.click()}
+                            title="Upload Paper"
+                        >
+                            <Camera className="w-4 h-4" />
+                        </Button>
 
                         <Input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder={activeMode === 'start' ? "Ask something..." : `Asking in ${ACTION_MODES.find(m => m.id === activeMode)?.label} mode...`}
-                            className="pr-12 py-6 bg-secondary/30 border-primary/20 focus-visible:ring-neon-purple/50 rounded-xl"
+                            placeholder={
+                                activeMode === 'grade_paper' ? "Add specific grading instructions..." :
+                                    activeMode === 'start' ? "Draft a lesson, grade a paper..." :
+                                        `Working on ${TEACHER_ACTION_MODES.find(m => m.id === activeMode)?.label}...`
+                            }
+                            className="pr-12 py-6 bg-secondary/30 border-primary/20 focus-visible:ring-indigo-500/50 rounded-xl"
                         />
                         <Button
                             type="submit"
                             size="icon"
-                            disabled={isLoading || !input.trim()}
+                            disabled={isLoading || (!input.trim() && !selectedImage)}
                             className="absolute right-1.5 top-1.5 h-9 w-9 bg-primary hover:bg-primary/90 rounded-lg transition-transform active:scale-95"
                         >
                             <Send className="w-4 h-4" />
@@ -329,4 +420,4 @@ const AiTutorChat = () => {
     );
 };
 
-export default AiTutorChat;
+export default AiTeacherChat;

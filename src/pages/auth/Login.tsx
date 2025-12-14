@@ -2,15 +2,14 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useNavigate, Link } from "react-router-dom";
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { useNavigate } from "react-router-dom";
+import { ApiError } from "@/lib/apiClient";
 
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -19,12 +18,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserRole } from "@/lib/auth";
 import { useAuth } from "@/auth/AuthContext";
-import { GraduationCap, School, Loader2 } from "lucide-react";
+import { GraduationCap, School, Loader2, Shield } from "lucide-react";
 
 // ... (schema remains same)
 const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
+  email: z.string().optional(),
+  password: z.string().optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -51,22 +50,18 @@ const Login = () => {
     try {
       // Use useAuth login
       await login(
-        data.email, 
+        data.email,
         data.password,
         activeTab // 'student' or 'teacher'
       );
 
       // Navigate based on role - since login() throws on error or mismatch, if we are here we are good.
-      // But we should double check where to navigate based on activeTab or just rely on the role validation in login?
-      // The backend validates if role matches expectedRole (activeTab).
-      // So if we succeed, activeTab is the correct role.
-      
       if (activeTab === "student") {
         navigate("/student", { replace: true });
       } else if (activeTab === "teacher") {
         navigate("/teacher", { replace: true });
       }
-      
+
     } catch (error: any) {
       // Check for password reset requirement
       if (error instanceof ApiError && error.data?.code === 'RESET_REQUIRED') {
@@ -74,7 +69,7 @@ const Login = () => {
         navigate("/reset-password", { state: { userId } });
         return;
       }
-      
+
       const message =
         error instanceof Error
           ? error.message
@@ -115,7 +110,8 @@ const Login = () => {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-muted-foreground">
-            Sign into access Nuvana360
+            Sign in to access Nuvana360 <br />
+            <span className="text-xs text-primary">(Demo Mode: Just click Sign In)</span>
           </p>
         </div>
 
@@ -204,6 +200,18 @@ const Login = () => {
 
           </Card>
         </Tabs>
+      </div>
+
+      {/* Admin Login Button */}
+      <div className="fixed top-4 right-4 z-50">
+        <Button
+          variant="default"
+          className="neon-glow flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          onClick={() => navigate('/admin')}
+        >
+          <Shield className="w-5 h-5" />
+          <span className="font-bold">Admin</span>
+        </Button>
       </div>
     </div>
   );

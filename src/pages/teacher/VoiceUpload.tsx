@@ -201,8 +201,8 @@ const VoiceUpload = () => {
         mimeType: MediaRecorder.isTypeSupported("audio/webm")
           ? "audio/webm"
           : MediaRecorder.isTypeSupported("audio/mp4")
-          ? "audio/mp4"
-          : "audio/ogg",
+            ? "audio/mp4"
+            : "audio/ogg",
       });
 
       const chunks: Blob[] = [];
@@ -510,7 +510,7 @@ const VoiceUpload = () => {
   }
 
   return (
-    <div className="min-h-screen p-6 bg-background">
+    <div className="min-h-screen p-6 pt-20 bg-background">
       <div className="max-w-7xl mx-auto space-y-8">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -525,13 +525,7 @@ const VoiceUpload = () => {
               Record and upload class sessions
             </p>
           </div>
-          <Button
-            variant="outline"
-            className="glass"
-            onClick={() => navigate("/teacher")}
-          >
-            Back to Dashboard
-          </Button>
+
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -599,16 +593,14 @@ const VoiceUpload = () => {
 
                 <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-border rounded-2xl bg-secondary/10 mb-6">
                   <div
-                    className={`w-32 h-32 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${
-                      isRecording
-                        ? "bg-red-500/20 animate-pulse"
-                        : "bg-primary/20"
-                    }`}
+                    className={`w-32 h-32 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${isRecording
+                      ? "bg-red-500/20 animate-pulse"
+                      : "bg-primary/20"
+                      }`}
                   >
                     <Mic
-                      className={`w-16 h-16 ${
-                        isRecording ? "text-red-500" : "text-primary"
-                      }`}
+                      className={`w-16 h-16 ${isRecording ? "text-red-500" : "text-primary"
+                        }`}
                     />
                   </div>
                   <div className="text-4xl font-mono font-bold mb-2">
@@ -790,8 +782,8 @@ const VoiceUpload = () => {
               </div>
 
               {/* Hidden audio element for playback */}
-              <audio 
-                ref={audioRef} 
+              <audio
+                ref={audioRef}
                 className="hidden"
                 onEnded={() => {
                   setIsPlaying(false);
@@ -870,11 +862,10 @@ const VoiceUpload = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className={`hover:text-primary ${
-                              playingVoiceNoteId === rec.id && isPlaying
-                                ? "text-primary"
-                                : ""
-                            }`}
+                            className={`hover:text-primary ${playingVoiceNoteId === rec.id && isPlaying
+                              ? "text-primary"
+                              : ""
+                              }`}
                             onClick={() => handlePlay(rec)}
                           >
                             {playingVoiceNoteId === rec.id && isPlaying ? (

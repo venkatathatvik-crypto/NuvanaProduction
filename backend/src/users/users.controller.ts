@@ -8,7 +8,13 @@ import {
   Body,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import {
   UpdateProfileDto,
@@ -22,7 +28,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Get()
   findAll(
@@ -56,6 +62,28 @@ export class UsersController {
   ) {
     const isSuperAdmin = user.role === 'super_admin';
     return this.usersService.updateProfile(id, updateDto, schoolId, isSuperAdmin);
+  }
+
+  @Post(':id/avatar')
+  @UseGuards(RolesGuard)
+  @Roles('super_admin', 'school_admin', 'teacher', 'student')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadAvatar(
+    @Param('id') id: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 2 * 1024 * 1024 }), // 2MB
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+    @Tenant() schoolId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const isSuperAdmin = user.role === 'super_admin';
+    return this.usersService.uploadAvatar(id, file, schoolId, isSuperAdmin);
   }
 
   @Post(':id/student-details')

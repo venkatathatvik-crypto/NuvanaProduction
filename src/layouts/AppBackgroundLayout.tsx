@@ -1,4 +1,6 @@
 import React from "react";
+import AiTutorWidget from "@/components/AiTutor/AiTutorWidget";
+import { BackToDashboardButton } from "@/components/BackToDashboardButton";
 
 const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
     return (
@@ -14,10 +16,16 @@ const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
                 }}
             />
 
+            {/* Global Back to Dashboard Button */}
+            <BackToDashboardButton />
+
             {/* Content */}
             <div className="relative z-10">
                 {children}
             </div>
+
+            {/* Global AI Chatbot Widget */}
+            <AiTutorWidget />
         </div>
     );
 };

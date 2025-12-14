@@ -6,18 +6,23 @@ import {
   CreateTeacherDetailsDto,
 } from './dto/user.dto';
 
+import { StorageService } from '../storage/storage.service';
+
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storage: StorageService,
+  ) { }
 
   async findAll(schoolId?: string, isSuperAdmin: boolean = false, roleId?: number) {
     // Build where clause
     const where: any = {};
-    
+
     if (schoolId && !isSuperAdmin) {
       where.school_id = schoolId;
     }
-    
+
     if (roleId) {
       where.role_id = roleId;
     }
@@ -188,5 +193,40 @@ export class UsersService {
     });
 
     return { message: 'User deleted successfully' };
+  }
+
+  async uploadAvatar(
+    id: string,
+    file: Express.Multer.File,
+    schoolId?: string,
+    isSuperAdmin: boolean = false,
+  ) {
+    // Verify user exists and tenant access
+    const user = await this.findOne(id, schoolId, isSuperAdmin);
+
+    // Upload to storage
+    // We use 'files' bucket but organize in avatars folder
+    const fileExt = file.originalname.split('.').pop() || 'jpg';
+    const fileName = `${id}-${Date.now()}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+
+    const { path } = await this.storage.uploadFile(
+      'files',
+      filePath,
+      file.buffer,
+      file.mimetype,
+      { upsert: true }
+    );
+
+    // Get Public URL
+    const publicUrl = this.storage.getPublicUrl('files', path);
+
+    // Update Profile
+    const updated = await this.prisma.profiles.update({
+      where: { id },
+      data: { avatar_url: publicUrl },
+    });
+
+    return { avatar_url: updated.avatar_url };
   }
 }

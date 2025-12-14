@@ -38,7 +38,7 @@ export interface WeeklyTimetable {
 }
 
 // Day of week mapping
-export const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 /**
  * Get the full weekly timetable for a class
@@ -57,9 +57,9 @@ export const getTimetableForClass = async (
 
     if (daysError) throw daysError;
 
-    // Initialize empty week (days 1-6 for Mon-Sat)
+    // Initialize empty week (days 1-7 for Mon-Sun)
     const weeklyTimetable: WeeklyTimetable = {};
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 7; i++) {
       weeklyTimetable[i] = null;
     }
 
@@ -260,7 +260,7 @@ export const getStudentTimetable = async (
       period_number: number;
     }>> = {};
 
-    for (let dayOfWeek = 1; dayOfWeek <= 6; dayOfWeek++) {
+    for (let dayOfWeek = 1; dayOfWeek <= 7; dayOfWeek++) {
       const dayName = DAY_NAMES[dayOfWeek - 1]; // Convert 1-based to 0-based for array
       const daySchedule = weeklyTimetable[dayOfWeek];
 

@@ -2,8 +2,6 @@ import { motion } from "framer-motion";
 import {
   User,
   Mail,
-  Phone,
-  MapPin,
   Award,
   BookOpen,
   Star,
@@ -286,19 +284,17 @@ const StudentProfile = () => {
             transition={{ delay: 0.5 }}
           >
             <Card
-              className={`glass-card p-6 border-l-4 ${
-                isFeedbackActive ? "border-l-neon-pink" : "border-l-muted"
-              }`}
+              className={`glass-card p-6 border-l-4 ${isFeedbackActive ? "border-l-neon-pink" : "border-l-muted"
+                }`}
             >
               <div className="flex flex-col h-full justify-between">
                 <div>
                   <h3 className="font-semibold flex items-center gap-2">
                     <Star
-                      className={`w-5 h-5 ${
-                        isFeedbackActive
+                      className={`w-5 h-5 ${isFeedbackActive
                           ? "text-neon-pink fill-neon-pink"
                           : "text-muted"
-                      }`}
+                        }`}
                     />
                     Annual Feedback
                   </h3>
@@ -309,11 +305,10 @@ const StudentProfile = () => {
                   </p>
                 </div>
                 <Button
-                  className={`mt-4 w-full ${
-                    isFeedbackActive
+                  className={`mt-4 w-full ${isFeedbackActive
                       ? "bg-neon-pink/20 text-neon-pink hover:bg-neon-pink/30"
                       : ""
-                  }`}
+                    }`}
                   disabled={!isFeedbackActive}
                   onClick={() => navigate("/student/feedback")}
                 >

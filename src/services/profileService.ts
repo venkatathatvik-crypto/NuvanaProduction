@@ -1,50 +1,25 @@
-import { supabase } from "@/lib/mockBackend";
+import { apiClient } from "@/lib/apiClient";
 
 /**
- * Upload a profile photo to Supabase storage and update the profile
+ * Upload a profile photo via the backend API
+ * @param userId The ID of the user to upload the photo for
+ * @param file The image file to upload
+ * @returns The new avatar URL or null if failed
  */
 export const uploadProfilePhoto = async (
   userId: string,
   file: File
 ): Promise<string | null> => {
   try {
-    // Generate unique filename
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${userId}-${Date.now()}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
+    const formData = new FormData();
+    formData.append("file", file);
 
-    // Upload to Supabase storage
-    const { error: uploadError } = await supabase.storage
-      .from("FILES_BUCKET")
-      .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: true,
-      });
+    const response = await apiClient.uploadFile<{ avatar_url: string }>(
+      `/users/${userId}/avatar`,
+      formData
+    );
 
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw uploadError;
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from("FILES_BUCKET")
-      .getPublicUrl(filePath);
-
-    const publicUrl = urlData.publicUrl;
-
-    // Update profile in database
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ avatar_url: publicUrl })
-      .eq("id", userId);
-
-    if (updateError) {
-      console.error("Profile update error:", updateError);
-      throw updateError;
-    }
-
-    return publicUrl;
+    return response.avatar_url;
   } catch (error) {
     console.error("Error uploading profile photo:", error);
     return null;
@@ -53,16 +28,17 @@ export const uploadProfilePhoto = async (
 
 /**
  * Delete the current profile photo
+ * @param userId The ID of the user to delete the photo for
+ * @returns True if successful, false otherwise
  */
 export const deleteProfilePhoto = async (userId: string): Promise<boolean> => {
   try {
-    // Update profile to remove avatar_url
-    const { error } = await supabase
-      .from("profiles")
-      .update({ avatar_url: null })
-      .eq("id", userId);
+    // Note: Use a dedicated endpoint if available, but for now we might have to use patch or implement delete endpoint.
+    // Since I only implemented POST for upload, and DELETE only for user deletion, 
+    // maybe we can skip DELETE photo specifically for this task unless explicitly requested.
+    // Or we simply update profile with null avatar_url.
 
-    if (error) throw error;
+    await apiClient.patch(`/users/${userId}`, { avatar_url: null });
     return true;
   } catch (error) {
     console.error("Error deleting profile photo:", error);
