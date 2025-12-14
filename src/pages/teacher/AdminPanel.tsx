@@ -34,11 +34,10 @@ import {
   type WeeklyTimetable,
 } from "@/services/academicApiService";
 import { userService } from "@/services/userService";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { getTimetableForClass, getOrCreateTimetableDay, saveTimetablePeriod, deleteTimetablePeriod, DAY_NAMES } from "@/services/timetableService";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import SchoolAnalyticsAdmin from "@/components/SchoolAnalyticsAdmin";
+import FeedbackQuestionsAdmin from "@/components/FeedbackQuestionsAdmin";
 
 export default function AdminPanel() {
   const { profile, logout } = useAuth();
@@ -450,8 +449,7 @@ export default function AdminPanel() {
       });
 
       toast.success(
-        `${
-          newMemberType === "teacher" ? "Teacher" : "Student"
+        `${newMemberType === "teacher" ? "Teacher" : "Student"
         } created successfully`
       );
       setNewMemberName("");
@@ -721,16 +719,7 @@ export default function AdminPanel() {
     }
   };
 
-  // Timetable day names constant
-  const DAY_NAMES = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-  ];
+
 
   // Timetable Functions
   const fetchTimetable = async (classId: string) => {
@@ -865,9 +854,9 @@ export default function AdminPanel() {
   );
   const filteredSubjectsForClass = selectedClassData
     ? gradeSubjects
-        .filter((gs) => gs.grade_level_id === selectedClassData.grade_level_id)
-        .map((gs) => ({ id: gs.id, name: gs.subjects_master?.name })) // Use gs.id (grade_subjects.id)
-        .filter((s) => s.name) // Filter out any with missing names
+      .filter((gs) => gs.grade_level_id === selectedClassData.grade_level_id)
+      .map((gs) => ({ id: gs.id, name: gs.subjects_master?.name })) // Use gs.id (grade_subjects.id)
+      .filter((s) => s.name) // Filter out any with missing names
     : subjects; // Fallback to all subjects if no class selected
 
   return (
@@ -1191,15 +1180,14 @@ export default function AdminPanel() {
                             const isAssigned = gradeSubjects.some(
                               (gs) =>
                                 gs.grade_level_id ===
-                                  parseInt(selectedGradeForSubject) &&
+                                parseInt(selectedGradeForSubject) &&
                                 gs.subject_master_id === s.id
                             );
                             return (
                               <label
                                 key={s.id}
-                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${
-                                  isAssigned ? "opacity-50" : ""
-                                }`}
+                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? "opacity-50" : ""
+                                  }`}
                               >
                                 <input
                                   type="checkbox"
@@ -1289,10 +1277,10 @@ export default function AdminPanel() {
                           gs.grade_level_id ===
                           parseInt(selectedGradeForSubject)
                       ).length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No subjects assigned to this grade yet
-                        </p>
-                      )}
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            No subjects assigned to this grade yet
+                          </p>
+                        )}
                     </div>
                   </>
                 )}
@@ -1436,10 +1424,9 @@ export default function AdminPanel() {
                         <div
                           className="bg-primary h-2 rounded-full transition-all"
                           style={{
-                            width: `${
-                              (importProgress.current / importProgress.total) *
+                            width: `${(importProgress.current / importProgress.total) *
                               100
-                            }%`,
+                              }%`,
                           }}
                         />
                       </div>
@@ -1635,9 +1622,8 @@ export default function AdminPanel() {
                               setSelectedStudent(s.id);
                               setStudentAssignSearch(s.name);
                             }}
-                            className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${
-                              selectedStudent === s.id ? "bg-primary/20" : ""
-                            }`}
+                            className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedStudent === s.id ? "bg-primary/20" : ""
+                              }`}
                           >
                             <p className="font-medium text-sm truncate">
                               {s.name}
@@ -1653,10 +1639,10 @@ export default function AdminPanel() {
                           ?.toLowerCase()
                           .includes(studentAssignSearch.toLowerCase())
                       ).length === 0 && (
-                        <p className="p-3 text-sm text-muted-foreground text-center">
-                          No students found
-                        </p>
-                      )}
+                          <p className="p-3 text-sm text-muted-foreground text-center">
+                            No students found
+                          </p>
+                        )}
                     </div>
                   </div>
                   <select
@@ -1762,9 +1748,8 @@ export default function AdminPanel() {
                               setSelectedTeacher(t.id);
                               setTeacherAssignSearch(t.name);
                             }}
-                            className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${
-                              selectedTeacher === t.id ? "bg-primary/20" : ""
-                            }`}
+                            className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedTeacher === t.id ? "bg-primary/20" : ""
+                              }`}
                           >
                             <p className="font-medium text-sm truncate">
                               {t.name}
@@ -1779,10 +1764,10 @@ export default function AdminPanel() {
                           ?.toLowerCase()
                           .includes(teacherAssignSearch.toLowerCase())
                       ).length === 0 && (
-                        <p className="p-3 text-sm text-muted-foreground text-center">
-                          No teachers found
-                        </p>
-                      )}
+                          <p className="p-3 text-sm text-muted-foreground text-center">
+                            No teachers found
+                          </p>
+                        )}
                     </div>
                   </div>
                   <select
@@ -1891,9 +1876,8 @@ export default function AdminPanel() {
                             return (
                               <label
                                 key={s.id}
-                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${
-                                  isAssigned ? "opacity-50" : ""
-                                }`}
+                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? "opacity-50" : ""
+                                  }`}
                               >
                                 <input
                                   type="checkbox"
@@ -1943,11 +1927,10 @@ export default function AdminPanel() {
                         <Plus className="w-4 h-4 mr-2" />
                         {assigningSubjects
                           ? "Assigning..."
-                          : `Assign ${
-                              selectedSubjectsForTeacher.length > 0
-                                ? `${selectedSubjectsForTeacher.length} Subject(s)`
-                                : "Subjects"
-                            } to Teacher`}
+                          : `Assign ${selectedSubjectsForTeacher.length > 0
+                            ? `${selectedSubjectsForTeacher.length} Subject(s)`
+                            : "Subjects"
+                          } to Teacher`}
                       </Button>
 
                       {/* Display currently assigned subjects */}

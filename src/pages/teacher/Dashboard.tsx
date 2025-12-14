@@ -11,6 +11,7 @@ import {
   LogOut,
   CheckSquare,
   AlertCircle,
+  MessageSquare,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -93,7 +94,8 @@ const TeacherDashboard = () => {
     { label: "Manage Tests", icon: FileText, color: "text-green-500", path: "/teacher/tests" },
     { label: "Analytics", icon: BarChart2, color: "text-blue-500", path: "/teacher/analytics" },
     { label: "Voice Upload", icon: Mic, color: "text-green-500", path: "/teacher/voice-upload" },
-    { label: "My Tasks", icon: CheckSquare, color: "text-green-500", path: "/teacher/tasks" },
+    { label: "My Tasks", icon: CheckSquare, color: "text-blue-500", path: "/teacher/tasks" },
+    { label: "Communication", icon: MessageSquare, color: "text-green-500", path: "/teacher/communication" },
   ];
 
   const handleNotificationClick = (notification: any) => {
@@ -114,7 +116,7 @@ const TeacherDashboard = () => {
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2 truncate">Welcome, {profile?.name || "Teacher"}! 📚</h1>
+            <h1 className="text-2xl sm:text-2xl font-bold neon-text mb-1 sm:mb-2 truncate">Welcome, {profile?.name || "Teacher"}!</h1>
             <p className="text-muted-foreground text-sm sm:text-base">Manage your classes and students efficiently</p>
           </div>
           <div className="flex gap-2 sm:gap-4 shrink-0">

@@ -47,7 +47,7 @@ const NEON_COLORS = {
 const StudentAnalytics = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
-    
+
     // State for all analytics data
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<StudentStatsSummary>({
@@ -123,7 +123,7 @@ const StudentAnalytics = () => {
     }));
 
     return (
-        <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8">
+        <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8 pt-16 sm:pt-20">
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -133,11 +133,7 @@ const StudentAnalytics = () => {
                     <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">My Performance 📈</h1>
                     <p className="text-muted-foreground text-sm sm:text-base">Track your academic progress</p>
                 </div>
-                <Button variant="outline" className="glass shrink-0" onClick={() => navigate("/student")}>
-                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Back to Dashboard</span>
-                    <span className="sm:hidden">Back</span>
-                </Button>
+
             </motion.div>
 
             {/* Stats Cards */}
@@ -331,7 +327,7 @@ const StudentAnalytics = () => {
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis type="number" domain={[0, 100]} />
                                                 <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                                                <Tooltip 
+                                                <Tooltip
                                                     content={({ active, payload }) => {
                                                         if (active && payload && payload[0]) {
                                                             const data = payload[0].payload;
@@ -348,9 +344,9 @@ const StudentAnalytics = () => {
                                                 />
                                                 <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
                                                     {chapterTopicData.chapters.slice(0, 8).map((entry, index) => (
-                                                        <Cell 
-                                                            key={`cell-${index}`} 
-                                                            fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#8884d8" : "#ff7373"} 
+                                                        <Cell
+                                                            key={`cell-${index}`}
+                                                            fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#8884d8" : "#ff7373"}
                                                         />
                                                     ))}
                                                 </Bar>
@@ -370,7 +366,7 @@ const StudentAnalytics = () => {
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis type="number" domain={[0, 100]} />
                                                 <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                                                <Tooltip 
+                                                <Tooltip
                                                     content={({ active, payload }) => {
                                                         if (active && payload && payload[0]) {
                                                             const data = payload[0].payload;
@@ -388,9 +384,9 @@ const StudentAnalytics = () => {
                                                 />
                                                 <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
                                                     {chapterTopicData.topics.slice(0, 8).map((entry, index) => (
-                                                        <Cell 
-                                                            key={`cell-${index}`} 
-                                                            fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#82ca9d" : "#ff7373"} 
+                                                        <Cell
+                                                            key={`cell-${index}`}
+                                                            fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#82ca9d" : "#ff7373"}
                                                         />
                                                     ))}
                                                 </Bar>
@@ -410,50 +406,50 @@ const StudentAnalytics = () => {
                         )}
 
                         {/* Weak Areas Summary */}
-                        {(chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 || 
-                          chapterTopicData.topics.filter(t => t.avgScore < 60).length > 0) && (
-                            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Weak Chapters */}
-                                {chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 && (
-                                    <div className="bg-red-500/5 rounded-lg p-4 border border-red-500/20">
-                                        <h4 className="font-semibold text-red-400 mb-3 flex items-center gap-2">
-                                            <AlertCircle className="w-4 h-4" /> Chapters to Focus On
-                                        </h4>
-                                        <div className="space-y-2">
-                                            {chapterTopicData.chapters
-                                                .filter(c => c.avgScore < 60)
-                                                .slice(0, 3)
-                                                .map((chapter, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center">
-                                                        <span className="text-sm">{chapter.name}</span>
-                                                        <span className="text-red-400 font-medium">{chapter.avgScore}%</span>
-                                                    </div>
-                                                ))}
+                        {(chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 ||
+                            chapterTopicData.topics.filter(t => t.avgScore < 60).length > 0) && (
+                                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Weak Chapters */}
+                                    {chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 && (
+                                        <div className="bg-red-500/5 rounded-lg p-4 border border-red-500/20">
+                                            <h4 className="font-semibold text-red-400 mb-3 flex items-center gap-2">
+                                                <AlertCircle className="w-4 h-4" /> Chapters to Focus On
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {chapterTopicData.chapters
+                                                    .filter(c => c.avgScore < 60)
+                                                    .slice(0, 3)
+                                                    .map((chapter, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center">
+                                                            <span className="text-sm">{chapter.name}</span>
+                                                            <span className="text-red-400 font-medium">{chapter.avgScore}%</span>
+                                                        </div>
+                                                    ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* Weak Topics */}
-                                {chapterTopicData.topics.filter(t => t.avgScore < 60).length > 0 && (
-                                    <div className="bg-orange-500/5 rounded-lg p-4 border border-orange-500/20">
-                                        <h4 className="font-semibold text-orange-400 mb-3 flex items-center gap-2">
-                                            <AlertCircle className="w-4 h-4" /> Topics to Focus On
-                                        </h4>
-                                        <div className="space-y-2">
-                                            {chapterTopicData.topics
-                                                .filter(t => t.avgScore < 60)
-                                                .slice(0, 3)
-                                                .map((topic, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center">
-                                                        <span className="text-sm">{topic.name}</span>
-                                                        <span className="text-orange-400 font-medium">{topic.avgScore}%</span>
-                                                    </div>
-                                                ))}
+                                    {/* Weak Topics */}
+                                    {chapterTopicData.topics.filter(t => t.avgScore < 60).length > 0 && (
+                                        <div className="bg-orange-500/5 rounded-lg p-4 border border-orange-500/20">
+                                            <h4 className="font-semibold text-orange-400 mb-3 flex items-center gap-2">
+                                                <AlertCircle className="w-4 h-4" /> Topics to Focus On
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {chapterTopicData.topics
+                                                    .filter(t => t.avgScore < 60)
+                                                    .slice(0, 3)
+                                                    .map((topic, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center">
+                                                            <span className="text-sm">{topic.name}</span>
+                                                            <span className="text-orange-400 font-medium">{topic.avgScore}%</span>
+                                                        </div>
+                                                    ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                    )}
+                                </div>
+                            )}
                     </CardContent>
                 </Card>
             </motion.div>

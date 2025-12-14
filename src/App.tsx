@@ -34,6 +34,7 @@ import TestDetails from "./pages/teacher/TestDetails";
 import AnalyticsDashboard from "./pages/teacher/Analytics";
 import VoiceUpload from "./pages/teacher/VoiceUpload";
 import AdminPanel from "./pages/teacher/AdminPanel";
+import TeacherCommunication from "./pages/teacher/Communication";
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 
 import StudentTests from "./pages/student/Tests";
@@ -41,7 +42,7 @@ import TestTake from "./pages/student/TestTake";
 import StudentProfile from "./pages/student/Profile";
 import StudentFeedback from "./pages/student/Feedback";
 import StudentAnalytics from "./pages/student/Analytics";
-import AiTutorPage from "./pages/student/AiTutorPage";
+import AiTutorPage from "./pages/AiTutorPage";
 import TeacherProfile from "./pages/teacher/Profile";
 import TeacherTasks from "./pages/teacher/Tasks";
 import NotFound from "./pages/NotFound";
@@ -69,7 +70,7 @@ const App = () => (
           <InstallPWA />
 
           <BrowserRouter>
-            <ThemeToggle />
+            {/* <ThemeToggle /> Removed to enforce dark mode */}
             <AppBackgroundLayout>
               <Routes>
                 {/* Public Routes */}
@@ -114,6 +115,7 @@ const App = () => (
                     </AuthRedirect>
                   }
                 />
+                <Route path="/ai-tutor" element={<ProtectedRoute><AiTutorPage /></ProtectedRoute>} />
                 <Route
                   path="/super-admin-signup"
                   element={
@@ -220,14 +222,6 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/student/ai-tutor"
-                  element={
-                    <ProtectedRoute role="student">
-                      <AiTutorPage />
-                    </ProtectedRoute>
-                  }
-                />
 
                 {/* Teacher Protected Routes */}
                 <Route
@@ -275,6 +269,14 @@ const App = () => (
                   element={
                     <ProtectedRoute role="teacher">
                       <TeacherTests />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/teacher/communication"
+                  element={
+                    <ProtectedRoute role="teacher">
+                      <TeacherCommunication />
                     </ProtectedRoute>
                   }
                 />

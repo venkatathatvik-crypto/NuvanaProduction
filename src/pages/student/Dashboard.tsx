@@ -136,13 +136,6 @@ const Dashboard = () => {
 
   const quickActions = [
     {
-      label: "AI Tutor",
-      value: "Ask Now",
-      icon: Brain,
-      color: "text-neon-purple animate-pulse",
-      path: "/student/ai-tutor",
-    },
-    {
       label: "Attendance",
       value: loadingAttendance ? "..." : `${attendancePercentage}%`,
       icon: Users,
@@ -214,8 +207,8 @@ const Dashboard = () => {
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2 truncate">
-              Welcome back, {profile?.name || "Student"}! 👋
+            <h1 className="text-2xl sm:text-2xl font-bold neon-text mb-1 sm:mb-2 truncate">
+              Welcome back, {profile?.name || "Student"}!
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base">
               Here's what's happening today
@@ -243,7 +236,7 @@ const Dashboard = () => {
         </motion.div>
 
         {/* Quick Actions Grid - All actions at the top */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {quickActions.map((action, index) => (
             <motion.div
               key={action.label}
@@ -257,8 +250,8 @@ const Dashboard = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{action.label}</p>
-                    <p className="text-lg sm:text-2xl font-bold mt-1 sm:mt-2 truncate">{action.value}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate font-medium">{action.label}</p>
+                    <p className={`font-bold mt-1 truncate ${action.value === 'Library' ? 'text-xs sm:text-lg' : 'text-sm sm:text-xl'}`}>{action.value}</p>
                   </div>
                   <action.icon className={`w-8 h-8 sm:w-10 sm:h-10 ${action.color} shrink-0 ml-2`} />
                 </div>

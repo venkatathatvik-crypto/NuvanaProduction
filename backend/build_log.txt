@@ -1,0 +1,75 @@
+
+> nuvana-ai-backend@0.0.1 build
+> nest build
+
+prisma.config.ts:4:35 - error TS2307: Cannot find module 'prisma/config' or its corresponding type declarations.
+
+4 import { defineConfig, env } from "prisma/config";
+                                    ~~~~~~~~~~~~~~~
+src/auth/auth.module.ts:2:27 - error TS2307: Cannot find module '@nestjs/jwt' or its corresponding type declarations.
+
+2 import { JwtModule } from '@nestjs/jwt';
+                            ~~~~~~~~~~~~~
+src/auth/auth.module.ts:3:32 - error TS2307: Cannot find module '@nestjs/passport' or its corresponding type declarations.
+
+3 import { PassportModule } from '@nestjs/passport';
+                                 ~~~~~~~~~~~~~~~~~~
+src/auth/auth.service.ts:9:28 - error TS2307: Cannot find module '@nestjs/jwt' or its corresponding type declarations.
+
+9 import { JwtService } from "@nestjs/jwt";
+                             ~~~~~~~~~~~~~
+src/auth/guards/jwt-auth.guard.ts:3:27 - error TS2307: Cannot find module '@nestjs/passport' or its corresponding type declarations.
+
+3 import { AuthGuard } from '@nestjs/passport';
+                            ~~~~~~~~~~~~~~~~~~
+src/auth/strategies/jwt.strategy.ts:3:34 - error TS2307: Cannot find module '@nestjs/passport' or its corresponding type declarations.
+
+3 import { PassportStrategy } from '@nestjs/passport';
+                                   ~~~~~~~~~~~~~~~~~~
+src/auth/strategies/jwt.strategy.ts:4:38 - error TS2307: Cannot find module 'passport-jwt' or its corresponding type declarations.
+
+4 import { ExtractJwt, Strategy } from 'passport-jwt';
+                                       ~~~~~~~~~~~~~~
+src/prisma/prisma.service.ts:3:26 - error TS2307: Cannot find module '@prisma/adapter-pg' or its corresponding type declarations.
+
+3 import { PrismaPg } from '@prisma/adapter-pg';
+                           ~~~~~~~~~~~~~~~~~~~~
+src/schools/dto/update-school.dto.ts:1:29 - error TS2307: Cannot find module '@nestjs/mapped-types' or its corresponding type declarations.
+Found 17 error(s).
+
+
+1 import { PartialType } from '@nestjs/mapped-types';
+                              ~~~~~~~~~~~~~~~~~~~~~~
+src/test/dto/update-test.dto.ts:1:39 - error TS2307: Cannot find module '@nestjs/mapped-types' or its corresponding type declarations.
+
+1 import { PartialType, OmitType } from '@nestjs/mapped-types';
+                                        ~~~~~~~~~~~~~~~~~~~~~~
+src/test/test.service.ts:22:29 - error TS2339: Property 'tests' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+22       const test = await tx.tests.create({
+                               ~~~~~
+src/test/test.service.ts:33:35 - error TS2339: Property 'questions' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+33         const question = await tx.questions.create({
+                                     ~~~~~~~~~
+src/test/test.service.ts:48:20 - error TS2339: Property 'question_options' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+48           await tx.question_options.createMany({
+                      ~~~~~~~~~~~~~~~~
+src/test/test.service.ts:517:35 - error TS2339: Property 'test_submissions' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+517       const submission = await tx.test_submissions.create({
+                                      ~~~~~~~~~~~~~~~~
+src/test/test.service.ts:534:16 - error TS2339: Property 'student_answers' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+534       await tx.student_answers.createMany({
+                   ~~~~~~~~~~~~~~~
+src/test/test.service.ts:547:20 - error TS2339: Property 'student_answers' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+547           await tx.student_answers.updateMany({
+                       ~~~~~~~~~~~~~~~
+src/test/test.service.ts:564:18 - error TS2339: Property 'test_submissions' does not exist on type 'Omit<PrismaClient<never, undefined, runtime.Types.Extensions.DefaultArgs>, runtime.ITXClientDenyList>'.
+
+564         await tx.test_submissions.update({
+                     ~~~~~~~~~~~~~~~~
+

@@ -173,7 +173,7 @@ const Events = () => {
             </TabsTrigger>
             <TabsTrigger value="deadlines" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Deadlines</TabsTrigger>
             <TabsTrigger value="past" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
-              <span className="hidden sm:inline">Past Events</span>
+              <span className="hidden sm:inline">Past Assignments</span>
               <span className="sm:hidden">Past</span>
             </TabsTrigger>
           </TabsList>

@@ -59,7 +59,7 @@ const TeacherTasks = () => {
     }
 
     return (
-        <div className="min-h-screen p-6">
+        <div className="min-h-screen p-6 pt-20">
             <div className="max-w-7xl mx-auto space-y-8">
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
@@ -70,9 +70,7 @@ const TeacherTasks = () => {
                         <h1 className="text-4xl font-bold neon-text mb-2">My Tasks 📝</h1>
                         <p className="text-muted-foreground">Manage your grading queue</p>
                     </div>
-                    <Button variant="outline" className="glass" onClick={() => navigate("/teacher")}>
-                        Back to Dashboard
-                    </Button>
+
                 </motion.div>
 
                 {/* Grading Section */}

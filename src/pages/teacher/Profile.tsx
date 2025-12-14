@@ -54,7 +54,7 @@ const TeacherProfile = () => {
               .map((ts: any) => ts.grade_subjects?.subjects_master?.name)
               .filter(Boolean)
           ),
-        ];
+        ] as string[];
         setSubjects(subjectNames);
       }
     } catch (error) {
@@ -267,7 +267,8 @@ const TeacherProfile = () => {
                       className="px-3 py-1 rounded-md bg-secondary/50 border border-white/10"
                     >
                       {tc?.classes?.name}{" "}
-                      {tc?.classes?.grade_levels?.name && `(${tc.classes.grade_levels.name})`}
+                      {tc?.classes?.grade_levels?.name &&
+                        `(${tc.classes.grade_levels.name})`}
                     </span>
                   ))
                 ) : (
