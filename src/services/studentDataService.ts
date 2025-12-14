@@ -1,9 +1,9 @@
 // Student data services - profile, voice notes, basic student info
-import { supabase, VOICE_NOTES_BUCKET } from "./types";
+import { apiClient } from "@/lib/apiClient";
 
 export interface StudentData {
   id: string;
-  class_id: string;
+  class_id: string | null;
   class_name?: string;
   grade_name?: string;
   roll_number?: string;
@@ -20,56 +20,54 @@ export interface StudentVoiceNote {
   uploadDate: string;
 }
 
-// Get student data including class_id
+// Get student data including class_id from backend API
 export const getStudentData = async (
   studentId: string
 ): Promise<StudentData | null> => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      `
-      id,
-      class_id,
-      roll_number,
-      classes (
-        id,
-        name,
-        grade_levels (
-          id,
-          name
-        )
-      )
-    `
-    )
-    .eq("id", studentId)
-    .eq("role_id", 4)
-    .single();
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const data = await apiClient.get<{
+      id: string;
+      student_details: {
+        class_id: string | null;
+        roll_number: string | null;
+        classes: {
+          id: string;
+          name: string;
+          grade_levels: {
+            id: number;
+            name: string;
+          };
+        } | null;
+      } | null;
+    }>(`/users/${studentId}`);
 
-  if (error) {
-    throw new Error("Failed to load student data.");
+    if (!data) {
+      return null;
+    }
+
+    // Extract student_details
+    const studentDetails = data.student_details;
+
+    if (!studentDetails) {
+      console.warn("No student_details found for student:", studentId);
+      return null;
+    }
+
+    const classData = studentDetails.classes;
+    const gradeData = classData?.grade_levels;
+
+    return {
+      id: data.id,
+      class_id: studentDetails.class_id || null,
+      class_name: classData?.name,
+      grade_name: gradeData?.name,
+      roll_number: studentDetails.roll_number || undefined,
+    };
+  } catch (error: any) {
+    console.error("Error fetching student data:", error);
+    throw new Error(error.message || "Failed to load student data.");
   }
-
-  if (!data) {
-    return null;
-  }
-
-  const classData = Array.isArray(data.classes)
-    ? data.classes[0]
-    : data.classes;
-
-  const gradeData = classData?.grade_levels
-    ? Array.isArray(classData.grade_levels)
-      ? classData.grade_levels[0]
-      : classData.grade_levels
-    : null;
-
-  return {
-    id: data.id,
-    class_id: data.class_id,
-    class_name: classData?.name,
-    grade_name: gradeData?.name,
-    roll_number: data.roll_number,
-  };
 };
 
 // Get voice notes by class_id for students
@@ -77,53 +75,34 @@ export const getStudentVoiceNotes = async (
   classId: string,
   schoolId: string
 ): Promise<StudentVoiceNote[]> => {
-  const { data, error } = await supabase
-    .from("voice_notes")
-    .select(
-      `
-      id,
-      title,
-      storage_url,
-      duration_seconds,
-      file_size_bytes,
-      grade_subject_id,
-      created_at,
-      grade_subjects (
-        subjects_master ( name )
-      )
-    `
-    )
-    .eq("class_id", classId)
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false });
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const data = await apiClient.get<Array<{
+      id: string;
+      title: string;
+      storageUrl: string;
+      storagePath: string;
+      durationSeconds: number;
+      duration: number;
+      fileSizeBytes: number;
+      fileSize: number;
+      subject: string;
+      uploadDate: string;
+      createdAt: string;
+    }>>(`/file-upload/voice-notes/class/${classId}`);
 
-  if (error) {
-    throw new Error("Failed to load voice notes.");
-  }
-
-  if (!data) {
-    return [];
-  }
-
-  return data.map((record: any) => {
-    const subjectMaster = Array.isArray(record.grade_subjects?.subjects_master)
-      ? record.grade_subjects.subjects_master[0]
-      : record.grade_subjects?.subjects_master;
-
-    // Generate public URL from storage path
-    const { data: publicUrlData } = supabase.storage
-      .from(VOICE_NOTES_BUCKET)
-      .getPublicUrl(record.storage_url);
-
-    return {
+    return data.map((record) => ({
       id: record.id,
       title: record.title,
-      storageUrl: publicUrlData.publicUrl,
-      duration: record.duration_seconds || 0,
-      fileSize: record.file_size_bytes || 0,
-      subject: subjectMaster?.name || "General",
-      gradeSubjectId: record.grade_subject_id,
-      uploadDate: record.created_at,
-    };
-  });
+      storageUrl: record.storageUrl,
+      duration: record.durationSeconds || record.duration || 0,
+      fileSize: record.fileSizeBytes || record.fileSize || 0,
+      subject: record.subject || "General",
+      gradeSubjectId: "", // Not needed for student view
+      uploadDate: record.uploadDate || record.createdAt,
+    }));
+  } catch (error) {
+    console.error("Error fetching student voice notes:", error);
+    throw new Error("Failed to load voice notes.");
+  }
 };

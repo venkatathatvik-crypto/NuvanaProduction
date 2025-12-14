@@ -39,6 +39,7 @@ export {
   getFileCategories,
   getTeacherClasses,
   getGradeSubjectsDetailed,
+  getTeacherSubjectsForClass,
 } from "./classService";
 
 // Re-export from fileService
@@ -108,6 +109,28 @@ export {
   sendAnnouncementEmail,
   sendGradeEmail,
 } from "./emailService";
+
+// Re-export from testService
+export {
+  type QuestionType,
+  type TestQuestion,
+  type TeacherTest,
+  type StudentTest,
+  type CreateTestParams,
+  type StudentTestWithQuestions,
+  type StudentTestQuestion,
+  createTeacherTest,
+  getTeacherTest,
+  getTeacherTests,
+  updateTeacherTest,
+  publishTeacherTest,
+  deleteTeacherTest,
+  getStudentTests,
+  getStudentTestForAttempt,
+  submitStudentTest,
+  getGradeSubjectIdBySubjectName,
+  getExamTypeIdByName,
+} from "./testService";
 
 // Re-export remaining functions from legacy file
 export * from "./academicLegacy";

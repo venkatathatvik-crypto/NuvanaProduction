@@ -61,7 +61,11 @@ export class UsersService {
         schools: true,
         student_details: {
           include: {
-            classes: true,
+            classes: {
+              include: {
+                grade_levels: true,
+              },
+            },
           },
         },
         teacher_details: true,

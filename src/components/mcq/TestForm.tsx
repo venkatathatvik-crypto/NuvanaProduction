@@ -32,6 +32,7 @@ import { Calendar } from "@/components/ui/calendar";
 
 import { Test } from "@/lib/mcq-store";
 import { getTeacherClasses, getExamTypesWithCategory, ExamTypeWithCategory, getSubjects, FlattenedClass } from "@/services/academic";
+import { getTeacherSubjectsForClass } from "@/services/classService";
 import { useAuth } from "@/auth/AuthContext";
 
 const questionSchema = z
@@ -167,16 +168,22 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                     });
 
                     // Preload subjects when editing
-                    if (initialClassId && classesData) {
+                    if (initialClassId && classesData && profile) {
                         const selectedClass = classesData.find(
                             (c) => c.class_id === initialClassId
                         );
                         if (selectedClass) {
                             try {
-                                const subjectsData = await getSubjects(selectedClass.grade_id);
+                                const subjectOptions = await getTeacherSubjectsForClass(
+                                    profile.id,
+                                    selectedClass.class_id,
+                                    selectedClass.grade_id
+                                );
+                                const subjectsData = subjectOptions.map(sub => sub.name);
                                 setSubjects(subjectsData || []);
                             } catch (error) {
                                 // Failed to fetch subjects for initial class
+                                console.error("Error fetching subjects for initial class:", error);
                             }
                         }
                     }
@@ -230,7 +237,20 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
             }
 
             try {
-                const subjectsData = await getSubjects(selectedClass.grade_id);
+                if (!profile) {
+                    setSubjects([]);
+                    return;
+                }
+                
+                // Get teacher's assigned subjects for this class
+                const subjectOptions = await getTeacherSubjectsForClass(
+                    profile.id,
+                    selectedClass.class_id,
+                    selectedClass.grade_id
+                );
+                
+                // Extract subject names for the dropdown
+                const subjectsData = subjectOptions.map(sub => sub.name);
                 setSubjects(subjectsData || []);
 
                 if (initialData && (initialData as any).subject) {
@@ -248,13 +268,14 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                     form.setValue("subject", subjectsData[0]);
                 }
             } catch (error) {
+                console.error("Error fetching subjects:", error);
                 toast.error("Failed to load subjects");
                 setSubjects([]);
             }
         };
 
         fetchSubjectsForClass();
-    }, [selectedClassId, classes, initialData, form]);
+    }, [selectedClassId, classes, initialData, form, profile]);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];

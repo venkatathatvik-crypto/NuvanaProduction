@@ -24,6 +24,7 @@ import {
   type FileCategoryOption,
   type GradeSubjectOption,
 } from "@/services/academic";
+import { getTeacherSubjectsForClass } from "@/services/classService";
 import type { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -127,21 +128,31 @@ const TeacherFiles = () => {
 
   useEffect(() => {
     const fetchUploadSubjects = async () => {
-      if (!uploadClass) {
+      if (!uploadClass || !profile) {
         setUploadSubjects([]);
         setUploadSubjectId("");
         return;
       }
 
       try {
-        const subjectResponse = await getGradeSubjectsDetailed(
+        // Get teacher's assigned subjects for this class
+        const subjectResponse = await getTeacherSubjectsForClass(
+          profile.id,
+          uploadClass.class_id,
           uploadClass.grade_id
         );
-        setUploadSubjects(subjectResponse);
-        setUploadSubjectId(subjectResponse[0]?.id ?? "");
+        
+        if (subjectResponse.length > 0) {
+          setUploadSubjects(subjectResponse);
+          setUploadSubjectId(subjectResponse[0]?.id ?? "");
+        } else {
+          setUploadSubjects([]);
+          setUploadSubjectId("");
+          toast.warning("No subjects assigned to you for this class.");
+        }
       } catch (error) {
         console.error(
-          `Error fetching subjects for upload (Grade ID ${uploadClass.grade_id}):`,
+          `Error fetching subjects for upload (Class: ${uploadClass.class_id}, Grade: ${uploadClass.grade_id}):`,
           error
         );
         setUploadSubjects([]);
@@ -150,7 +161,7 @@ const TeacherFiles = () => {
     };
 
     fetchUploadSubjects();
-  }, [uploadClass]);
+  }, [uploadClass, profile]);
 
   useEffect(() => {
     const fetchFiles = async () => {

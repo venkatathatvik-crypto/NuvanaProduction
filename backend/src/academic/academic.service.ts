@@ -2,7 +2,6 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
-  ForbiddenException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -356,7 +355,14 @@ export class AcademicService {
       where: { teacher_id: teacherId, school_id: schoolId },
       include: {
         classes: {
-          select: { id: true, name: true },
+          select: { 
+            id: true, 
+            name: true,
+            grade_level_id: true,
+            grade_levels: {
+              select: { id: true, name: true },
+            },
+          },
         },
       },
     });
@@ -799,5 +805,52 @@ export class AcademicService {
 
     await this.prisma.timetable_periods.delete({ where: { id } });
     return { message: "Period deleted successfully" };
+  }
+
+  // ==================== HELPER METHODS ====================
+  
+  async getGradeSubjectIdByDetails(
+    classId: string,
+    subjectName: string,
+    schoolId: string,
+  ): Promise<string | null> {
+    // First get the class to get grade_level_id
+    const classData = await this.prisma.classes.findFirst({
+      where: { id: classId, school_id: schoolId },
+      select: { grade_level_id: true },
+    });
+
+    if (!classData) {
+      return null;
+    }
+
+    // Then get grade_subject_id by matching subject name
+    const gradeSubject = await this.prisma.grade_subjects.findFirst({
+      where: {
+        grade_level_id: classData.grade_level_id,
+        school_id: schoolId,
+        subjects_master: {
+          name: subjectName,
+        },
+      },
+      select: { id: true },
+    });
+
+    return gradeSubject?.id || null;
+  }
+
+  async getExamTypeIdByName(
+    examTypeName: string,
+    schoolId: string,
+  ): Promise<number | null> {
+    const examType = await this.prisma.exam_types.findFirst({
+      where: {
+        name: examTypeName,
+        school_id: schoolId,
+      },
+      select: { id: true },
+    });
+
+    return examType?.id || null;
   }
 }
