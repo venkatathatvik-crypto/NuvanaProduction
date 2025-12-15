@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/mockBackend";
+
 
 export interface AiRequestDto {
     taskType: 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
@@ -19,7 +19,7 @@ export interface AiResponseDto {
     rawResponse?: string;
 }
 
-const BACKEND_URL = 'http://localhost:3000'; // Default NestJS port
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
 
 export const aiService = {
     async processRequest(dto: AiRequestDto): Promise<AiResponseDto> {
@@ -40,21 +40,8 @@ export const aiService = {
 
             return await response.json();
         } catch (error) {
-            console.warn("AI Backend unreachable, falling back to mock response.", error);
-
-            // 2. Fallback Mock Response (for UI development/testing without backend)
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve({
-                        title: `Mock ${dto.taskType} Response`,
-                        keyPoints: ["Point 1: Conceptual understanding", "Point 2: Practical application", "Point 3: Critical analysis"],
-                        explanation: `This is a **simulated response** because the backend at ${BACKEND_URL} is offline.\n\nYou asked: *"${dto.query}"*\n\nIn a real scenario, the AI would analyse your mastery profile and RAG context to give a precise answer.`,
-                        personalizedFeedback: "You seem strong in this area, try tackling harder problems!",
-                        followUpQuestion: "How would you apply this concept to a real-world scenario?",
-                        rawResponse: "..."
-                    });
-                }, 1500);
-            });
+            console.error("AI Backend request failed:", error);
+            throw error; // Propagate error to UI instead of faking a success
         }
     }
 };

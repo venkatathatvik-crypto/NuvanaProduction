@@ -5,10 +5,10 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
-    
+
     // Enable CORS
     app.enableCors();
-    
+
     // Global validation pipe - validates all DTOs
     app.useGlobalPipes(
         new ValidationPipe({
@@ -20,12 +20,12 @@ async function bootstrap() {
             },
         }),
     );
-    
+
     // Global JWT authentication guard
     const reflector = app.get(Reflector);
     app.useGlobalGuards(new JwtAuthGuard(reflector));
-    
-    await app.listen(3000);
-    console.log('🚀 Server running on http://localhost:3000');
+
+    await app.listen(4000);
+    console.log('🚀 Server running on http://localhost:4000');
 }
 bootstrap();

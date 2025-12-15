@@ -49,26 +49,39 @@ export class RagService implements OnModuleInit {
 
     async retrieve(query: string, subject: string, classBand: string): Promise<string> {
         if (!this.isConnected) {
-            return "Creating specific context for " + subject + " aimed at " + classBand + " level.";
+            console.warn("Vector DB not connected. RAG disabled.");
+            return "";
         }
 
         // 1. Embed query
         const queryVector = await this.embeddingService.generateEmbedding(query);
+
+        // 🔒 GRACEFUL DEGRADATION: If embeddings are disabled (returns empty array), skip RAG
+        if (!queryVector || queryVector.length === 0) {
+            console.warn('Embeddings unavailable (Gemini-only mode). Skipping RAG retrieval.');
+            return "";
+        }
+
         const vectorStr = `[${queryVector.join(',')}]`;
 
         // 2. Search (Cosine similarity)
         // Filter by subject if stored in metadata (assumed)
-        const result = await this.pool.query(
-            `SELECT content, 1 - (embedding <=> $1) as similarity 
-         FROM documents 
-         WHERE metadata->>'subject' = $2
-         ORDER BY similarity DESC 
-         LIMIT 3`,
-            [vectorStr, subject]
-        );
+        try {
+            const result = await this.pool.query(
+                `SELECT content, 1 - (embedding <=> $1) as similarity 
+             FROM documents 
+             WHERE metadata->>'subject' = $2
+             ORDER BY similarity DESC 
+             LIMIT 3`,
+                [vectorStr, subject]
+            );
 
-        if (result.rows.length === 0) return "";
+            if (result.rows.length === 0) return "";
 
-        return result.rows.map(r => r.content).join('\n\n');
+            return result.rows.map(r => r.content).join('\n\n');
+        } catch (error) {
+            console.error('RAG database query failed:', error);
+            return "";
+        }
     }
 }
