@@ -10,6 +10,8 @@ import { useAuth } from '@/auth/AuthContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import VoiceModeOverlay from './VoiceModeOverlay';
 import { toast } from 'sonner';
+import { getStudentData } from '@/services/studentDataService';
+import { getSubjects } from '@/services/classService';
 
 const ACTION_MODES = [
     { id: 'start', label: 'Ask Anything', icon: Sparkles, color: 'text-neon-purple', desc: 'General queries' },
@@ -30,6 +32,10 @@ const AiTutorChat = () => {
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
+
+    // Subject Selection State
+    const [subjects, setSubjects] = useState<string[]>([]);
+    const [selectedSubject, setSelectedSubject] = useState<string>('');
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
@@ -91,6 +97,30 @@ const AiTutorChat = () => {
         }
     }, [profile]);
 
+    // Load Subjects for Student
+    useEffect(() => {
+        const loadSubjects = async () => {
+            // Check if user is student (profile role might need verification, assuming 'student' for now or just checking id)
+            if (profile?.id) {
+                try {
+                    console.log("AiTutorChat: Fetching student data for", profile.id);
+                    const studentData = await getStudentData(profile.id);
+                    console.log("AiTutorChat: Received studentData", studentData);
+                    if (studentData?.grade_id) {
+                        const subs = await getSubjects(studentData.grade_id);
+                        console.log("AiTutorChat: Received subjects", subs);
+                        setSubjects(subs);
+                    } else {
+                        console.warn("AiTutorChat: No grade_id found in studentData");
+                    }
+                } catch (err) {
+                    console.error("Failed to load subjects", err);
+                }
+            }
+        };
+        loadSubjects();
+    }, [profile]);
+
     const startListening = () => {
         if (recognitionRef.current) {
             try {
@@ -147,7 +177,7 @@ const AiTutorChat = () => {
                 taskType: taskType,
                 query: userMsg.content,
                 studentId: profile?.id,
-                // subject: "Math", // We could infer this from current page context in a real app
+                subject: selectedSubject || undefined, // Use selected subject
                 classBand: 'middle', // Could be dynamic from profile
             });
 
@@ -214,6 +244,22 @@ const AiTutorChat = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* Subject Selector - Always visible */}
+                        <select
+                            value={selectedSubject}
+                            onChange={(e) => setSelectedSubject(e.target.value)}
+                            className="h-8 max-w-[120px] rounded-md border border-border bg-background/50 px-2 text-xs focus:outline-none focus:border-primary transition-colors truncate"
+                        >
+                            <option value="">General Subject</option>
+                            {subjects.length > 0 ? (
+                                subjects.map(sub => (
+                                    <option key={sub} value={sub}>{sub}</option>
+                                ))
+                            ) : (
+                                <option disabled>No subjects found</option>
+                            )}
+                        </select>
+
                         {/* Voice Mode Toggle */}
                         <Button
                             variant="ghost"
