@@ -159,7 +159,8 @@ export class AuthService {
     }
 
     // Check if first-time login - AFTER role validation
-    if ((user as any).is_first_login) {
+    // Skip password reset requirement for super_admin
+    if ((user as any).is_first_login && userRole !== 'super_admin') {
       throw new ForbiddenException({
         statusCode: 403,
         message: "Password reset required",

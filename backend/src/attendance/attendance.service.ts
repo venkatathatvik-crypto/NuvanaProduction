@@ -50,12 +50,18 @@ export class AttendanceService {
       return 0;
     });
 
-    return sortedStudents.map((student) => ({
+    const result = sortedStudents.map((student) => ({
       id: student.id,
       name: student.name || 'Unknown Student',
       roll_number: student.student_details?.roll_number || '',
       present: false,
     }));
+
+    console.log(`[Attendance Service] Returning ${result.length} students with roll numbers:`, 
+      result.map(s => ({ name: s.name, roll_number: s.roll_number }))
+    );
+
+    return result;
   }
 
   async getAttendanceForDate(

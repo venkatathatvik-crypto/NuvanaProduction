@@ -31,7 +31,7 @@ export class AiRequestDto {
 
     @IsString()
     @IsOptional()
-    classBand?: string; // e.g., 'primary', 'middle', 'high', 'advanced'
+    classBand?: string; // DEPRECATED: Auto-determined from student's grade in backend. Kept for backward compatibility only.
 
     @IsString()
     @IsOptional()

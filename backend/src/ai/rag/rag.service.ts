@@ -259,23 +259,83 @@ export class RagService implements OnModuleInit {
                 return "";
             }
 
-            // Filter by similarity threshold (only return highly relevant results)
-            const relevantChunks = result.rows
-                .filter(row => {
-                    const similarity = parseFloat(row.similarity);
-                    console.log(`[RAG] Chunk similarity: ${(similarity * 100).toFixed(1)}%`);
-                    return similarity > 0.7; // 70% similarity threshold
-                })
-                .map(row => row.content);
+            // Print all extracted documents with details
+            console.log(`[RAG] ========================================`);
+            console.log(`[RAG] 📄 EXTRACTED DOCUMENTS (${result.rows.length} total):`);
+            console.log(`[RAG] ========================================`);
+            
+            result.rows.forEach((row, index) => {
+                const similarity = parseFloat(row.similarity);
+                const similarityPercent = (similarity * 100).toFixed(1);
+                console.log(`[RAG] ─────────────────────────────────────`);
+                console.log(`[RAG] Document ${index + 1}:`);
+                console.log(`[RAG]   Similarity: ${similarityPercent}%`);
+                console.log(`[RAG]   Content Length: ${row.content.length} characters`);
+                console.log(`[RAG]   Content Preview: ${row.content.substring(0, 200)}${row.content.length > 200 ? '...' : ''}`);
+                console.log(`[RAG]   Full Content:`);
+                console.log(`[RAG]   ${row.content}`);
+                console.log(`[RAG] ─────────────────────────────────────`);
+            });
 
+            // Filter by similarity threshold (only return highly relevant results)
+            const chunksWithSimilarity = result.rows.map(row => ({
+                content: row.content,
+                similarity: parseFloat(row.similarity),
+            }));
+
+            // Log similarity for each chunk
+            chunksWithSimilarity.forEach((chunk, index) => {
+                const similarityPercent = (chunk.similarity * 100).toFixed(1);
+                console.log(`[RAG] Chunk ${index + 1} similarity: ${similarityPercent}% ${chunk.similarity > 0.7 ? '✅ (above threshold)' : '❌ (below 70% threshold)'}`);
+            });
+
+            // Filter chunks above 70% threshold
+            let relevantChunks = chunksWithSimilarity
+                .filter(chunk => chunk.similarity > 0.7)
+                .map(chunk => chunk.content);
+
+            let usedFallback = false;
+
+            // If no chunks above 70%, use the chunk with highest similarity
             if (relevantChunks.length === 0) {
                 console.log(`[RAG] ⚠️ No documents above 70% similarity threshold`);
-                return "";
+                
+                // Find the chunk with highest similarity
+                const bestChunk = chunksWithSimilarity.reduce((best, current) => 
+                    current.similarity > best.similarity ? current : best
+                );
+                
+                const bestSimilarityPercent = (bestChunk.similarity * 100).toFixed(1);
+                console.log(`[RAG] 📌 Using best available chunk with ${bestSimilarityPercent}% similarity (below 70% threshold)`);
+                console.log(`[RAG] ⚠️ Note: This chunk may be less relevant to the query`);
+                
+                relevantChunks = [bestChunk.content];
+                usedFallback = true;
             }
 
-            console.log(`[RAG] ✅ Retrieved ${relevantChunks.length} relevant document chunks`);
+            console.log(`[RAG] ========================================`);
+            const thresholdStatus = usedFallback 
+                ? 'best available (below 70% threshold)' 
+                : 'above 70% threshold';
+            console.log(`[RAG] ✅ Retrieved ${relevantChunks.length} relevant document chunk(s) (${thresholdStatus})`);
+            console.log(`[RAG] ========================================`);
+            console.log(`[RAG] 📝 RELEVANT DOCUMENTS CONTENT:`);
+            console.log(`[RAG] ========================================`);
+            
+            relevantChunks.forEach((chunk, index) => {
+                console.log(`[RAG] ─────────────────────────────────────`);
+                console.log(`[RAG] Relevant Chunk ${index + 1} (${chunk.length} chars):`);
+                console.log(`[RAG] ${chunk}`);
+                console.log(`[RAG] ─────────────────────────────────────`);
+            });
+
             const combinedContent = relevantChunks.join('\n\n');
-            console.log(`[RAG] Combined content length: ${combinedContent.length} characters`);
+            console.log(`[RAG] ========================================`);
+            console.log(`[RAG] 📋 COMBINED CONTENT (${combinedContent.length} characters):`);
+            console.log(`[RAG] ========================================`);
+            console.log(`[RAG] ${combinedContent}`);
+            console.log(`[RAG] ========================================`);
+            
             return combinedContent;
         } catch (error) {
             console.error(`[RAG] ❌ Database query failed:`, error);

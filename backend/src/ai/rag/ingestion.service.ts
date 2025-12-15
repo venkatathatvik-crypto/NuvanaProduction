@@ -32,9 +32,9 @@ export class IngestionService {
         try {
             // 1. Extract Text from PDF
             console.log(`[PDF Processing] Step 1: Extracting text from PDF...`);
-            const data = await pdf(buffer);
+        const data = await pdf(buffer);
             let fullText = data.text.trim();
-            
+
             // Clean text: Remove null bytes and other invalid UTF-8 characters
             fullText = fullText.replace(/\0/g, ''); // Remove null bytes
             fullText = fullText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Remove other control characters
@@ -59,7 +59,7 @@ export class IngestionService {
 
             // 3. Generate Embeddings & Store
             console.log(`[PDF Processing] Step 3: Generating embeddings and storing chunks...`);
-            let processedCount = 0;
+        let processedCount = 0;
             let skippedCount = 0;
 
             for (let i = 0; i < chunks.length; i++) {
@@ -68,14 +68,14 @@ export class IngestionService {
 
                 try {
                     // Generate embedding
-                    const vector = await this.embeddingService.generateEmbedding(chunk);
+            const vector = await this.embeddingService.generateEmbedding(chunk);
 
                     // Graceful degradation: Skip if embeddings unavailable
-                    if (!vector || vector.length === 0) {
+            if (!vector || vector.length === 0) {
                         console.warn(`[PDF Processing] ⚠️ Embedding unavailable for chunk ${i + 1}, skipping...`);
                         skippedCount++;
-                        continue;
-                    }
+                continue;
+            }
 
                     console.log(`[PDF Processing] ✓ Generated embedding (${vector.length} dimensions) for chunk ${i + 1}`);
 
@@ -88,7 +88,7 @@ export class IngestionService {
                     };
 
                     await this.ragService.storeVector(vector, chunk, chunkMetadata);
-                    processedCount++;
+            processedCount++;
 
                     console.log(`[PDF Processing] ✓ Stored chunk ${i + 1}/${chunks.length} in vector database`);
 
@@ -108,9 +108,9 @@ export class IngestionService {
             console.log(`[PDF Processing] Summary: ${processedCount} processed, ${skippedCount} skipped, ${chunks.length} total`);
             console.log(`[PDF Processing] Duration: ${duration}ms`);
 
-            return {
-                chunksProcessed: processedCount,
-                totalChunks: chunks.length,
+        return {
+            chunksProcessed: processedCount,
+            totalChunks: chunks.length,
                 skipped: skippedCount,
             };
         } catch (error) {
@@ -150,7 +150,7 @@ export class IngestionService {
             // Stop if we've covered all words
             if (i + chunkSizeWords >= totalWords) {
                 break;
-            }
+        }
         }
 
         console.log(`[PDF Processing] Created ${chunks.length} chunks from ${totalWords} words`);

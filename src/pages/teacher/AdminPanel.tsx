@@ -67,14 +67,18 @@ export default function AdminPanel() {
   const [selectedGrade, setSelectedGrade] = useState<string>("");
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [selectedTeacher, setSelectedTeacher] = useState<string>("");
+  const [filterGradeForClasses, setFilterGradeForClasses] = useState<string>("");
 
   // Student-Class Assignment
-  const [selectedStudent, setSelectedStudent] = useState<string>("");
-  const [selectedClassForStudent, setSelectedClassForStudent] =
-    useState<string>("");
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [selectedClassesForStudents, setSelectedClassesForStudents] =
+    useState<string[]>([]);
   const [studentAssignSearch, setStudentAssignSearch] = useState("");
 
   // Teacher-Class Assignment
+  const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
+  const [selectedClassesForTeachers, setSelectedClassesForTeachers] =
+    useState<string[]>([]);
   const [teacherAssignSearch, setTeacherAssignSearch] = useState("");
   // Subject-Grade Assignment
   const [selectedGradeForSubject, setSelectedGradeForSubject] =
@@ -104,7 +108,7 @@ export default function AdminPanel() {
   );
   const [isCreatingMember, setIsCreatingMember] = useState(false);
 
-  // CSV Import
+  // CSV Import for Members
   const [csvImportType, setCsvImportType] = useState<"teacher" | "student">(
     "student"
   );
@@ -117,9 +121,30 @@ export default function AdminPanel() {
     errors: Array<{ row: number; email: string; error: string }>;
   } | null>(null);
 
+  // CSV Import for Subjects
+  const [isImportingSubjects, setIsImportingSubjects] = useState(false);
+  const [subjectImportProgress, setSubjectImportProgress] = useState<{
+    total: number;
+    current: number;
+    success: number;
+    failed: number;
+    errors: Array<{ row: number; name: string; error: string }>;
+  } | null>(null);
+
+  // CSV Import for Classes
+  const [isImportingClasses, setIsImportingClasses] = useState(false);
+  const [classImportProgress, setClassImportProgress] = useState<{
+    total: number;
+    current: number;
+    success: number;
+    failed: number;
+    errors: Array<{ row: number; name: string; error: string }>;
+  } | null>(null);
+
   // Edit states
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Loading states for assignments
   const [assigningStudent, setAssigningStudent] = useState(false);
@@ -132,6 +157,7 @@ export default function AdminPanel() {
   const [addingExamType, setAddingExamType] = useState(false);
   const [assigningSubjectsToGrade, setAssigningSubjectsToGrade] =
     useState(false);
+  const [addingPeriod, setAddingPeriod] = useState(false);
 
   // Timetable states
   const [selectedTimetableClass, setSelectedTimetableClass] =
@@ -257,57 +283,258 @@ export default function AdminPanel() {
     }
   };
 
-  const assignTeacher = async () => {
-    if (!selectedTeacher || !selectedClass) {
-      toast.error("Please select both teacher and class");
+  const handleClassCsvImport = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
+      toast.error("Please upload a CSV file");
+      event.target.value = "";
+      return;
+    }
+
+    setIsImportingClasses(true);
+    setClassImportProgress(null);
+
+    try {
+      const text = await file.text();
+      const lines = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line);
+
+      if (lines.length < 2) {
+        toast.error("CSV file must have at least a header and one data row");
+        setIsImportingClasses(false);
+        event.target.value = "";
+        return;
+      }
+
+      // Parse header
+      const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const nameIndex = header.findIndex(
+        (h) => h === "name" || h === "class" || h === "class_name"
+      );
+      const gradeIdIndex = header.findIndex(
+        (h) => h === "grade_id" || h === "gradeid"
+      );
+      const gradeNameIndex = header.findIndex(
+        (h) => h === "grade" || h === "grade_name" || h === "gradename"
+      );
+
+      if (nameIndex === -1) {
+        toast.error("CSV must have a 'name' or 'class' column");
+        setIsImportingClasses(false);
+        event.target.value = "";
+        return;
+      }
+
+      if (gradeIdIndex === -1 && gradeNameIndex === -1) {
+        toast.error("CSV must have a 'grade_id' or 'grade' column");
+        setIsImportingClasses(false);
+        event.target.value = "";
+        return;
+      }
+
+      // Parse data rows
+      const classData = lines
+        .slice(1)
+        .map((line, index) => {
+          const values = line.split(",").map((v) => v.trim());
+          return {
+            row: index + 2, // +2 because index 0 is header and we're 0-indexed
+            name: values[nameIndex] || "",
+            gradeId: gradeIdIndex !== -1 ? values[gradeIdIndex] : undefined,
+            gradeName: gradeNameIndex !== -1 ? values[gradeNameIndex] : undefined,
+          };
+        })
+        .filter((cls) => cls.name && cls.name.length > 0); // Filter out empty rows
+
+      if (classData.length === 0) {
+        toast.error("No valid class data found in CSV");
+        setIsImportingClasses(false);
+        event.target.value = "";
+        return;
+      }
+
+      // Initialize progress
+      setClassImportProgress({
+        total: classData.length,
+        current: 0,
+        success: 0,
+        failed: 0,
+        errors: [],
+      });
+
+      // Create classes one by one
+      let successCount = 0;
+      let failedCount = 0;
+      const errors: Array<{ row: number; name: string; error: string }> = [];
+
+      for (let i = 0; i < classData.length; i++) {
+        const classItem = classData[i];
+        try {
+          let gradeId: number;
+
+          // If grade_id is provided, use it directly
+          if (classItem.gradeId) {
+            gradeId = parseInt(classItem.gradeId, 10);
+            if (isNaN(gradeId)) {
+              throw new Error(`Invalid grade_id: ${classItem.gradeId}`);
+            }
+          } else if (classItem.gradeName) {
+            // If grade_name is provided, find the grade by name
+            const grade = grades.find(
+              (g) => g.name.toLowerCase() === classItem.gradeName?.toLowerCase()
+            );
+            if (!grade) {
+              throw new Error(`Grade not found: ${classItem.gradeName}`);
+            }
+            gradeId = grade.id;
+          } else {
+            throw new Error("Either grade_id or grade_name must be provided");
+          }
+
+          await academicService.createClass(classItem.name.trim(), gradeId);
+          successCount++;
+        } catch (error: any) {
+          failedCount++;
+          errors.push({
+            row: classItem.row,
+            name: classItem.name,
+            error: error.message || "Unknown error",
+          });
+        }
+
+        // Update progress
+        setClassImportProgress({
+          total: classData.length,
+          current: i + 1,
+          success: successCount,
+          failed: failedCount,
+          errors,
+        });
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // Show final results
+      if (successCount > 0) {
+        toast.success(`Successfully created ${successCount} class(es)`);
+      }
+      if (failedCount > 0) {
+        toast.error(
+          `Failed to create ${failedCount} class(es). Check details below.`
+        );
+      }
+
+      fetchSchoolData();
+    } catch (error: any) {
+      console.error("Class CSV Import Error:", error);
+      toast.error("Failed to process CSV file");
+    } finally {
+      setIsImportingClasses(false);
+      // Reset file input
+      event.target.value = "";
+    }
+  };
+
+  const assignTeachers = async () => {
+    if (selectedTeachers.length === 0 || selectedClassesForTeachers.length === 0) {
+      toast.error("Please select at least one teacher and one class");
       return;
     }
 
     setAssigningTeacher(true);
+    let successCount = 0;
+    let failedCount = 0;
+
     try {
-      await academicService.assignTeacherToClass(
-        selectedTeacher,
-        selectedClass
-      );
-      toast.success("Teacher assigned to class");
-      setSelectedTeacher("");
-      setSelectedClass("");
-      setTeacherAssignSearch(""); // Reset search
+      // Assign each teacher to each selected class
+      for (const teacherId of selectedTeachers) {
+        for (const classId of selectedClassesForTeachers) {
+          try {
+            // Check if already assigned
+            const isAlreadyAssigned = teacherClasses.some(
+              (tc) => tc.teacher_id === teacherId && tc.class_id === classId
+            );
+
+            if (!isAlreadyAssigned) {
+              await academicService.assignTeacherToClass(teacherId, classId);
+              successCount++;
+            }
+          } catch (error: any) {
+            failedCount++;
+            console.error(`Failed to assign teacher ${teacherId} to class ${classId}:`, error);
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully assigned ${successCount} teacher-class combination(s)`);
+      }
+      if (failedCount > 0) {
+        toast.error(`Failed to assign ${failedCount} combination(s). Some may already be assigned.`);
+      }
+
+      setSelectedTeachers([]);
+      setSelectedClassesForTeachers([]);
+      setTeacherAssignSearch("");
       fetchSchoolData();
     } catch (error: any) {
-      // Backend handles duplicate checking
-      toast.error(error.message || "Failed to assign teacher");
+      toast.error(error.message || "Failed to assign teachers");
     } finally {
       setAssigningTeacher(false);
     }
   };
 
-  const assignStudentToClass = async () => {
-    if (!selectedStudent || !selectedClassForStudent) {
-      toast.error("Select both student and class");
-      return;
-    }
-
-    // Check if student is already assigned to this class
-    const student = students.find((s) => s.id === selectedStudent);
-    if (student?.student_details?.class_id === selectedClassForStudent) {
-      toast.error("Student is already assigned to this class");
+  const assignStudentsToClasses = async () => {
+    if (selectedStudents.length === 0 || selectedClassesForStudents.length === 0) {
+      toast.error("Select at least one student and one class");
       return;
     }
 
     setAssigningStudent(true);
+    let successCount = 0;
+    let failedCount = 0;
+
     try {
-      await userService.assignStudentToClass(
-        selectedStudent,
-        selectedClassForStudent
-      );
-      toast.success("Student assigned to class");
-      setSelectedStudent("");
-      setSelectedClassForStudent("");
-      setStudentAssignSearch(""); // Reset search
+      // Assign each student to each selected class
+      for (const studentId of selectedStudents) {
+        for (const classId of selectedClassesForStudents) {
+          try {
+            // Check if student is already assigned to this class
+            const student = students.find((s) => s.id === studentId);
+            if (student?.student_details?.class_id === classId) {
+              // Already assigned, skip
+              continue;
+            }
+
+            await userService.assignStudentToClass(studentId, classId);
+            successCount++;
+          } catch (error: any) {
+            failedCount++;
+            console.error(`Failed to assign student ${studentId} to class ${classId}:`, error);
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully assigned ${successCount} student-class combination(s)`);
+      }
+      if (failedCount > 0) {
+        toast.error(`Failed to assign ${failedCount} combination(s). Some may already be assigned.`);
+      }
+
+      setSelectedStudents([]);
+      setSelectedClassesForStudents([]);
+      setStudentAssignSearch("");
       fetchSchoolData();
     } catch (error: any) {
-      toast.error(error.message || "Failed to assign student to class");
+      toast.error(error.message || "Failed to assign students");
     } finally {
       setAssigningStudent(false);
     }
@@ -390,6 +617,129 @@ export default function AdminPanel() {
     }
   };
 
+  const handleSubjectCsvImport = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
+      toast.error("Please upload a CSV file");
+      event.target.value = "";
+      return;
+    }
+
+    setIsImportingSubjects(true);
+    setSubjectImportProgress(null);
+
+    try {
+      const text = await file.text();
+      const lines = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line);
+
+      if (lines.length < 2) {
+        toast.error("CSV file must have at least a header and one data row");
+        setIsImportingSubjects(false);
+        event.target.value = "";
+        return;
+      }
+
+      // Parse header
+      const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const nameIndex = header.findIndex(
+        (h) => h === "name" || h === "subject" || h === "subject_name"
+      );
+
+      if (nameIndex === -1) {
+        toast.error("CSV must have a 'name' or 'subject' column");
+        setIsImportingSubjects(false);
+        event.target.value = "";
+        return;
+      }
+
+      // Parse data rows
+      const subjectNames = lines
+        .slice(1)
+        .map((line, index) => {
+          const values = line.split(",").map((v) => v.trim());
+          return {
+            row: index + 2, // +2 because index 0 is header and we're 0-indexed
+            name: values[nameIndex] || "",
+          };
+        })
+        .filter((subject) => subject.name && subject.name.length > 0); // Filter out empty rows
+
+      if (subjectNames.length === 0) {
+        toast.error("No valid subject data found in CSV");
+        setIsImportingSubjects(false);
+        event.target.value = "";
+        return;
+      }
+
+      // Initialize progress
+      setSubjectImportProgress({
+        total: subjectNames.length,
+        current: 0,
+        success: 0,
+        failed: 0,
+        errors: [],
+      });
+
+      // Create subjects one by one
+      let successCount = 0;
+      let failedCount = 0;
+      const errors: Array<{ row: number; name: string; error: string }> = [];
+
+      for (let i = 0; i < subjectNames.length; i++) {
+        const subject = subjectNames[i];
+        try {
+          await academicService.createSubject(subject.name.trim());
+          successCount++;
+        } catch (error: any) {
+          failedCount++;
+          errors.push({
+            row: subject.row,
+            name: subject.name,
+            error: error.message || "Unknown error",
+          });
+        }
+
+        // Update progress
+        setSubjectImportProgress({
+          total: subjectNames.length,
+          current: i + 1,
+          success: successCount,
+          failed: failedCount,
+          errors,
+        });
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // Show final results
+      if (successCount > 0) {
+        toast.success(`Successfully created ${successCount} subject(s)`);
+      }
+      if (failedCount > 0) {
+        toast.error(
+          `Failed to create ${failedCount} subject(s). Check details below.`
+        );
+      }
+
+      fetchSchoolData();
+    } catch (error: any) {
+      console.error("Subject CSV Import Error:", error);
+      toast.error("Failed to process CSV file");
+    } finally {
+      setIsImportingSubjects(false);
+      // Reset file input
+      event.target.value = "";
+    }
+  };
+
   const addFileCategory = async () => {
     if (!newFileCategory.trim()) {
       toast.error("Please enter a category name");
@@ -440,13 +790,28 @@ export default function AdminPanel() {
     try {
       const roleId = newMemberType === "teacher" ? 3 : 4; // 3 = teacher, 4 = student
 
-      await userService.createUser({
+      // Create the user
+      const createdUser = await userService.createUser({
         email: newMemberEmail,
         name: newMemberName,
         role_id: roleId,
         school_id: profile?.school_id,
         temporaryPassword: newMemberPassword,
       });
+
+      // If student and roll number provided, save student details
+      if (newMemberType === "student" && newMemberRollNo.trim()) {
+        try {
+          await userService.updateStudentDetails(createdUser.id, {
+            roll_number: newMemberRollNo.trim(),
+          });
+          console.log(`[AdminPanel] Roll number saved for student: ${createdUser.id}`);
+        } catch (rollNumberError: any) {
+          console.error("Error saving roll number:", rollNumberError);
+          // Don't fail the entire operation if roll number save fails
+          toast.warning("User created but roll number could not be saved. You can update it later.");
+        }
+      }
 
       toast.success(
         `${newMemberType === "teacher" ? "Teacher" : "Student"
@@ -575,13 +940,27 @@ export default function AdminPanel() {
         try {
           const roleId = csvImportType === "teacher" ? 3 : 4;
 
-          await userService.createUser({
+          // Create the user
+          const createdUser = await userService.createUser({
             email: user.email,
             name: user.name,
             role_id: roleId,
             school_id: profile?.school_id,
             temporaryPassword: user.password,
           });
+
+          // If student and roll number provided, save student details
+          if (csvImportType === "student" && user.roll_number?.trim()) {
+            try {
+              await userService.updateStudentDetails(createdUser.id, {
+                roll_number: user.roll_number.trim(),
+              });
+              console.log(`[AdminPanel] Roll number saved for student: ${createdUser.id}`);
+            } catch (rollNumberError: any) {
+              console.error(`Error saving roll number for ${user.email}:`, rollNumberError);
+              // Don't fail the entire operation if roll number save fails
+            }
+          }
 
           successCount++;
         } catch (error: any) {
@@ -689,6 +1068,7 @@ export default function AdminPanel() {
   const saveEdit = async () => {
     if (!editingItem) return;
 
+    setSavingEdit(true);
     try {
       switch (editingItem.type) {
         case "grade_levels":
@@ -716,6 +1096,8 @@ export default function AdminPanel() {
       fetchSchoolData();
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -746,6 +1128,7 @@ export default function AdminPanel() {
       return;
     }
 
+    setAddingPeriod(true);
     try {
       await academicService.createOrUpdatePeriod({
         class_id: selectedTimetableClass,
@@ -764,6 +1147,8 @@ export default function AdminPanel() {
     } catch (error: any) {
       console.error("Error saving period:", error);
       toast.error(error.message || "Failed to save period");
+    } finally {
+      setAddingPeriod(false);
     }
   };
 
@@ -953,9 +1338,22 @@ export default function AdminPanel() {
                     onChange={(e) => setNewGrade(e.target.value)}
                     className="flex-1 sm:w-48"
                   />
-                  <Button onClick={addGrade} className="shrink-0">
-                    <Plus className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Add Grade</span>
+                  <Button 
+                    onClick={addGrade} 
+                    className="shrink-0"
+                    disabled={addingGrade}
+                  >
+                    {addingGrade ? (
+                      <>
+                        <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+                        <span className="hidden sm:inline">Adding...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Add Grade</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -996,8 +1394,16 @@ export default function AdminPanel() {
                         <td className="p-2 text-right">
                           {editingItem?.id === grade.id ? (
                             <div className="flex gap-2 justify-end">
-                              <Button size="sm" onClick={saveEdit}>
-                                <Save className="w-4 h-4" />
+                              <Button 
+                                size="sm" 
+                                onClick={saveEdit}
+                                disabled={savingEdit}
+                              >
+                                {savingEdit ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Save className="w-4 h-4" />
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -1039,36 +1445,164 @@ export default function AdminPanel() {
           {/* Classes Tab */}
           <TabsContent value="classes">
             <Card className="glass-card p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
-                <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
-                  <School className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />{" "}
-                  Classes
-                </h2>
-                <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-4 mb-4 sm:mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h2 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+                    <School className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />{" "}
+                    Classes
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      className="bg-muted border border-border rounded-md h-10 px-3 text-sm flex-1 sm:flex-none"
+                      value={selectedGrade}
+                      onChange={(e) => setSelectedGrade(e.target.value)}
+                    >
+                      <option value="">Select Grade</option>
+                      {grades.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      placeholder="e.g. 10-A"
+                      value={newClass}
+                      onChange={(e) => setNewClass(e.target.value)}
+                      className="flex-1 sm:w-32"
+                    />
+                    <Button 
+                      onClick={addClass} 
+                      className="shrink-0"
+                      disabled={addingClass}
+                    >
+                      {addingClass ? (
+                        <>
+                          <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+                          <span className="hidden sm:inline">Adding...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Add</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {/* Filter by Grade */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium whitespace-nowrap">Filter by Grade:</label>
                   <select
-                    className="bg-muted border border-border rounded-md h-10 px-3 text-sm flex-1 sm:flex-none"
-                    value={selectedGrade}
-                    onChange={(e) => setSelectedGrade(e.target.value)}
+                    className="bg-muted border border-border rounded-md h-10 px-3 text-sm flex-1 sm:flex-none sm:w-48"
+                    value={filterGradeForClasses}
+                    onChange={(e) => setFilterGradeForClasses(e.target.value)}
                   >
-                    <option value="">Select Grade</option>
+                    <option value="">All Grades</option>
                     {grades.map((g) => (
-                      <option key={g.id} value={g.id}>
+                      <option key={g.id} value={g.id.toString()}>
                         {g.name}
                       </option>
                     ))}
                   </select>
-                  <Input
-                    placeholder="e.g. 10-A"
-                    value={newClass}
-                    onChange={(e) => setNewClass(e.target.value)}
-                    className="flex-1 sm:w-32"
-                  />
-                  <Button onClick={addClass} className="shrink-0">
-                    <Plus className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Add</span>
-                  </Button>
+                  {filterGradeForClasses && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFilterGradeForClasses("")}
+                      className="shrink-0"
+                    >
+                      Clear Filter
+                    </Button>
+                  )}
                 </div>
               </div>
+
+              {/* CSV Import Section */}
+              <div className="mb-4 pt-4 border-t border-border">
+                <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-primary" /> Import from CSV
+                </h3>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    CSV Format: name (or class, class_name), grade_id (or grade, grade_name)
+                  </p>
+                  <label className="block">
+                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-secondary/20 transition">
+                      <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm font-medium">
+                        {isImportingClasses ? "Importing..." : "Upload CSV File"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        or drag and drop
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleClassCsvImport}
+                      disabled={isImportingClasses}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {isImportingClasses && classImportProgress && (
+                  <div className="space-y-2 p-3 bg-secondary/10 rounded-lg mt-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress:</span>
+                      <span>
+                        {classImportProgress.current} / {classImportProgress.total}
+                      </span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all"
+                        style={{
+                          width: `${(classImportProgress.current / classImportProgress.total) *
+                            100
+                            }%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span className="text-green-500">
+                        ✓ {classImportProgress.success}
+                      </span>
+                      <span className="text-red-500">
+                        ✗ {classImportProgress.failed}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!isImportingClasses &&
+                  classImportProgress &&
+                  classImportProgress.errors.length > 0 && (
+                    <div className="space-y-2 max-h-48 overflow-y-auto p-3 bg-destructive/10 rounded-lg mt-2">
+                      <p className="text-sm font-medium text-destructive">
+                        Errors:
+                      </p>
+                      {classImportProgress.errors.slice(0, 10).map((err, idx) => (
+                        <div
+                          key={idx}
+                          className="text-xs p-2 bg-background rounded"
+                        >
+                          <p className="font-medium">
+                            Row {err.row}: {err.name}
+                          </p>
+                          <p className="text-muted-foreground">{err.error}</p>
+                        </div>
+                      ))}
+                      {classImportProgress.errors.length > 10 && (
+                        <p className="text-xs text-muted-foreground text-center">
+                          ... and {classImportProgress.errors.length - 10} more
+                          errors
+                        </p>
+                      )}
+                    </div>
+                  )}
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -1080,7 +1614,12 @@ export default function AdminPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {classes.map((cls) => (
+                    {classes
+                      .filter((cls) => {
+                        if (!filterGradeForClasses) return true;
+                        return cls.grade_level_id?.toString() === filterGradeForClasses;
+                      })
+                      .map((cls) => (
                       <tr
                         key={cls.id}
                         className="border-b border-border/50 hover:bg-secondary/20"
@@ -1102,7 +1641,19 @@ export default function AdminPanel() {
                           </Button>
                         </td>
                       </tr>
-                    ))}
+                      ))}
+                    {classes.filter((cls) => {
+                      if (!filterGradeForClasses) return true;
+                      return cls.grade_level_id?.toString() === filterGradeForClasses;
+                    }).length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                          {filterGradeForClasses
+                            ? "No classes found for the selected grade"
+                            : "No classes found"}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1122,8 +1673,15 @@ export default function AdminPanel() {
                     value={newSubject}
                     onChange={(e) => setNewSubject(e.target.value)}
                   />
-                  <Button onClick={addSubject}>
-                    <Plus className="w-4 h-4" />
+                  <Button 
+                    onClick={addSubject}
+                    disabled={addingSubject}
+                  >
+                    {addingSubject ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -1144,6 +1702,92 @@ export default function AdminPanel() {
                       </Button>
                     </div>
                   ))}
+                </div>
+
+                {/* CSV Import Section */}
+                <div className="mt-4 pt-4 border-t border-border">
+                  <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-primary" /> Import from CSV
+                  </h3>
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      CSV Format: name (or subject, subject_name)
+                    </p>
+                    <label className="block">
+                      <div className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-secondary/20 transition">
+                        <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm font-medium">
+                          {isImportingSubjects ? "Importing..." : "Upload CSV File"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          or drag and drop
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleSubjectCsvImport}
+                        disabled={isImportingSubjects}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {isImportingSubjects && subjectImportProgress && (
+                    <div className="space-y-2 p-3 bg-secondary/10 rounded-lg mt-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Progress:</span>
+                        <span>
+                          {subjectImportProgress.current} / {subjectImportProgress.total}
+                        </span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all"
+                          style={{
+                            width: `${(subjectImportProgress.current / subjectImportProgress.total) *
+                              100
+                              }%`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span className="text-green-500">
+                          ✓ {subjectImportProgress.success}
+                        </span>
+                        <span className="text-red-500">
+                          ✗ {subjectImportProgress.failed}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isImportingSubjects &&
+                    subjectImportProgress &&
+                    subjectImportProgress.errors.length > 0 && (
+                      <div className="space-y-2 max-h-48 overflow-y-auto p-3 bg-destructive/10 rounded-lg mt-2">
+                        <p className="text-sm font-medium text-destructive">
+                          Errors:
+                        </p>
+                        {subjectImportProgress.errors.slice(0, 10).map((err, idx) => (
+                          <div
+                            key={idx}
+                            className="text-xs p-2 bg-background rounded"
+                          >
+                            <p className="font-medium">
+                              Row {err.row}: {err.name}
+                            </p>
+                            <p className="text-muted-foreground">{err.error}</p>
+                          </div>
+                        ))}
+                        {subjectImportProgress.errors.length > 10 && (
+                          <p className="text-xs text-muted-foreground text-center">
+                            ... and {subjectImportProgress.errors.length - 10} more
+                            errors
+                          </p>
+                        )}
+                      </div>
+                    )}
                 </div>
               </Card>
 
@@ -1174,67 +1818,142 @@ export default function AdminPanel() {
                         <p className="text-sm text-muted-foreground mb-2">
                           Select subjects to add:
                         </p>
-                        <div className="space-y-2">
-                          {subjects.map((s) => {
-                            // Check if already assigned
+                        {(() => {
+                          // Get available subjects (not already assigned)
+                          const availableSubjects = subjects.filter((s) => {
                             const isAssigned = gradeSubjects.some(
                               (gs) =>
                                 gs.grade_level_id ===
                                 parseInt(selectedGradeForSubject) &&
                                 gs.subject_master_id === s.id
                             );
-                            return (
-                              <label
-                                key={s.id}
-                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? "opacity-50" : ""
-                                  }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  disabled={isAssigned}
-                                  checked={selectedSubjects.includes(s.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedSubjects([
-                                        ...selectedSubjects,
-                                        s.id,
-                                      ]);
-                                    } else {
-                                      setSelectedSubjects(
-                                        selectedSubjects.filter(
-                                          (id) => id !== s.id
-                                        )
-                                      );
-                                    }
-                                  }}
-                                  className="w-4 h-4 rounded border-input"
-                                />
-                                <span
-                                  className={isAssigned ? "line-through" : ""}
-                                >
-                                  {s.name}
-                                </span>
-                                {isAssigned && (
-                                  <span className="text-xs text-muted-foreground">
-                                    (already added)
-                                  </span>
-                                )}
-                              </label>
+                            return !isAssigned;
+                          });
+
+                          // Check if all available subjects are selected
+                          const allSelected =
+                            availableSubjects.length > 0 &&
+                            availableSubjects.every((s) =>
+                              selectedSubjects.includes(s.id)
                             );
-                          })}
-                        </div>
+
+                          // Handle select all / deselect all
+                          const handleSelectAll = (checked: boolean) => {
+                            if (checked) {
+                              // Select all available subjects
+                              const availableIds = availableSubjects.map(
+                                (s) => s.id
+                              );
+                              setSelectedSubjects([
+                                ...new Set([
+                                  ...selectedSubjects,
+                                  ...availableIds,
+                                ]),
+                              ]);
+                            } else {
+                              // Deselect all available subjects
+                              const availableIds = availableSubjects.map(
+                                (s) => s.id
+                              );
+                              setSelectedSubjects(
+                                selectedSubjects.filter(
+                                  (id) => !availableIds.includes(id)
+                                )
+                              );
+                            }
+                          };
+
+                          return (
+                            <>
+                              {availableSubjects.length > 0 && (
+                                <label className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 mb-2 border-b border-border pb-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    onChange={(e) =>
+                                      handleSelectAll(e.target.checked)
+                                    }
+                                    className="w-4 h-4 rounded border-input"
+                                  />
+                                  <span className="font-medium text-sm">
+                                    Select All ({availableSubjects.length}{" "}
+                                    available)
+                                  </span>
+                                </label>
+                              )}
+                              <div className="space-y-2">
+                                {subjects.map((s) => {
+                                  // Check if already assigned
+                                  const isAssigned = gradeSubjects.some(
+                                    (gs) =>
+                                      gs.grade_level_id ===
+                                      parseInt(selectedGradeForSubject) &&
+                                      gs.subject_master_id === s.id
+                                  );
+                                  return (
+                                    <label
+                                      key={s.id}
+                                      className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-secondary/20 ${isAssigned ? "opacity-50" : ""
+                                        }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        disabled={isAssigned}
+                                        checked={selectedSubjects.includes(s.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedSubjects([
+                                              ...selectedSubjects,
+                                              s.id,
+                                            ]);
+                                          } else {
+                                            setSelectedSubjects(
+                                              selectedSubjects.filter(
+                                                (id) => id !== s.id
+                                              )
+                                            );
+                                          }
+                                        }}
+                                        className="w-4 h-4 rounded border-input"
+                                      />
+                                      <span
+                                        className={isAssigned ? "line-through" : ""}
+                                      >
+                                        {s.name}
+                                      </span>
+                                      {isAssigned && (
+                                        <span className="text-xs text-muted-foreground">
+                                          (already added)
+                                        </span>
+                                      )}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                       <Button
                         onClick={addSubjectToGrade}
                         className="w-full"
-                        disabled={selectedSubjects.length === 0}
+                        disabled={selectedSubjects.length === 0 || assigningSubjectsToGrade}
                       >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add{" "}
-                        {selectedSubjects.length > 0
-                          ? `${selectedSubjects.length} Subject(s)`
-                          : "Subjects"}{" "}
-                        to Grade
+                        {assigningSubjectsToGrade ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Assigning...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add{" "}
+                            {selectedSubjects.length > 0
+                              ? `${selectedSubjects.length} Subject(s)`
+                              : "Subjects"}{" "}
+                            to Grade
+                          </>
+                        )}
                       </Button>
                     </>
                   )}
@@ -1592,10 +2311,10 @@ export default function AdminPanel() {
                   to Classes
                 </h2>
                 <div className="space-y-4">
-                  {/* Searchable Student Selection */}
+                  {/* Searchable Student Selection with Checkboxes */}
                   <div>
                     <label className="text-sm text-muted-foreground mb-1 block">
-                      Search & Select Student
+                      Search & Select Students
                     </label>
                     <Input
                       placeholder="Type to search students..."
@@ -1603,112 +2322,175 @@ export default function AdminPanel() {
                       onChange={(e) => setStudentAssignSearch(e.target.value)}
                       className="mb-2"
                     />
-                    <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden bg-muted/50">
-                      {students
-                        .filter(
-                          (s) =>
-                            s.name
-                              ?.toLowerCase()
-                              .includes(studentAssignSearch.toLowerCase()) ||
-                            s.email
-                              ?.toLowerCase()
-                              .includes(studentAssignSearch.toLowerCase())
-                        )
-                        .slice(0, 50) // Limit to 50 results
-                        .map((s) => (
-                          <div
-                            key={s.id}
-                            onClick={() => {
-                              setSelectedStudent(s.id);
-                              setStudentAssignSearch(s.name);
-                            }}
-                            className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedStudent === s.id ? "bg-primary/20" : ""
-                              }`}
-                          >
-                            <p className="font-medium text-sm truncate">
-                              {s.name}
+                    {(() => {
+                      const filteredStudents = students.filter(
+                        (s) =>
+                          s.name
+                            ?.toLowerCase()
+                            .includes(studentAssignSearch.toLowerCase()) ||
+                          s.email
+                            ?.toLowerCase()
+                            .includes(studentAssignSearch.toLowerCase())
+                      ).slice(0, 50);
+
+                      const allSelected = filteredStudents.length > 0 &&
+                        filteredStudents.every((s) => selectedStudents.includes(s.id));
+
+                      const handleSelectAllStudents = (checked: boolean) => {
+                        if (checked) {
+                          const filteredIds = filteredStudents.map((s) => s.id);
+                          setSelectedStudents([...new Set([...selectedStudents, ...filteredIds])]);
+                        } else {
+                          const filteredIds = filteredStudents.map((s) => s.id);
+                          setSelectedStudents(selectedStudents.filter((id) => !filteredIds.includes(id)));
+                        }
+                      };
+
+                      return (
+                        <div className="border border-border rounded-md max-h-48 overflow-y-auto overflow-x-hidden bg-muted/50">
+                          {filteredStudents.length > 0 && (
+                            <label className="flex items-center gap-2 p-2 border-b border-border cursor-pointer hover:bg-secondary/20">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={(e) => handleSelectAllStudents(e.target.checked)}
+                                className="w-4 h-4 rounded border-input"
+                              />
+                              <span className="font-medium text-sm">
+                                Select All ({filteredStudents.length})
+                              </span>
+                            </label>
+                          )}
+                          {filteredStudents.map((s) => (
+                            <label
+                              key={s.id}
+                              className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedStudents.includes(s.id) ? "bg-primary/20" : ""
+                                }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedStudents.includes(s.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedStudents([...selectedStudents, s.id]);
+                                  } else {
+                                    setSelectedStudents(selectedStudents.filter((id) => id !== s.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-input"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {s.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {s.email} •{" "}
+                                  {s.student_details?.classes?.name || "Unassigned"}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                          {filteredStudents.length === 0 && (
+                            <p className="p-3 text-sm text-muted-foreground text-center">
+                              No students found
                             </p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {s.email} •{" "}
-                              {s.student_details?.classes?.name || "Unassigned"}
-                            </p>
-                          </div>
-                        ))}
-                      {students.filter((s) =>
-                        s.name
-                          ?.toLowerCase()
-                          .includes(studentAssignSearch.toLowerCase())
-                      ).length === 0 && (
-                          <p className="p-3 text-sm text-muted-foreground text-center">
-                            No students found
-                          </p>
-                        )}
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Class Selection with Checkboxes */}
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-1 block">
+                      Select Classes
+                    </label>
+                    <div className="border border-border rounded-md max-h-48 overflow-y-auto bg-muted/50">
+                      {(() => {
+                        const allClassesSelected = classes.length > 0 &&
+                          classes.every((c) => selectedClassesForStudents.includes(c.id));
+
+                        const handleSelectAllClasses = (checked: boolean) => {
+                          if (checked) {
+                            const allClassIds = classes.map((c) => c.id);
+                            setSelectedClassesForStudents([...new Set([...selectedClassesForStudents, ...allClassIds])]);
+                          } else {
+                            const allClassIds = classes.map((c) => c.id);
+                            setSelectedClassesForStudents(selectedClassesForStudents.filter((id) => !allClassIds.includes(id)));
+                          }
+                        };
+
+                        return (
+                          <>
+                            {classes.length > 0 && (
+                              <label className="flex items-center gap-2 p-2 border-b border-border cursor-pointer hover:bg-secondary/20">
+                                <input
+                                  type="checkbox"
+                                  checked={allClassesSelected}
+                                  onChange={(e) => handleSelectAllClasses(e.target.checked)}
+                                  className="w-4 h-4 rounded border-input"
+                                />
+                                <span className="font-medium text-sm">
+                                  Select All Classes ({classes.length})
+                                </span>
+                              </label>
+                            )}
+                            {classes.map((c) => (
+                              <label
+                                key={c.id}
+                                className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedClassesForStudents.includes(c.id) ? "bg-primary/20" : ""
+                                  }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedClassesForStudents.includes(c.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedClassesForStudents([...selectedClassesForStudents, c.id]);
+                                    } else {
+                                      setSelectedClassesForStudents(selectedClassesForStudents.filter((id) => id !== c.id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-input"
+                                />
+                                <span className="text-sm">{c.name}</span>
+                              </label>
+                            ))}
+                            {classes.length === 0 && (
+                              <p className="p-3 text-sm text-muted-foreground text-center">
+                                No classes available
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
-                  <select
-                    className="w-full bg-muted border border-border rounded-md h-10 px-3"
-                    value={selectedClassForStudent}
-                    onChange={(e) => setSelectedClassForStudent(e.target.value)}
-                  >
-                    <option value="">Select Class</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+
                   <Button
-                    onClick={assignStudentToClass}
+                    onClick={assignStudentsToClasses}
                     className="w-full"
-                    disabled={assigningStudent}
+                    disabled={assigningStudent || selectedStudents.length === 0 || selectedClassesForStudents.length === 0}
                   >
-                    {assigningStudent
-                      ? "Assigning..."
-                      : "Assign Student to Class"}
+                    {assigningStudent ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Assigning...
+                      </>
+                    ) : (
+                      <>
+                        Assign {selectedStudents.length > 0 ? `${selectedStudents.length} Student(s)` : "Students"} to{" "}
+                        {selectedClassesForStudents.length > 0 ? `${selectedClassesForStudents.length} Class(es)` : "Classes"}
+                      </>
+                    )}
                   </Button>
                 </div>
-                {selectedClassForStudent && (
+                {selectedStudents.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-border">
                     <p className="text-sm text-muted-foreground mb-2">
-                      Students in{" "}
-                      {
-                        classes.find((c) => c.id === selectedClassForStudent)
-                          ?.name
-                      }
-                      :
+                      Selected: {selectedStudents.length} student(s), {selectedClassesForStudents.length} class(es)
                     </p>
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
-                      {students.filter(
-                        (s) =>
-                          s.student_details?.class_id ===
-                          selectedClassForStudent
-                      ).length > 0 ? (
-                        students
-                          .filter(
-                            (s) =>
-                              s.student_details?.class_id ===
-                              selectedClassForStudent
-                          )
-                          .map((s) => (
-                            <div
-                              key={s.id}
-                              className="text-sm p-1 px-2 bg-secondary/20 rounded"
-                            >
-                              {s.name}
-                            </div>
-                          ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          No students assigned
-                        </p>
-                      )}
-                    </div>
                   </div>
-                )}
-                {!selectedClassForStudent && (
-                  <p className="text-sm text-muted-foreground text-center py-3 mt-4 border-t border-border">
-                    Select a class to see list of students
-                  </p>
                 )}
               </Card>
 
@@ -1718,10 +2500,10 @@ export default function AdminPanel() {
                   Classes
                 </h2>
                 <div className="space-y-4">
-                  {/* Searchable Teacher Selection */}
+                  {/* Searchable Teacher Selection with Checkboxes */}
                   <div>
                     <label className="text-sm text-muted-foreground mb-1 block">
-                      Search & Select Teacher
+                      Search & Select Teachers
                     </label>
                     <Input
                       placeholder="Type to search teachers..."
@@ -1729,8 +2511,8 @@ export default function AdminPanel() {
                       onChange={(e) => setTeacherAssignSearch(e.target.value)}
                       className="mb-2"
                     />
-                    <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden bg-muted/50">
-                      {teachers
+                    {(() => {
+                      const filteredTeachers = teachers
                         .filter(
                           (t) =>
                             t.name
@@ -1740,94 +2522,165 @@ export default function AdminPanel() {
                               ?.toLowerCase()
                               .includes(teacherAssignSearch.toLowerCase())
                         )
-                        .slice(0, 50) // Limit to 50 results
-                        .map((t) => (
-                          <div
-                            key={t.id}
-                            onClick={() => {
-                              setSelectedTeacher(t.id);
-                              setTeacherAssignSearch(t.name);
-                            }}
-                            className={`p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedTeacher === t.id ? "bg-primary/20" : ""
-                              }`}
-                          >
-                            <p className="font-medium text-sm truncate">
-                              {t.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {t.email}
-                            </p>
-                          </div>
-                        ))}
-                      {teachers.filter((t) =>
-                        t.name
-                          ?.toLowerCase()
-                          .includes(teacherAssignSearch.toLowerCase())
-                      ).length === 0 && (
-                          <p className="p-3 text-sm text-muted-foreground text-center">
-                            No teachers found
-                          </p>
-                        )}
-                    </div>
-                  </div>
-                  <select
-                    className="w-full bg-muted border border-border rounded-md h-10 px-3"
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                  >
-                    <option value="">Select Class</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    onClick={assignTeacher}
-                    className="w-full"
-                    disabled={assigningTeacher}
-                  >
-                    {assigningTeacher
-                      ? "Assigning..."
-                      : "Assign Teacher to Class"}
-                  </Button>
-                </div>
-                {selectedClass && (
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Teachers in{" "}
-                      {classes.find((c) => c.id === selectedClass)?.name}:
-                    </p>
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
-                      {(() => {
-                        const assignedTeacherIds = teacherClasses
-                          .filter((tc) => tc.class_id === selectedClass)
-                          .map((tc) => tc.teacher_id);
-                        const assignedTeachers = teachers.filter((t) =>
-                          assignedTeacherIds.includes(t.id)
-                        );
-                        return assignedTeachers.length > 0 ? (
-                          assignedTeachers.map((t) => (
-                            <div
+                        .slice(0, 50);
+
+                      const allSelected = filteredTeachers.length > 0 &&
+                        filteredTeachers.every((t) => selectedTeachers.includes(t.id));
+
+                      const handleSelectAllTeachers = (checked: boolean) => {
+                        if (checked) {
+                          const filteredIds = filteredTeachers.map((t) => t.id);
+                          setSelectedTeachers([...new Set([...selectedTeachers, ...filteredIds])]);
+                        } else {
+                          const filteredIds = filteredTeachers.map((t) => t.id);
+                          setSelectedTeachers(selectedTeachers.filter((id) => !filteredIds.includes(id)));
+                        }
+                      };
+
+                      return (
+                        <div className="border border-border rounded-md max-h-48 overflow-y-auto overflow-x-hidden bg-muted/50">
+                          {filteredTeachers.length > 0 && (
+                            <label className="flex items-center gap-2 p-2 border-b border-border cursor-pointer hover:bg-secondary/20">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={(e) => handleSelectAllTeachers(e.target.checked)}
+                                className="w-4 h-4 rounded border-input"
+                              />
+                              <span className="font-medium text-sm">
+                                Select All ({filteredTeachers.length})
+                              </span>
+                            </label>
+                          )}
+                          {filteredTeachers.map((t) => (
+                            <label
                               key={t.id}
-                              className="text-sm p-1 px-2 bg-secondary/20 rounded"
+                              className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedTeachers.includes(t.id) ? "bg-primary/20" : ""
+                                }`}
                             >
-                              {t.name}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            No teachers assigned
-                          </p>
+                              <input
+                                type="checkbox"
+                                checked={selectedTeachers.includes(t.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedTeachers([...selectedTeachers, t.id]);
+                                  } else {
+                                    setSelectedTeachers(selectedTeachers.filter((id) => id !== t.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-input"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {t.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {t.email}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                          {filteredTeachers.length === 0 && (
+                            <p className="p-3 text-sm text-muted-foreground text-center">
+                              No teachers found
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Class Selection with Checkboxes */}
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-1 block">
+                      Select Classes
+                    </label>
+                    <div className="border border-border rounded-md max-h-48 overflow-y-auto bg-muted/50">
+                      {(() => {
+                        const allClassesSelected = classes.length > 0 &&
+                          classes.every((c) => selectedClassesForTeachers.includes(c.id));
+
+                        const handleSelectAllClasses = (checked: boolean) => {
+                          if (checked) {
+                            const allClassIds = classes.map((c) => c.id);
+                            setSelectedClassesForTeachers([...new Set([...selectedClassesForTeachers, ...allClassIds])]);
+                          } else {
+                            const allClassIds = classes.map((c) => c.id);
+                            setSelectedClassesForTeachers(selectedClassesForTeachers.filter((id) => !allClassIds.includes(id)));
+                          }
+                        };
+
+                        return (
+                          <>
+                            {classes.length > 0 && (
+                              <label className="flex items-center gap-2 p-2 border-b border-border cursor-pointer hover:bg-secondary/20">
+                                <input
+                                  type="checkbox"
+                                  checked={allClassesSelected}
+                                  onChange={(e) => handleSelectAllClasses(e.target.checked)}
+                                  className="w-4 h-4 rounded border-input"
+                                />
+                                <span className="font-medium text-sm">
+                                  Select All Classes ({classes.length})
+                                </span>
+                              </label>
+                            )}
+                            {classes.map((c) => (
+                              <label
+                                key={c.id}
+                                className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-primary/20 border-b border-border/50 last:border-0 ${selectedClassesForTeachers.includes(c.id) ? "bg-primary/20" : ""
+                                  }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedClassesForTeachers.includes(c.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedClassesForTeachers([...selectedClassesForTeachers, c.id]);
+                                    } else {
+                                      setSelectedClassesForTeachers(selectedClassesForTeachers.filter((id) => id !== c.id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-input"
+                                />
+                                <span className="text-sm">{c.name}</span>
+                              </label>
+                            ))}
+                            {classes.length === 0 && (
+                              <p className="p-3 text-sm text-muted-foreground text-center">
+                                No classes available
+                              </p>
+                            )}
+                          </>
                         );
                       })()}
                     </div>
                   </div>
-                )}
-                {!selectedClass && (
-                  <p className="text-sm text-muted-foreground text-center py-3 mt-4 border-t border-border">
-                    Select a class to see list of teachers
-                  </p>
+
+                  <Button
+                    onClick={assignTeachers}
+                    className="w-full"
+                    disabled={assigningTeacher || selectedTeachers.length === 0 || selectedClassesForTeachers.length === 0}
+                  >
+                    {assigningTeacher ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Assigning...
+                      </>
+                    ) : (
+                      <>
+                        Assign {selectedTeachers.length > 0 ? `${selectedTeachers.length} Teacher(s)` : "Teachers"} to{" "}
+                        {selectedClassesForTeachers.length > 0 ? `${selectedClassesForTeachers.length} Class(es)` : "Classes"}
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {selectedTeachers.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Selected: {selectedTeachers.length} teacher(s), {selectedClassesForTeachers.length} class(es)
+                    </p>
+                  </div>
                 )}
               </Card>
 
@@ -1924,13 +2777,20 @@ export default function AdminPanel() {
                           selectedSubjectsForTeacher.length === 0
                         }
                       >
-                        <Plus className="w-4 h-4 mr-2" />
-                        {assigningSubjects
-                          ? "Assigning..."
-                          : `Assign ${selectedSubjectsForTeacher.length > 0
-                            ? `${selectedSubjectsForTeacher.length} Subject(s)`
-                            : "Subjects"
-                          } to Teacher`}
+                        {assigningSubjects ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Assigning...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Assign {selectedSubjectsForTeacher.length > 0
+                              ? `${selectedSubjectsForTeacher.length} Subject(s)`
+                              : "Subjects"
+                            } to Teacher
+                          </>
+                        )}
                       </Button>
 
                       {/* Display currently assigned subjects */}
@@ -2025,9 +2885,22 @@ export default function AdminPanel() {
                     </option>
                     <option value="School_Exam">School Exam</option>
                   </select>
-                  <Button onClick={addExamType} className="shrink-0">
-                    <Plus className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Add</span>
+                  <Button 
+                    onClick={addExamType} 
+                    className="shrink-0"
+                    disabled={addingExamType}
+                  >
+                    {addingExamType ? (
+                      <>
+                        <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+                        <span className="hidden sm:inline">Adding...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Add</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -2080,8 +2953,16 @@ export default function AdminPanel() {
                         <td className="p-2 text-right">
                           {editingItem?.id === examType.id ? (
                             <div className="flex gap-2 justify-end">
-                              <Button size="sm" onClick={saveEdit}>
-                                <Save className="w-4 h-4" />
+                              <Button 
+                                size="sm" 
+                                onClick={saveEdit}
+                                disabled={savingEdit}
+                              >
+                                {savingEdit ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Save className="w-4 h-4" />
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -2150,9 +3031,22 @@ export default function AdminPanel() {
                     onChange={(e) => setNewFileCategory(e.target.value)}
                     className="flex-1 sm:w-48"
                   />
-                  <Button onClick={addFileCategory} className="shrink-0">
-                    <Plus className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Add</span>
+                  <Button 
+                    onClick={addFileCategory} 
+                    className="shrink-0"
+                    disabled={addingFileCategory}
+                  >
+                    {addingFileCategory ? (
+                      <>
+                        <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+                        <span className="hidden sm:inline">Adding...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Add</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -2193,8 +3087,16 @@ export default function AdminPanel() {
                         <td className="p-2 text-right">
                           {editingItem?.id === category.id ? (
                             <div className="flex gap-2 justify-end">
-                              <Button size="sm" onClick={saveEdit}>
-                                <Save className="w-4 h-4" />
+                              <Button 
+                                size="sm" 
+                                onClick={saveEdit}
+                                disabled={savingEdit}
+                              >
+                                {savingEdit ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Save className="w-4 h-4" />
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -2595,13 +3497,26 @@ export default function AdminPanel() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button className="flex-1" onClick={handleAddPeriod}>
-                            {isEditingPeriod ? (
-                              <Save className="w-4 h-4 mr-2" />
+                          <Button 
+                            className="flex-1" 
+                            onClick={handleAddPeriod}
+                            disabled={addingPeriod}
+                          >
+                            {addingPeriod ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                {isEditingPeriod ? "Updating..." : "Adding..."}
+                              </>
                             ) : (
-                              <Plus className="w-4 h-4 mr-2" />
+                              <>
+                                {isEditingPeriod ? (
+                                  <Save className="w-4 h-4 mr-2" />
+                                ) : (
+                                  <Plus className="w-4 h-4 mr-2" />
+                                )}
+                                {isEditingPeriod ? "Update Period" : "Add Period"}
+                              </>
                             )}
-                            {isEditingPeriod ? "Update Period" : "Add Period"}
                           </Button>
                           {isEditingPeriod && (
                             <Button variant="outline" onClick={resetPeriodForm}>

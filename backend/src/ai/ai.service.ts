@@ -45,18 +45,30 @@ export class AiService {
 
         try {
             const { taskType, query, subject, classBand, studentId, additionalContext } = dto;
-            const band = classBand || 'middle';
 
-            // 0. Get Student's Class ID (for RAG filtering)
+            // 0. Get Student's Class ID and Grade Level (for RAG filtering and class band)
             let studentClassId: string | undefined;
+            let autoClassBand: string | undefined;
+            
             if (studentId) {
-                console.log(`[AI Service] Step 0: Getting student's class information...`);
+                console.log(`[AI Service] Step 0: Getting student's class and grade information...`);
                 try {
                     const student = await this.prisma.profiles.findFirst({
                         where: { id: studentId },
                         include: {
                             student_details: {
-                                select: { class_id: true },
+                                include: {
+                                    classes: {
+                                        include: {
+                                            grade_levels: {
+                                                select: {
+                                                    id: true,
+                                                    name: true,
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
                             },
                         },
                     });
@@ -64,6 +76,18 @@ export class AiService {
                     if (student?.student_details?.class_id) {
                         studentClassId = student.student_details.class_id;
                         console.log(`[AI Service] ✓ Student class_id: ${studentClassId}`);
+                        
+                        // Get grade level name to determine class band
+                        const gradeLevel = student.student_details.classes?.grade_levels;
+                        if (gradeLevel?.name) {
+                            console.log(`[AI Service] ✓ Student grade level: ${gradeLevel.name}`);
+                            
+                            // Auto-determine class band from grade level name
+                            autoClassBand = this.determineClassBandFromGrade(gradeLevel.name);
+                            console.log(`[AI Service] ✓ Auto-determined class band: ${autoClassBand} (from grade: ${gradeLevel.name})`);
+                        } else {
+                            console.log(`[AI Service] ⚠️ Grade level not found for student's class`);
+                        }
                     } else {
                         console.log(`[AI Service] ⚠️ Student class_id not found (student may not be assigned to a class)`);
                     }
@@ -71,6 +95,16 @@ export class AiService {
                     console.error(`[AI Service] ❌ Error getting student class:`, error);
                     // Continue without class_id - RAG will work but less specific
                 }
+            }
+
+            // Use auto-determined class band, fallback to frontend-provided, then default to 'middle'
+            const band = autoClassBand || classBand || 'middle';
+            if (autoClassBand) {
+                console.log(`[AI Service] Using auto-determined class band: ${band} (from student's grade)`);
+            } else if (classBand) {
+                console.log(`[AI Service] Using frontend-provided class band: ${band} (fallback)`);
+            } else {
+                console.log(`[AI Service] Using default class band: ${band} (no grade/class info available)`);
             }
 
             // 1. Context Retrieval (RAG) - Filter by student's class
@@ -298,5 +332,41 @@ export class AiService {
             return firstLine.replace(/^#+\s*/, '').substring(0, 100);
         }
         return null;
+    }
+
+    /**
+     * Determine class band from grade level name
+     * Examples: "Grade 10" → "high", "Grade 8" → "middle", "Grade 3" → "primary"
+     * 
+     * @param gradeName - Grade level name (e.g., "Grade 10", "10", "Class 10")
+     * @returns Class band: 'primary', 'middle', 'high', or 'middle' as default
+     */
+    private determineClassBandFromGrade(gradeName: string): string {
+        if (!gradeName) {
+            return 'middle'; // Default fallback
+        }
+
+        // Extract numeric grade from grade name
+        // Handles formats like: "Grade 10", "10", "Class 10", "Grade 10-A", etc.
+        const gradeMatch = gradeName.match(/\d+/);
+        if (!gradeMatch) {
+            console.warn(`[AI Service] Could not extract grade number from: "${gradeName}", defaulting to 'middle'`);
+            return 'middle';
+        }
+
+        const gradeNumber = parseInt(gradeMatch[0], 10);
+
+        // Map grade number to class band
+        if (gradeNumber >= 1 && gradeNumber <= 5) {
+            return 'primary';
+        } else if (gradeNumber >= 6 && gradeNumber <= 8) {
+            return 'middle';
+        } else if (gradeNumber >= 9 && gradeNumber <= 12) {
+            return 'high';
+        } else {
+            // For grades outside 1-12 (e.g., kindergarten, university), default to middle
+            console.warn(`[AI Service] Grade ${gradeNumber} outside standard range (1-12), defaulting to 'middle'`);
+            return 'middle';
+        }
     }
 }

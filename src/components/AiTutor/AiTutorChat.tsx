@@ -10,7 +10,7 @@ import { useAuth } from '@/auth/AuthContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import VoiceModeOverlay from './VoiceModeOverlay';
 import { toast } from 'sonner';
-import { getStudentData } from '@/services/studentDataService';
+import { getStudentData, StudentData } from '@/services/studentDataService';
 import { getSubjects } from '@/services/classService';
 
 const ACTION_MODES = [
@@ -33,8 +33,6 @@ const AiTutorChat = () => {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
     const [studentData, setStudentData] = useState<StudentData | null>(null);
-    const [selectedSubject, setSelectedSubject] = useState<string>('');
-
     // Subject Selection State
     const [subjects, setSubjects] = useState<string[]>([]);
     const [selectedSubject, setSelectedSubject] = useState<string>('');
@@ -42,21 +40,40 @@ const AiTutorChat = () => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
 
-    // Load student data on mount
+    // Load student data and subjects on mount
     useEffect(() => {
-        const loadStudentData = async () => {
+        const loadStudentDataAndSubjects = async () => {
             if (profile?.id && profile?.role === 'student') {
                 console.log('[AiTutorChat] Loading student data...');
                 try {
                     const data = await getStudentData(profile.id);
                     setStudentData(data);
                     console.log('[AiTutorChat] Student data loaded:', data);
+                    
+                    // Load subjects based on grade_id
+                    if (data?.grade_id) {
+                        console.log('[AiTutorChat] Loading subjects for grade_id:', data.grade_id);
+                        try {
+                            const subs = await getSubjects(data.grade_id);
+                            console.log('[AiTutorChat] Received subjects (raw):', subs);
+                            // Trim subject names to remove any whitespace
+                            const trimmedSubjects = subs.map(sub => sub?.trim()).filter(sub => sub && sub.length > 0);
+                            console.log('[AiTutorChat] Received subjects (trimmed):', trimmedSubjects);
+                            setSubjects(trimmedSubjects);
+                        } catch (err) {
+                            console.error('[AiTutorChat] Failed to load subjects:', err);
+                            setSubjects([]);
+                        }
+                    } else {
+                        console.warn('[AiTutorChat] No grade_id found in studentData');
+                        setSubjects([]);
+                    }
                 } catch (error) {
                     console.error('[AiTutorChat] Failed to load student data:', error);
                 }
             }
         };
-        loadStudentData();
+        loadStudentDataAndSubjects();
     }, [profile]);
 
     const scrollToBottom = () => {
@@ -116,29 +133,6 @@ const AiTutorChat = () => {
         }
     }, [profile]);
 
-    // Load Subjects for Student
-    useEffect(() => {
-        const loadSubjects = async () => {
-            // Check if user is student (profile role might need verification, assuming 'student' for now or just checking id)
-            if (profile?.id) {
-                try {
-                    console.log("AiTutorChat: Fetching student data for", profile.id);
-                    const studentData = await getStudentData(profile.id);
-                    console.log("AiTutorChat: Received studentData", studentData);
-                    if (studentData?.grade_id) {
-                        const subs = await getSubjects(studentData.grade_id);
-                        console.log("AiTutorChat: Received subjects", subs);
-                        setSubjects(subs);
-                    } else {
-                        console.warn("AiTutorChat: No grade_id found in studentData");
-                    }
-                } catch (err) {
-                    console.error("Failed to load subjects", err);
-                }
-            }
-        };
-        loadSubjects();
-    }, [profile]);
 
     const startListening = () => {
         if (recognitionRef.current) {
@@ -178,23 +172,6 @@ const AiTutorChat = () => {
         }
     };
 
-    /**
-     * Infer class band from class name (e.g., "Class 8B" -> "middle")
-     */
-    const inferClassBand = (className?: string): string => {
-        if (!className) return 'middle';
-        const lower = className.toLowerCase();
-        if (lower.includes('1') || lower.includes('2') || lower.includes('3') || 
-            lower.includes('4') || lower.includes('5') || lower.includes('kg') || lower.includes('nursery')) {
-            return 'primary';
-        } else if (lower.includes('6') || lower.includes('7') || lower.includes('8')) {
-            return 'middle';
-        } else if (lower.includes('9') || lower.includes('10') || lower.includes('11') || lower.includes('12')) {
-            return 'high';
-        }
-        return 'middle';
-    };
-
     const handleSend = async (textOverride?: string) => {
         const textToSend = textOverride || input;
         if (!textToSend.trim()) return;
@@ -215,21 +192,27 @@ const AiTutorChat = () => {
             // Determine task type based on active mode
             const taskType = (activeMode === 'start' ? 'doubt' : activeMode) as any;
 
-            // Infer class band from student's class name
-            const classBand = studentData?.class_name 
-                ? inferClassBand(studentData.class_name)
-                : 'middle';
+            console.log('[AiTutorChat] Selected Subject (raw):', selectedSubject);
+            console.log('[AiTutorChat] Selected Subject (type):', typeof selectedSubject);
+            console.log('[AiTutorChat] Selected Subject (length):', selectedSubject?.length);
 
-            console.log('[AiTutorChat] Inferred class band:', classBand);
+            // Build AI request - only include subject if it's a non-empty string
+            // Note: classBand is now auto-determined in backend from student's grade
+            const subjectToSend = selectedSubject && selectedSubject.trim() !== '' ? selectedSubject.trim() : undefined;
+            console.log('[AiTutorChat] Subject to send:', subjectToSend);
 
-            // Build AI request
             const aiRequest: AiRequestDto = {
                 taskType: taskType,
                 query: userMsg.content,
                 studentId: profile?.id,
-                subject: selectedSubject || undefined, // Use selected subject
-                classBand: 'middle', // Could be dynamic from profile
-            });
+                subject: subjectToSend, // Use selected subject (only if not empty)
+            };
+
+            console.log('[AiTutorChat] Sending AI request:', JSON.stringify(aiRequest, null, 2));
+
+            // Call AI service
+            const aiResponseEncoded = await aiService.processRequest(aiRequest);
+            console.log('[AiTutorChat] Received AI response:', aiResponseEncoded);
 
             // Flatten response for speech
             let speakableText = aiResponseEncoded.explanation || "I found some information for you.";
@@ -297,16 +280,20 @@ const AiTutorChat = () => {
                         {/* Subject Selector - Always visible */}
                         <select
                             value={selectedSubject}
-                            onChange={(e) => setSelectedSubject(e.target.value)}
-                            className="h-8 max-w-[120px] rounded-md border border-border bg-background/50 px-2 text-xs focus:outline-none focus:border-primary transition-colors truncate"
+                            onChange={(e) => {
+                                console.log('[AiTutorChat] Subject changed to:', e.target.value);
+                                setSelectedSubject(e.target.value);
+                            }}
+                            className="h-8 max-w-[150px] rounded-md border border-border bg-background/50 px-2 text-xs focus:outline-none focus:border-primary transition-colors truncate"
+                            title={selectedSubject || "Select a subject"}
                         >
-                            <option value="">General Subject</option>
+                            <option value="">All Subjects</option>
                             {subjects.length > 0 ? (
                                 subjects.map(sub => (
                                     <option key={sub} value={sub}>{sub}</option>
                                 ))
                             ) : (
-                                <option disabled>No subjects found</option>
+                                <option disabled>Loading subjects...</option>
                             )}
                         </select>
 
