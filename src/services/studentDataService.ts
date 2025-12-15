@@ -5,6 +5,7 @@ export interface StudentData {
   id: string;
   class_id: string | null;
   class_name?: string;
+  grade_id?: number;
   grade_name?: string;
   roll_number?: string;
 }
@@ -61,6 +62,7 @@ export const getStudentData = async (
       id: data.id,
       class_id: studentDetails.class_id || null,
       class_name: classData?.name,
+      grade_id: gradeData?.id,
       grade_name: gradeData?.name,
       roll_number: studentDetails.roll_number || undefined,
     };
