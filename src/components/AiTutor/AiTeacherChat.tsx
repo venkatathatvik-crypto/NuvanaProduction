@@ -9,6 +9,7 @@ import { MessageBubble } from '@/components/AiTutor/MessageBubble';
 import { useAuth } from '@/auth/AuthContext';
 import { toast } from 'sonner';
 import VoiceModeOverlay from './VoiceModeOverlay';
+import { academicService } from '@/services/academicApiService';
 
 const TEACHER_ACTION_MODES = [
     { id: 'start', label: 'Ask Assistant', icon: Sparkles, color: 'text-neon-purple', desc: 'General help' },
@@ -32,6 +33,10 @@ const AiTeacherChat = () => {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
 
+    // Subject Selection
+    const [subjects, setSubjects] = useState<string[]>([]);
+    const [selectedSubject, setSelectedSubject] = useState<string>('');
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const recognitionRef = useRef<any>(null);
@@ -43,6 +48,27 @@ const AiTeacherChat = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Load Teacher Subjects
+    useEffect(() => {
+        const loadSubjects = async () => {
+            if (profile?.id) {
+                try {
+                    const teacherSubjects = await academicService.getSubjectsByTeacher(profile.id);
+                    // Extract unique subject names
+                    const uniqueSubjects = Array.from(new Set(
+                        teacherSubjects
+                            .map(ts => ts.grade_subjects?.subjects_master?.name)
+                            .filter((name): name is string => !!name)
+                    ));
+                    setSubjects(uniqueSubjects);
+                } catch (error) {
+                    console.error("Failed to load teacher subjects", error);
+                }
+            }
+        };
+        loadSubjects();
+    }, [profile]);
 
     // Initialize Speech Recognition
     useEffect(() => {
@@ -183,6 +209,7 @@ const AiTeacherChat = () => {
                 taskType: taskType as any,
                 query: query,
                 studentId: profile?.id,
+                subject: selectedSubject || undefined,
                 additionalContext: additionalContext
             });
 
@@ -254,6 +281,22 @@ const AiTeacherChat = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* Subject Selector - Always visible */}
+                        <select
+                            value={selectedSubject}
+                            onChange={(e) => setSelectedSubject(e.target.value)}
+                            className="h-8 max-w-[120px] rounded-md border border-border bg-background/50 px-2 text-xs focus:outline-none focus:border-primary transition-colors truncate"
+                        >
+                            <option value="">General Subject</option>
+                            {subjects.length > 0 ? (
+                                subjects.map(sub => (
+                                    <option key={sub} value={sub}>{sub}</option>
+                                ))
+                            ) : (
+                                <option disabled>No subjects found</option>
+                            )}
+                        </select>
+
                         {/* Voice Mode Toggle */}
                         <Button
                             variant="ghost"
