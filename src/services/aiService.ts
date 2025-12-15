@@ -3,7 +3,6 @@ export interface AiRequestDto {
     query: string;
     subject?: string;
     topic?: string;
-    classBand?: string;
     studentId?: string;
     additionalContext?: any;
 }
@@ -25,7 +24,6 @@ export const aiService = {
         console.log('[Frontend AI Service] Query:', dto.query);
         console.log('[Frontend AI Service] Subject:', dto.subject || 'Not provided');
         console.log('[Frontend AI Service] Student ID:', dto.studentId || 'Not provided');
-        console.log('[Frontend AI Service] Class Band:', dto.classBand || 'Not provided');
 
         try {
             const { apiClient } = await import('@/lib/apiClient');
@@ -35,6 +33,7 @@ export const aiService = {
             console.log('[Frontend AI Service] Endpoint:', endpoint);
 
             const startTime = Date.now();
+            console.log('[Frontend AI Service] Request payload:', JSON.stringify(dto, null, 2));
             const response = await apiClient.post<AiResponseDto>(endpoint, dto);
             const duration = Date.now() - startTime;
 

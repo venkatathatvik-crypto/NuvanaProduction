@@ -30,7 +30,24 @@ export default function AdminLogin() {
 
     } catch (error: any) {
       console.error("Login error:", error);
-      toast.error(error.message || "Failed to login");
+      
+      // Check for password reset requirement
+      if (error instanceof ApiError && error.data?.code === 'RESET_REQUIRED') {
+        const userId = error.data.userId;
+        navigate("/reset-password", { state: { userId } });
+        return;
+      }
+
+      const message = error.message || "Failed to login";
+      
+      // Handle role mismatch with specific message
+      if (message.includes("You are registered as")) {
+        toast.error(`Access denied. ${message}`);
+      } else if (message.includes("Invalid credentials")) {
+        toast.error("Invalid email or password. Please check your credentials.");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }

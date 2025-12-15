@@ -16,6 +16,8 @@ export class AiController {
     @HttpCode(HttpStatus.OK)
     async explain(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
         console.log(`[AI Controller] POST /ai/explain - Request received`);
+        console.log(`[AI Controller] Request body:`, JSON.stringify(dto, null, 2));
+        console.log(`[AI Controller] Subject from DTO:`, dto.subject || 'Not provided');
         dto.taskType = AiTaskType.EXPLAIN;
         return this.aiService.processRequest(dto);
     }
@@ -34,6 +36,8 @@ export class AiController {
     @HttpCode(HttpStatus.OK)
     async doubt(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
         console.log(`[AI Controller] POST /ai/doubt - Request received`);
+        console.log(`[AI Controller] Request body:`, JSON.stringify(dto, null, 2));
+        console.log(`[AI Controller] Subject from DTO:`, dto.subject || 'Not provided');
         dto.taskType = AiTaskType.DOUBT;
         return this.aiService.processRequest(dto);
     }

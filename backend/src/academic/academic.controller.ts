@@ -137,7 +137,7 @@ export class AcademicController {
   }
 
   @Get("grade-subjects/grade/:gradeId")
-  @Roles("school_admin", "teacher", "super_admin")
+  @Roles("school_admin", "teacher", "super_admin", "student")
   getSubjectsByGrade(
     @Param("gradeId", ParseIntPipe) gradeId: number,
     @Tenant() schoolId: string
@@ -282,7 +282,7 @@ export class AcademicController {
 
   // ==================== TIMETABLE ====================
   @Get("timetable/class/:classId")
-  @Roles("school_admin", "teacher", "super_admin")
+  @Roles("school_admin", "teacher", "super_admin", "student")
   getWeeklyTimetable(
     @Param("classId") classId: string,
     @Tenant() schoolId: string

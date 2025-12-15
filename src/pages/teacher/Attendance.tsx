@@ -85,6 +85,8 @@ const TeacherAttendance = () => {
       try {
         // Fetch students from the selected class
         const studentsData = await getStudentsByClass(selectedClass.class_id);
+        console.log('[Teacher Attendance] Students data received:', studentsData);
+        console.log('[Teacher Attendance] Sample student:', studentsData[0]);
 
         // Fetch existing attendance records for today
         const attendanceMap = await getAttendanceForDate(
@@ -98,6 +100,7 @@ const TeacherAttendance = () => {
           present: attendanceMap[student.id] ?? false,
         }));
 
+        console.log('[Teacher Attendance] Merged students:', mergedStudents);
         setStudents(mergedStudents);
       } catch (error) {
         console.error("Error fetching students:", error);
