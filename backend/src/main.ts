@@ -25,7 +25,7 @@ async function bootstrap() {
     const reflector = app.get(Reflector);
     app.useGlobalGuards(new JwtAuthGuard(reflector));
 
-    await app.listen(4000);
-    console.log('🚀 Server running on http://localhost:4000');
+    await app.listen(3000);
+    console.log('🚀 Server running on http://localhost:3000');
 }
 bootstrap();
