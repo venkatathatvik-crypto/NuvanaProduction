@@ -1,5 +1,3 @@
-
-
 export interface AiRequestDto {
     taskType: 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
     query: string;
@@ -19,29 +17,41 @@ export interface AiResponseDto {
     rawResponse?: string;
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
-
 export const aiService = {
     async processRequest(dto: AiRequestDto): Promise<AiResponseDto> {
+        console.log('[Frontend AI Service] ========================================');
+        console.log('[Frontend AI Service] 🚀 Sending AI request');
+        console.log('[Frontend AI Service] Task Type:', dto.taskType);
+        console.log('[Frontend AI Service] Query:', dto.query);
+        console.log('[Frontend AI Service] Subject:', dto.subject || 'Not provided');
+        console.log('[Frontend AI Service] Student ID:', dto.studentId || 'Not provided');
+        console.log('[Frontend AI Service] Class Band:', dto.classBand || 'Not provided');
+
         try {
-            // 1. Try hitting the real backend
-            const response = await fetch(`${BACKEND_URL}/ai/${dto.taskType.replace('_', '')}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    // 'x-api-key': 'your-api-key' // If we enforced it
-                },
-                body: JSON.stringify(dto),
+            const { apiClient } = await import('@/lib/apiClient');
+            
+            // Convert task type to endpoint (e.g., 'study_plan' -> 'studyplan')
+            const endpoint = `/ai/${dto.taskType.replace('_', '')}`;
+            console.log('[Frontend AI Service] Endpoint:', endpoint);
+
+            const startTime = Date.now();
+            const response = await apiClient.post<AiResponseDto>(endpoint, dto);
+            const duration = Date.now() - startTime;
+
+            console.log('[Frontend AI Service] ✅ Response received');
+            console.log('[Frontend AI Service] Duration:', duration, 'ms');
+            console.log('[Frontend AI Service] Response title:', response.title);
+            console.log('[Frontend AI Service] ========================================');
+
+            return response;
+        } catch (error: any) {
+            console.error('[Frontend AI Service] ❌ Request failed:', error);
+            console.error('[Frontend AI Service] Error details:', {
+                message: error.message,
+                status: error.status,
+                data: error.data,
             });
-
-            if (!response.ok) {
-                throw new Error(`Backend error: ${response.statusText}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error("AI Backend request failed:", error);
-            throw error; // Propagate error to UI instead of faking a success
+            throw error;
         }
     }
 };

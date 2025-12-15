@@ -10,6 +10,7 @@ import { useAuth } from '@/auth/AuthContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import VoiceModeOverlay from './VoiceModeOverlay';
 import { toast } from 'sonner';
+import { getStudentData, type StudentData } from '@/services/studentDataService';
 
 const ACTION_MODES = [
     { id: 'start', label: 'Ask Anything', icon: Sparkles, color: 'text-neon-purple', desc: 'General queries' },
@@ -30,9 +31,28 @@ const AiTutorChat = () => {
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
+    const [studentData, setStudentData] = useState<StudentData | null>(null);
+    const [selectedSubject, setSelectedSubject] = useState<string>('');
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
+
+    // Load student data on mount
+    useEffect(() => {
+        const loadStudentData = async () => {
+            if (profile?.id && profile?.role === 'student') {
+                console.log('[AiTutorChat] Loading student data...');
+                try {
+                    const data = await getStudentData(profile.id);
+                    setStudentData(data);
+                    console.log('[AiTutorChat] Student data loaded:', data);
+                } catch (error) {
+                    console.error('[AiTutorChat] Failed to load student data:', error);
+                }
+            }
+        };
+        loadStudentData();
+    }, [profile]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -129,9 +149,33 @@ const AiTutorChat = () => {
         }
     };
 
+    /**
+     * Infer class band from class name (e.g., "Class 8B" -> "middle")
+     */
+    const inferClassBand = (className?: string): string => {
+        if (!className) return 'middle';
+        const lower = className.toLowerCase();
+        if (lower.includes('1') || lower.includes('2') || lower.includes('3') || 
+            lower.includes('4') || lower.includes('5') || lower.includes('kg') || lower.includes('nursery')) {
+            return 'primary';
+        } else if (lower.includes('6') || lower.includes('7') || lower.includes('8')) {
+            return 'middle';
+        } else if (lower.includes('9') || lower.includes('10') || lower.includes('11') || lower.includes('12')) {
+            return 'high';
+        }
+        return 'middle';
+    };
+
     const handleSend = async (textOverride?: string) => {
         const textToSend = textOverride || input;
         if (!textToSend.trim()) return;
+
+        console.log('[AiTutorChat] ========================================');
+        console.log('[AiTutorChat] 📤 User sending message');
+        console.log('[AiTutorChat] Message:', textToSend);
+        console.log('[AiTutorChat] Active Mode:', activeMode);
+        console.log('[AiTutorChat] Student Data:', studentData);
+        console.log('[AiTutorChat] Selected Subject:', selectedSubject);
 
         const userMsg = { sender: 'user', content: textToSend, timestamp: new Date() };
         setMessages((prev) => [...prev, userMsg]);
@@ -140,16 +184,27 @@ const AiTutorChat = () => {
 
         try {
             // Determine task type based on active mode
-            // If mode is 'start' (default), we might infer intent, but for now map 'start' -> 'doubt' as generic fallback
             const taskType = (activeMode === 'start' ? 'doubt' : activeMode) as any;
 
-            const aiResponseEncoded = await aiService.processRequest({
+            // Infer class band from student's class name
+            const classBand = studentData?.class_name 
+                ? inferClassBand(studentData.class_name)
+                : 'middle';
+
+            console.log('[AiTutorChat] Inferred class band:', classBand);
+
+            // Build AI request
+            const aiRequest: AiRequestDto = {
                 taskType: taskType,
                 query: userMsg.content,
                 studentId: profile?.id,
-                // subject: "Math", // We could infer this from current page context in a real app
-                classBand: 'middle', // Could be dynamic from profile
-            });
+                subject: selectedSubject || undefined, // Use selected subject if available
+                classBand: classBand,
+            };
+
+            console.log('[AiTutorChat] AI Request:', JSON.stringify(aiRequest, null, 2));
+
+            const aiResponseEncoded = await aiService.processRequest(aiRequest);
 
             // Flatten response for speech
             let speakableText = aiResponseEncoded.explanation || "I found some information for you.";
