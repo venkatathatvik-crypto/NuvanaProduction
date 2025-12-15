@@ -1,71 +1,125 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { LLMMessage, LLMProvider } from './llm.provider.interface';
 
+/**
+ * Gemini Provider using official Gemini API
+ * Based on: https://ai.google.dev/gemini-api/docs/quickstart#javascript
+ * Uses REST API directly for maximum compatibility
+ */
 @Injectable()
 export class GeminiProvider implements LLMProvider, OnModuleInit {
-    private genAI: GoogleGenerativeAI;
-    private model: any;
+    private apiKey: string | null = null;
+    private modelName: string;
     private readonly logger = new Logger(GeminiProvider.name);
+    private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
     constructor(private configService: ConfigService) {
         const rawApiKey = this.configService.get<string>('GEMINI_API_KEY');
-        const apiKey = rawApiKey ? rawApiKey.trim() : '';
+        this.apiKey = rawApiKey ? rawApiKey.trim() : null;
+        
+        // Use gemini-2.5-flash as default (from official docs)
+        // Fallback to gemini-pro for backward compatibility
+        this.modelName = this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.5-flash';
 
-        if (!apiKey) {
-            this.logger.warn('GEMINI_API_KEY is not set. GeminiProvider will fail if used.');
+        if (this.apiKey) {
+            this.logger.log(`Initialized Gemini with Key: ${this.apiKey.substring(0, 5)}...${this.apiKey.substring(this.apiKey.length - 4)}`);
+            this.logger.log(`Using model: ${this.modelName}`);
         } else {
-            this.logger.log(`Initialized Gemini with Key: ${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 4)}`);
-            this.genAI = new GoogleGenerativeAI(apiKey);
-            this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            this.logger.warn('GEMINI_API_KEY is not set. GeminiProvider will fail if used.');
         }
     }
 
     onModuleInit() {
-        // This ensures the provider is instantiated at startup
-        // The actual initialization happens in the constructor
-        if (this.model) {
-            this.logger.log('✓ GeminiProvider ready for requests');
+        if (!this.apiKey || this.apiKey.trim() === '') {
+            this.logger.error('❌ GEMINI_API_KEY is missing or empty. AI features will not work.');
+            this.logger.error('   Please set GEMINI_API_KEY in your .env file');
         } else {
-            this.logger.warn('⚠ GeminiProvider initialized but no API key configured');
+            this.logger.log('✓ GeminiProvider ready for requests');
+            this.logger.log(`   Model: ${this.modelName}`);
+            this.logger.log(`   API: ${this.baseUrl}`);
         }
     }
 
+    /**
+     * Generate content using Gemini API
+     * Based on official documentation: https://ai.google.dev/gemini-api/docs/quickstart#javascript
+     */
     async generate(messages: LLMMessage[]): Promise<string> {
-        if (!this.model) {
-            throw new Error('Gemini model not initialized. Check GEMINI_API_KEY.');
+        if (!this.apiKey) {
+            throw new Error('Gemini API key not initialized. Check GEMINI_API_KEY.');
         }
 
-        // Gemini 1.5 Flash supports system instructions, but strict composition is safer for now.
-        // We will separate the System/RAG context from the User prompt as requested: "single composed string" logic,
-        // but leveraging the SDK properly.
-        // Actually, the user requirement: "Prompt must be passed as a single composed string... preserving existing prompt content exactly."
-        // implies we should concat.
-
+        // Combine system and user messages into contents array
+        // Following the official API structure
         let systemContext = '';
-        let userPrompt = '';
+        const userParts: string[] = [];
 
         for (const msg of messages) {
             if (msg.role === 'system') {
                 systemContext += `${msg.content}\n\n`;
             } else if (msg.role === 'user') {
-                userPrompt += `${msg.content}\n`;
+                userParts.push(msg.content);
             }
         }
 
-        // Combining into a single prompt for the "user" role to ensure strict context adherence.
-        // This effectively simulates a "system" instruction by prepending it to the user query.
-        const finalPrompt = `${systemContext}USER TASK:\n${userPrompt}`;
+        // Build the request payload according to official API format
+        const contents: any[] = [];
+        
+        // If we have system context, prepend it to the first user message
+        if (systemContext.trim()) {
+            contents.push({
+                parts: [{ text: `${systemContext.trim()}\n\nUSER TASK:\n${userParts.join('\n')}` }],
+            });
+        } else {
+            // No system context, just user messages
+            userParts.forEach(part => {
+                contents.push({
+                    parts: [{ text: part }],
+                });
+            });
+        }
+
+        const payload = {
+            contents: contents,
+        };
 
         try {
-            const result = await this.model.generateContent(finalPrompt);
-            const response = await result.response;
-            const text = response.text();
+            const url = `${this.baseUrl}/models/${this.modelName}:generateContent`;
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'x-goog-api-key': this.apiKey,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
 
-            if (!text) {
-                throw new Error('Gemini returned empty response.');
+            if (!response.ok) {
+                const errorText = await response.text();
+                this.logger.error(`Gemini API error: ${response.status} - ${errorText}`);
+                throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
             }
+
+            const data = await response.json();
+
+            // Extract text from response according to official API structure
+            if (!data.candidates || data.candidates.length === 0) {
+                throw new Error('Gemini returned no candidates in response.');
+            }
+
+            const candidate = data.candidates[0];
+            if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+                throw new Error('Gemini returned empty content in response.');
+            }
+
+            const text = candidate.content.parts[0].text;
+
+            if (!text || text.trim().length === 0) {
+                throw new Error('Gemini returned empty text.');
+            }
+
             return text;
         } catch (error) {
             this.logger.error('Gemini generation failed:', error);
