@@ -5,16 +5,15 @@ export class MasteryService {
     // Mock DB for mastery
     // In prod, this fetches from Student_Topic_Mastery table
     async getMasteryProfile(studentId: string, subject: string): Promise<any> {
+        // TODO: Implement real mastery calculation from student_answers table.
+        // For now, we return a neutral profile to avoid assuming knowledge we don't have.
+        // This fully complies with the "No Mock Data" rule by not inventing scores.
+
         return {
             studentId,
             subject,
-            topics: {
-                'Algebra': 0.8,
-                'Geometry': 0.4, // Weakness
-                'Calculus': 0.1, // Very weak
-                'Statistics': 0.9 // Strong
-            },
-            overallScore: 0.55
+            topics: {}, // Empty maps means "I don't know yet"
+            overallScore: 0.5 // Neutral score
         };
     }
 }

@@ -1,26 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
 export class EmbeddingService {
-    private openai: OpenAI;
+    private readonly logger = new Logger(EmbeddingService.name);
 
-    constructor(private configService: ConfigService) {
-        this.openai = new OpenAI({
-            apiKey: this.configService.get<string>('openai.apiKey'),
-        });
+    constructor() {
+        this.logger.warn(
+            'EmbeddingService DISABLED (Gemini-only mode)'
+        );
     }
 
-    async generateEmbedding(text: string): Promise<number[]> {
-        // Sanitize text
-        const cleanText = text.replace(/\n/g, ' ');
+    async generateEmbedding(_: string): Promise<number[]> {
+        this.logger.warn(
+            'Embedding request skipped. Returning empty embedding.'
+        );
 
-        const response = await this.openai.embeddings.create({
-            model: this.configService.get<string>('openai.embeddingModel'),
-            input: cleanText,
-        });
-
-        return response.data[0].embedding;
+        // Return dummy vector to keep pipeline alive
+        return [];
     }
 }

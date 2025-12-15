@@ -19,12 +19,25 @@ export class IngestionService {
         const chunks = this.chunkText(fullText, 1000, 200);
 
         // 3. Embedding & Storing
+        let processedCount = 0;
         for (const chunk of chunks) {
             const vector = await this.embeddingService.generateEmbedding(chunk);
+
+            // 🔒 GRACEFUL DEGRADATION: Skip storage if embeddings are disabled
+            if (!vector || vector.length === 0) {
+                console.warn('Embeddings unavailable. Skipping chunk storage.');
+                continue;
+            }
+
             await this.ragService.storeVector(vector, chunk, metadata);
+            processedCount++;
         }
 
-        return { chunksProcessed: chunks.length };
+        return {
+            chunksProcessed: processedCount,
+            totalChunks: chunks.length,
+            skipped: chunks.length - processedCount
+        };
     }
 
     private chunkText(text: string, chunkSize: number, overlap: number): string[] {

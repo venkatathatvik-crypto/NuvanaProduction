@@ -2,7 +2,9 @@ import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { AiRequestDto, AiTaskType } from './dto/ai-request.dto';
 import { AiResponseDto } from './dto/ai-response.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
+@Public() // 👈 ADD THIS LINE
 @Controller('ai')
 export class AiController {
     constructor(private readonly aiService: AiService) { }

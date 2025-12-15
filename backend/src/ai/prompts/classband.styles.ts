@@ -1,23 +1,26 @@
 export const ClassBandStyles = {
-    primary: `
-    Tone: Fun, encouraging, and very simple.
-    Language: Simple words, short sentences.
-    Metaphors: Use toys, animals, or cartoons.
-    Structure: Very visual descriptions, step-by-step small chunks.
-  `,
-    middle: `
-    Tone: Friendly but informative.
-    Language: Clear, conversational, introducing some technical terms with definitions.
-    Metaphors: Real-world daily life examples (sports, video games, shopping).
-    Structure: Paragraphs, bullet points, engaging questions.
-  `,
-    high: `
-    Tone: Academic but accessible.
-    Language: Formal, precise technical terminology.
-    Metaphors: Scientific concepts, complex real-world scenarios.
-    Structure: Logical derivation, case studies, critical analysis.
-  `,
-    advanced: `
+  primary: `
+    Class 1-5 Style:
+    - Language: Simple, short sentences.
+    - Analogies: Everyday objects, animals, stories.
+    - Formulas: None unless absolutely essential.
+    - Tone: Encouraging, teacher-like.
+    `,
+  middle: `
+    Class 6-8 Style:
+    - Language: Clear, structured steps.
+    - Analogies: Relatable real-world examples.
+    - Formulas: Gentle introduction with explanation.
+    - Tone: Supportive, guiding.
+    `,
+  high: `
+    Class 9-12 Style:
+    - Language: Formal, academic, exam-oriented.
+    - Content: Step-by-step derivations, board-style thinking.
+    - Formulas: Rigorous use and application.
+    - Tone: Professional, focused on exam readiness.
+    `,
+  advanced: `
     Tone: Scholarly and rigorous.
     Language: University-level, highly technical.
     Metaphors: Abstract concepts, theoretical frameworks.

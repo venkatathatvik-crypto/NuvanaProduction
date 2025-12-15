@@ -14,6 +14,7 @@ export enum AiTaskType {
 
 export class AiRequestDto {
     @IsEnum(AiTaskType)
+    @IsOptional()
     taskType: AiTaskType;
 
     @IsString()
