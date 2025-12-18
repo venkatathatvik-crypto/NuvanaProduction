@@ -46,9 +46,9 @@ import {
     getQuestionTypeDistribution,
     getStudentAnalyticsForTeacher,
     ClassPerformanceTrend,
-    ClassStudentWithScore,
+    StudentWithScore,
     RecentTestMetrics,
-    SubjectAverageData,
+    SubjectAverage,
     AttendanceVsMarks,
     QuestionTypeDistribution,
     StudentAnalyticsForTeacher
@@ -65,13 +65,6 @@ const NEON_COLORS = {
 };
 
 // ---------------- TYPE DEFINITIONS ----------------
-interface StudentListItem {
-    id: string;
-    name: string;
-    avgScore: number;
-    attendancePercentage: number;
-}
-
 interface StudentAnalyticsData {
     radar: { subject: string; A: number; B: number }[];
     strengths: { subject: string; desc: string }[];
@@ -105,12 +98,12 @@ const AnalyticsDashboard = () => {
 
     // State for class insights tab
     const [performanceTrendData, setPerformanceTrendData] = useState<ClassPerformanceTrend[]>([]);
-    const [subjectAverageData, setSubjectAverageData] = useState<SubjectAverageData[]>([]);
+    const [subjectAverageData, setSubjectAverageData] = useState<SubjectAverage[]>([]);
     const [attendanceVsMarksData, setAttendanceVsMarksData] = useState<AttendanceVsMarks[]>([]);
     const [classInsightsLoading, setClassInsightsLoading] = useState(false);
 
     // State for student analysis tab
-    const [studentsList, setStudentsList] = useState<StudentListItem[]>([]);
+    const [studentsList, setStudentsList] = useState<StudentWithScore[]>([]);
     const [studentAnalyticsData, setStudentAnalyticsData] = useState<Record<string, StudentAnalyticsData>>({});
     const [topicChapterData, setTopicChapterData] = useState<Record<string, Record<string, TopicChapterData>>>({});
     const [studentAnalysisLoading, setStudentAnalysisLoading] = useState(false);

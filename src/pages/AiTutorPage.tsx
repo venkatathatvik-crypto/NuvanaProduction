@@ -15,8 +15,13 @@ const AiTutorPage = () => {
     return (
         <div className="min-h-screen bg-background flex flex-col">
             <header className="p-4 border-b border-white/10 flex items-center gap-4 bg-background/50 backdrop-blur-md sticky top-0 z-10">
-                <Button variant="ghost" onClick={() => navigate(-1)}>
-                    <ArrowLeft className="w-5 h-5 mr-2" /> Back
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => navigate(isTeacher ? "/teacher" : "/student")}
+                    className="shrink-0"
+                >
+                    <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
                 <h1 className="text-xl font-bold neon-text">
                     {isTeacher ? 'AI Teaching Assistant' : 'AI Tutor'} - Fullscreen Mode

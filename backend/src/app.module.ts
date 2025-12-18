@@ -10,6 +10,8 @@ import { AcademicModule } from './academic/academic.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import openaiConfig from './config/openai.config';
 
 @Module({
@@ -26,6 +28,8 @@ import openaiConfig from './config/openai.config';
         AnnouncementsModule,
         AttendanceModule,
         FileUploadModule,
+        NotificationsModule,
+        AnalyticsModule,
         AiModule,
         TestModule,
     ],

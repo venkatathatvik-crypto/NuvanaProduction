@@ -9,6 +9,7 @@ import {
   Loader2,
   Calendar,
   Camera,
+  ArrowLeft,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -117,14 +118,17 @@ const TeacherProfile = () => {
           transition={{ duration: 0.5 }}
           className="flex items-center justify-between"
         >
-          <h1 className="text-4xl font-bold neon-text">My Profile</h1>
-          <Button
-            variant="outline"
-            className="glass hover:neon-glow"
-            onClick={() => navigate("/teacher")}
-          >
-            Back to Dashboard
-          </Button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/teacher")}
+              className="shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+            </Button>
+            <h1 className="text-4xl font-bold neon-text">My Profile</h1>
+          </div>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

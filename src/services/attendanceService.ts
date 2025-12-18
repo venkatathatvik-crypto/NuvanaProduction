@@ -107,3 +107,29 @@ export const getStudentAverageMarksPercentage = async (
     return 0;
   }
 };
+
+// Get monthly attendance data for a student
+export const getStudentMonthlyAttendance = async (
+  studentId: string,
+  year: number,
+  month: number,
+): Promise<any> => {
+  try {
+    return await attendanceApi.getStudentMonthlyAttendance(studentId, year, month);
+  } catch (error) {
+    console.error('Error fetching monthly attendance:', error);
+    return null;
+  }
+};
+
+// Get monthly attendance summary (all months)
+export const getStudentMonthlyAttendanceSummary = async (
+  studentId: string,
+): Promise<any[]> => {
+  try {
+    return await attendanceApi.getStudentMonthlyAttendanceSummary(studentId);
+  } catch (error) {
+    console.error('Error fetching monthly summary:', error);
+    return [];
+  }
+};

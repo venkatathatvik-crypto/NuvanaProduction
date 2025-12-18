@@ -38,6 +38,14 @@ export class TestController {
     return this.testService.getTeacherTests(teacherId, schoolId);
   }
 
+  @Get('grading-queue/teacher/:teacherId')
+  async getTeacherGradingQueue(
+    @Param('teacherId') teacherId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.testService.getTeacherGradingQueue(teacherId, schoolId);
+  }
+
   @Get(':id/teacher/:teacherId')
   async getTeacherTest(
     @Param('id') id: string,
@@ -131,5 +139,22 @@ export class TestController {
     @Tenant() schoolId: string,
   ) {
     return this.testService.getStudentSubmission(id, studentId, schoolId);
+  }
+
+  @Get('student/:studentId/graded')
+  async getStudentGradedTests(
+    @Param('studentId') studentId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.testService.getStudentGradedTests(studentId, schoolId);
+  }
+
+  @Get(':testId/submission/student/:studentId')
+  async getSubmissionByTestAndStudent(
+    @Param('testId') testId: string,
+    @Param('studentId') studentId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.testService.getSubmissionByTestAndStudent(testId, studentId, schoolId);
   }
 }

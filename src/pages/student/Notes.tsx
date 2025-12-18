@@ -313,10 +313,12 @@ const Notes = () => {
                                 </Badge>
                               </div>
                               <p className="text-xs text-muted-foreground mt-2">
-                                {formatDistanceToNow(
-                                  new Date(note.uploadDate),
-                                  { addSuffix: true }
-                                )}
+                                {note.uploadDate
+                                  ? formatDistanceToNow(
+                                      new Date(note.uploadDate),
+                                      { addSuffix: true }
+                                    )
+                                  : "Recently"}
                               </p>
                             </div>
                           </div>

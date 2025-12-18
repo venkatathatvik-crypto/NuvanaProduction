@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/mockBackend";
+import { academicService } from "@/services/academicApiService";
 
 // Types
 export interface TimetableDay {
@@ -48,14 +48,10 @@ export const getTimetableForClass = async (
   schoolId: string
 ): Promise<WeeklyTimetable> => {
   try {
-    // Get all days for this class
-    const { data: daysData, error: daysError } = await supabase
-      .from("timetable_days")
-      .select("*")
-      .eq("class_id", classId)
-      .eq("school_id", schoolId);
+    // Use backend API instead of Supabase
+    const weeklyTimetableData = await academicService.getWeeklyTimetable(classId);
 
-    if (daysError) throw daysError;
+    console.log("📅 Raw timetable data from API:", weeklyTimetableData);
 
     // Initialize empty week (days 1-7 for Mon-Sun)
     const weeklyTimetable: WeeklyTimetable = {};
@@ -63,44 +59,46 @@ export const getTimetableForClass = async (
       weeklyTimetable[i] = null;
     }
 
-    if (!daysData || daysData.length === 0) {
-      return weeklyTimetable;
-    }
+    // Transform API response to match expected format
+    // Backend returns: { [day: number]: TimetableDay } where TimetableDay has timetable_periods
+    Object.keys(weeklyTimetableData).forEach((dayOfWeekStr) => {
+      const dayOfWeek = parseInt(dayOfWeekStr);
+      const dayData = weeklyTimetableData[dayOfWeek];
+      
+      console.log(`📆 Processing day ${dayOfWeek}:`, dayData);
+      
+      if (dayData) {
+        const periods = Array.isArray(dayData.timetable_periods) ? dayData.timetable_periods : [];
+        
+        // Always add the day structure, even if it has no periods
+        weeklyTimetable[dayOfWeek] = {
+          day: {
+            id: dayData.id,
+            class_id: dayData.class_id,
+            day_of_week: dayData.day_of_week,
+            school_id: dayData.school_id,
+          },
+          periods: periods.map((period: any) => ({
+            id: period.id,
+            timetable_day_id: dayData.id,
+            period_number: period.period_number,
+            subject_id: period.subject_id,
+            teacher_id: period.teacher_id,
+            start_time: period.start_time,
+            end_time: period.end_time,
+            room: period.room || "",
+            school_id: dayData.school_id,
+            subject_name: period.subject_name,
+            teacher_name: period.teacher_name,
+          })),
+        };
+        console.log(`✅ Added day ${dayOfWeek} with ${periods.length} periods`);
+      } else {
+        console.log(`⚠️ Day ${dayOfWeek} data is missing or invalid:`, dayData);
+      }
+    });
 
-    // Get all periods for these days
-    // Note: subject_id references grade_subjects.id, so we need to join through grade_subjects
-    const dayIds = daysData.map((d) => d.id);
-    const { data: periodsData, error: periodsError } = await supabase
-      .from("timetable_periods")
-      .select(`
-        *,
-        grade_subjects:subject_id (
-          id,
-          subjects_master (name)
-        ),
-        profiles:teacher_id (name)
-      `)
-      .in("timetable_day_id", dayIds)
-      .order("period_number", { ascending: true });
-
-    if (periodsError) throw periodsError;
-
-    // Organize by day
-    for (const day of daysData) {
-      const dayPeriods = (periodsData || [])
-        .filter((p) => p.timetable_day_id === day.id)
-        .map((p) => ({
-          ...p,
-          subject_name: p.grade_subjects?.subjects_master?.name,
-          teacher_name: p.profiles?.name,
-        }));
-
-      weeklyTimetable[day.day_of_week] = {
-        day,
-        periods: dayPeriods,
-      };
-    }
-
+    console.log("📋 Final transformed timetable:", weeklyTimetable);
     return weeklyTimetable;
   } catch (error) {
     console.error("Error in getTimetableForClass:", error);
@@ -110,6 +108,8 @@ export const getTimetableForClass = async (
 
 /**
  * Get or create a timetable day for a class
+ * Note: This function is kept for backward compatibility but should use backend API
+ * The backend API handles day creation automatically when creating periods
  */
 export const getOrCreateTimetableDay = async (
   classId: string,
@@ -117,40 +117,22 @@ export const getOrCreateTimetableDay = async (
   schoolId: string
 ): Promise<TimetableDay | null> => {
   try {
-    // Check if day exists - use maybeSingle to avoid error when no row found
-    const { data: existingDay, error: checkError } = await supabase
-      .from("timetable_days")
-      .select("*")
-      .eq("class_id", classId)
-      .eq("day_of_week", dayOfWeek)
-      .eq("school_id", schoolId)
-      .maybeSingle();
-
-    if (checkError) {
-      console.error("Error checking for existing day:", checkError);
-      throw checkError;
+    // Get the weekly timetable and check if the day exists
+    const weeklyTimetable = await getTimetableForClass(classId, schoolId);
+    const daySchedule = weeklyTimetable[dayOfWeek];
+    
+    if (daySchedule) {
+      return daySchedule.day;
     }
-
-    if (existingDay) {
-      return existingDay;
-    }
-
-    // Create new day
-    const { data: newDay, error: insertError } = await supabase
-      .from("timetable_days")
-      .insert({
-        class_id: classId,
-        day_of_week: dayOfWeek,
-        school_id: schoolId,
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("Error inserting new day:", insertError);
-      throw insertError;
-    }
-    return newDay;
+    
+    // Day doesn't exist - backend will create it when a period is added
+    // Return a placeholder structure
+    return {
+      id: '', // Will be created by backend
+      class_id: classId,
+      day_of_week: dayOfWeek,
+      school_id: schoolId,
+    };
   } catch (error) {
     console.error("Error in getOrCreateTimetableDay:", error);
     return null;
@@ -159,6 +141,7 @@ export const getOrCreateTimetableDay = async (
 
 /**
  * Save (create or update) a timetable period
+ * Uses backend API instead of Supabase
  */
 export const saveTimetablePeriod = async (
   period: {
@@ -174,43 +157,25 @@ export const saveTimetablePeriod = async (
   }
 ): Promise<TimetablePeriod | null> => {
   try {
+    // Extract class_id and day_of_week from timetable_day_id if needed
+    // For now, we'll use the API which handles this
     if (period.id) {
-      // Update existing
-      const { data, error } = await supabase
-        .from("timetable_periods")
-        .update({
-          period_number: period.period_number,
-          subject_id: period.subject_id,
-          teacher_id: period.teacher_id,
-          start_time: period.start_time,
-          end_time: period.end_time,
-          room: period.room,
-        })
-        .eq("id", period.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      // Update existing period
+      const updated = await academicService.updatePeriod(period.id, {
+        period_number: period.period_number,
+        subject_id: period.subject_id,
+        teacher_id: period.teacher_id,
+        start_time: period.start_time,
+        end_time: period.end_time,
+        room: period.room,
+      });
+      return updated as any;
     } else {
-      // Create new
-      const { data, error } = await supabase
-        .from("timetable_periods")
-        .insert({
-          timetable_day_id: period.timetable_day_id,
-          period_number: period.period_number,
-          subject_id: period.subject_id,
-          teacher_id: period.teacher_id,
-          start_time: period.start_time,
-          end_time: period.end_time,
-          room: period.room,
-          school_id: period.school_id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      // Create new period - need to get class_id and day_of_week
+      // This is a limitation - we need these from the day
+      // For now, return null and let the caller use academicService.createOrUpdatePeriod directly
+      console.warn("saveTimetablePeriod: Use academicService.createOrUpdatePeriod for creating new periods");
+      return null;
     }
   } catch (error) {
     console.error("Error in saveTimetablePeriod:", error);
@@ -220,15 +185,11 @@ export const saveTimetablePeriod = async (
 
 /**
  * Delete a timetable period
+ * Uses backend API instead of Supabase
  */
 export const deleteTimetablePeriod = async (periodId: string): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from("timetable_periods")
-      .delete()
-      .eq("id", periodId);
-
-    if (error) throw error;
+    await academicService.deletePeriod(periodId);
     return true;
   } catch (error) {
     console.error("Error in deleteTimetablePeriod:", error);
@@ -286,13 +247,16 @@ export const getStudentTimetable = async (
 };
 
 /**
- * Helper to format time from "HH:MM:SS" to "HH:MM AM/PM"
+ * Helper to format time from "HH:MM" or "HH:MM:SS" to "HH:MM AM/PM"
  */
 const formatTime = (time: string): string => {
   if (!time) return "";
+  // Handle both "HH:MM" and "HH:MM:SS" formats
   const [hours, minutes] = time.split(":");
-  const h = parseInt(hours);
+  const h = parseInt(hours, 10);
+  if (isNaN(h)) return "";
+  const m = minutes || "00";
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return `${h12}:${minutes} ${ampm}`;
+  return `${h12}:${m} ${ampm}`;
 };

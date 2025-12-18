@@ -7,10 +7,11 @@ import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentTimetable } from "@/services/timetableService";
+import { getStudentData } from "@/services/academic";
 
 const Timetable = () => {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, profileLoading } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [timetable, setTimetable] = useState<Record<string, Array<{ time: string; subject: string; room: string; teacher: string; period_number: number }>>>({});
@@ -19,14 +20,24 @@ const Timetable = () => {
 
   useEffect(() => {
     const fetchTimetable = async () => {
-      if (!profile?.class_id || !profile?.school_id) {
+      if (profileLoading) return;
+
+      if (!profile?.id || !profile?.school_id) {
         setLoading(false);
         return;
       }
 
       try {
-        const data = await getStudentTimetable(profile.class_id, profile.school_id);
-        setTimetable(data);
+        // Get student data to get class_id
+        const studentData = await getStudentData(profile.id);
+        console.log("👤 Student data:", studentData);
+        if (studentData?.class_id) {
+          const data = await getStudentTimetable(studentData.class_id, profile.school_id);
+          console.log("📚 Timetable data received:", data);
+          setTimetable(data);
+        } else {
+          console.warn("⚠️ No class_id found for student");
+        }
       } catch (error) {
         console.error("Error fetching timetable:", error);
       } finally {
@@ -35,7 +46,7 @@ const Timetable = () => {
     };
 
     fetchTimetable();
-  }, [profile?.class_id, profile?.school_id]);
+  }, [profile?.id, profile?.school_id, profileLoading]);
 
   const subjectColors: Record<string, string> = {
     Mathematics: "bg-neon-cyan/20 border-neon-cyan/50",

@@ -13,7 +13,6 @@ import {
   getTeacherClasses,
   getTeacherGradingQueue,
   getTestSubmissionsForGrading,
-  gradeStudentAnswer,
   finalizeSubmissionGrading,
   createNotification,
   sendGradeEmail,
@@ -145,7 +144,8 @@ const TeacherMarks = () => {
 
       setGradingLoading(true);
       try {
-        const subs = await getTestSubmissionsForGrading(selectedTestId);
+        if (!profile) return;
+        const subs = await getTestSubmissionsForGrading(selectedTestId, profile.id);
         setSubmissions(subs);
         
         // Auto-select first ungraded submission (pass subs directly since state update is async)
@@ -192,17 +192,18 @@ const TeacherMarks = () => {
   };
 
   const handleSaveGrades = async () => {
-    if (!selectedSubmissionId) return;
+    if (!selectedSubmissionId || !profile) return;
 
     setGradingLoading(true);
     try {
-      // Save each grade
-      for (const [answerId, marks] of Object.entries(localGrades)) {
-        await gradeStudentAnswer(answerId, marks);
-      }
+      // Prepare answers array for grading
+      const answers = Object.entries(localGrades).map(([answerId, marks]) => ({
+        answer_id: answerId,
+        marks_awarded: marks,
+      }));
 
-      // Finalize the submission
-      await finalizeSubmissionGrading(selectedSubmissionId);
+      // Grade all answers at once
+      await finalizeSubmissionGrading(selectedSubmissionId, profile.id, answers);
 
       // Send notification to the student
       const gradedSubmission = submissions.find(s => s.submissionId === selectedSubmissionId);
@@ -236,8 +237,8 @@ const TeacherMarks = () => {
       toast.success("Grades saved successfully!");
 
       // Refresh submissions
-      if (selectedTestId) {
-        const subs = await getTestSubmissionsForGrading(selectedTestId);
+      if (selectedTestId && profile) {
+        const subs = await getTestSubmissionsForGrading(selectedTestId, profile.id);
         setSubmissions(subs);
 
         // Move to next ungraded (pass subs directly since state update is async)
@@ -323,19 +324,19 @@ const TeacherMarks = () => {
         </div>
 
         <Tabs defaultValue="questionwise" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-auto">
+          <TabsList className="grid w-full grid-cols-1 h-auto">
             <TabsTrigger value="questionwise" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
               <span className="hidden sm:inline">Question-wise Grading</span>
               <span className="sm:hidden">Grade</span>
             </TabsTrigger>
-            <TabsTrigger value="manual" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+            {/* <TabsTrigger value="manual" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
               <span className="hidden sm:inline">Manual Entry</span>
               <span className="sm:hidden">Manual</span>
             </TabsTrigger>
             <TabsTrigger value="bulk" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
               <span className="hidden sm:inline">Bulk Upload</span>
               <span className="sm:hidden">Bulk</span>
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
 
           {/* Question-wise Grading Tab - Main Grading Flow */}
@@ -608,8 +609,8 @@ const TeacherMarks = () => {
             )}
           </TabsContent>
 
-          {/* Manual Entry Tab */}
-          <TabsContent value="manual" className="space-y-6 mt-6">
+          {/* Manual Entry Tab - Commented out for now */}
+          {/* <TabsContent value="manual" className="space-y-6 mt-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <Card className="glass-card p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -716,10 +717,10 @@ const TeacherMarks = () => {
                 Publish Marks
               </Button>
             </div>
-          </TabsContent>
+          </TabsContent> */}
 
-          {/* Bulk Upload Tab */}
-          <TabsContent value="bulk" className="space-y-6 mt-6">
+          {/* Bulk Upload Tab - Commented out for now */}
+          {/* <TabsContent value="bulk" className="space-y-6 mt-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <Card className="glass-card p-8 text-center">
                 <Upload className="w-16 h-16 text-primary mx-auto mb-4 neon-glow" />
@@ -748,7 +749,7 @@ const TeacherMarks = () => {
                 <li>• Save the file in CSV format before uploading</li>
               </ul>
             </Card>
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
       </div>
     </div>

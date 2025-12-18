@@ -1,6 +1,7 @@
 // Class, grade, subject, and file category services
-import { supabase, GradeSubjectOption, FileCategoryOption } from "./types";
+import { GradeSubjectOption, FileCategoryOption } from "./types";
 import { NestedClass, FlattenedClass } from "@/schemas/academic";
+import { academicService } from "./academicApiService";
 
 interface RawSubjectData {
   subject_master_id: string;
@@ -25,29 +26,15 @@ interface GradeSubjectRow {
 }
 
 export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> => {
-  const { data: rawData, error } = await supabase.from("classes").select(`
-    id,
-    name,
-    grade_levels (
-      id,
-      name
-    )
-  `)
-  .eq("school_id", schoolId);
+  try {
+    const classes = await academicService.getClasses();
 
-  if (error) {
-    throw new Error("Failed to load class data.");
-  }
+    if (!classes || !Array.isArray(classes)) {
+      return [];
+    }
 
-  if (!rawData) {
-    return [];
-  }
-
-  const flattenedClasses: FlattenedClass[] = rawData.map(
-    (item: NestedClass) => {
-      const gradeData = Array.isArray(item.grade_levels)
-        ? item.grade_levels[0]
-        : item.grade_levels;
+    const flattenedClasses: FlattenedClass[] = classes.map((item) => {
+      const gradeData = item.grade_levels;
 
       return {
         class_id: item.id,
@@ -55,22 +42,26 @@ export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> =>
         grade_id: gradeData ? gradeData.id : 0,
         grade_name: gradeData ? gradeData.name : "Unknown Grade",
       };
-    }
-  );
+    });
 
-  return flattenedClasses;
+    return flattenedClasses;
+  } catch (error) {
+    console.error("Error fetching classes:", error);
+    throw new Error("Failed to load class data.");
+  }
 };
 
 export const getExamTypes = async (schoolId: string): Promise<string[]> => {
-  const { data, error } = await supabase.from("exam_types").select("name")
-    .eq("school_id", schoolId);
-  if (error) {
+  try {
+    const examTypes = await academicService.getExamTypes();
+    if (!examTypes || !Array.isArray(examTypes)) {
+      return [];
+    }
+    return examTypes.map((item) => item.name);
+  } catch (error) {
+    console.error("Error fetching exam types:", error);
     throw new Error("Failed to load exam types.");
   }
-  if (!data) {
-    return [];
-  }
-  return data.map((item) => item.name);
 };
 
 // Exam type with category information
