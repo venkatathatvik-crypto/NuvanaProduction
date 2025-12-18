@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MessageSquare, Send, Users, Shield, Smartphone, ArrowLeft } from 'lucide-react';
+import { Mail, MessageSquare, Send, Users, Shield, Smartphone, ArrowLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,16 +9,45 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/auth/AuthContext";
+import { getTeacherClasses } from "@/services/classService";
+import { FlattenedClass } from "@/schemas/academic";
 
 const TeacherCommunication = () => {
     const navigate = useNavigate();
+    const { profile, profileLoading } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [classes, setClasses] = useState<FlattenedClass[]>([]);
+    const [classesLoading, setClassesLoading] = useState(true);
 
     // Form states
     const [adminSubject, setAdminSubject] = useState('');
     const [adminMessage, setAdminMessage] = useState('');
     const [parentClass, setParentClass] = useState('');
     const [parentMessage, setParentMessage] = useState('');
+
+    // Fetch teacher classes
+    useEffect(() => {
+        const fetchClasses = async () => {
+            if (profileLoading || !profile) {
+                setClassesLoading(false);
+                return;
+            }
+
+            try {
+                setClassesLoading(true);
+                const teacherClasses = await getTeacherClasses(profile.id, profile.school_id);
+                setClasses(teacherClasses);
+            } catch (error) {
+                console.error("Error fetching teacher classes:", error);
+                toast.error("Failed to load classes");
+            } finally {
+                setClassesLoading(false);
+            }
+        };
+
+        fetchClasses();
+    }, [profile, profileLoading]);
 
     const handleSendToAdmin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,7 +65,9 @@ const TeacherCommunication = () => {
         setLoading(true);
         // Simulate API call to WhatsApp bot service
         await new Promise(resolve => setTimeout(resolve, 2000));
-        toast.success(`WhatsApp message scheduled for parents of Class ${parentClass}`);
+        const selectedClass = classes.find(c => c.class_id === parentClass);
+        const className = selectedClass ? selectedClass.class_name : parentClass;
+        toast.success(`WhatsApp message scheduled for parents of ${className}`);
         setParentClass('');
         setParentMessage('');
         setLoading(false);
@@ -142,16 +173,33 @@ const TeacherCommunication = () => {
                                 <form onSubmit={handleSendToParents} className="space-y-4">
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">Select Class</label>
-                                        <Select onValueChange={setParentClass} value={parentClass} required>
+                                        <Select onValueChange={setParentClass} value={parentClass} required disabled={classesLoading}>
                                             <SelectTrigger className="bg-secondary/50 border-white/10">
-                                                <SelectValue placeholder="Choose a class group" />
+                                                <SelectValue placeholder={classesLoading ? "Loading classes..." : "Choose a class group"} />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="10-A">Class 10-A</SelectItem>
-                                                <SelectItem value="10-B">Class 10-B</SelectItem>
-                                                <SelectItem value="9-A">Class 9-A</SelectItem>
+                                                {classesLoading ? (
+                                                    <div className="flex items-center justify-center p-4">
+                                                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                                    </div>
+                                                ) : classes.length === 0 ? (
+                                                    <div className="p-4 text-sm text-muted-foreground text-center">
+                                                        No classes assigned
+                                                    </div>
+                                                ) : (
+                                                    classes.map((cls) => (
+                                                        <SelectItem key={cls.class_id} value={cls.class_id}>
+                                                            {cls.class_name} {cls.grade_name && `(${cls.grade_name})`}
+                                                        </SelectItem>
+                                                    ))
+                                                )}
                                             </SelectContent>
                                         </Select>
+                                        {classes.length === 0 && !classesLoading && (
+                                            <p className="text-xs text-muted-foreground">
+                                                You don't have any classes assigned. Contact admin to get assigned to classes.
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">Announcement Message</label>

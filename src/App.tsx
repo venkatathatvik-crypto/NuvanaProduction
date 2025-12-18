@@ -37,6 +37,14 @@ import AdminPanel from "./pages/teacher/AdminPanel";
 import TeacherCommunication from "./pages/teacher/Communication";
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminAcademic from "./pages/admin/Academic";
+import AdminMembers from "./pages/admin/Members";
+import AdminAssignments from "./pages/admin/Assignments";
+import AdminSettings from "./pages/admin/Settings";
+import AdminTimetable from "./pages/admin/Timetable";
+import AdminProfile from "./pages/admin/Profile";
+
 import StudentTests from "./pages/student/Tests";
 import TestTake from "./pages/student/TestTake";
 import StudentProfile from "./pages/student/Profile";
@@ -312,11 +320,60 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {/* Admin Protected Routes */}
                 <Route
                   path="/admin"
                   element={
                     <ProtectedRoute role="school_admin">
-                      <AdminPanel />
+                      <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/academic"
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminAcademic />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/members"
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminMembers />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/assignments"
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminAssignments />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/settings"
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminSettings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/timetable"
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminTimetable />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/profile"
+                  element={
+                    <ProtectedRoute role="school_admin">
+                      <AdminProfile />
                     </ProtectedRoute>
                   }
                 />
