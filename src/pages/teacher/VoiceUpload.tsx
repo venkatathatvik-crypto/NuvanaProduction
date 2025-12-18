@@ -11,6 +11,7 @@ import {
   Clock,
   FileAudio,
   Download,
+  ArrowLeft,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -510,23 +511,30 @@ const VoiceUpload = () => {
   }
 
   return (
-    <div className="min-h-screen p-6 pt-20 bg-background">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-4xl font-bold neon-text mb-2">
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/teacher")}
+            className="shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+          </Button>
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="min-w-0"
+          >
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">
               Voice Notes 🎙️
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm sm:text-base">
               Record and upload class sessions
             </p>
-          </div>
-
-        </motion.div>
+          </motion.div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Recording Interface */}
