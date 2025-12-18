@@ -814,6 +814,13 @@ export class AcademicService {
     subjectName: string,
     schoolId: string,
   ): Promise<string | null> {
+    // Trim and normalize subject name for matching
+    console.log("subjectName", subjectName);
+    console.log("classId", classId);
+    console.log("schoolId", schoolId);
+    const normalizedSubjectName = subjectName.trim();
+    console.log("normalizedSubjectName", normalizedSubjectName);
+
     // First get the class to get grade_level_id
     const classData = await this.prisma.classes.findFirst({
       where: { id: classId, school_id: schoolId },
@@ -821,36 +828,79 @@ export class AcademicService {
     });
 
     if (!classData) {
+      console.error(`[getGradeSubjectIdByDetails] Class not found: classId=${classId}, schoolId=${schoolId}`);
       return null;
     }
 
-    // Then get grade_subject_id by matching subject name
-    const gradeSubject = await this.prisma.grade_subjects.findFirst({
+    console.log("classData", classData);
+
+    console.log("classData.grade_level_id", classData.grade_level_id);
+    console.log("schoolId", schoolId);
+
+    // Get all grade_subjects for this grade level and school
+    // Then filter by case-insensitive subject name match
+    const gradeSubjects = await this.prisma.grade_subjects.findMany({
       where: {
         grade_level_id: classData.grade_level_id,
         school_id: schoolId,
+      },
+      include: {
         subjects_master: {
-          name: subjectName,
+          select: { name: true },
         },
       },
-      select: { id: true },
     });
 
-    return gradeSubject?.id || null;
+    console.log("gradeSubjects", gradeSubjects);
+
+    // Find matching subject (case-insensitive)
+    const gradeSubject = gradeSubjects.find(
+      (gs) => gs.subjects_master?.name?.trim().toLowerCase() === normalizedSubjectName.toLowerCase()
+    );
+    console.log("gradeSubject", gradeSubject);
+    if (!gradeSubject) {
+      console.error(
+        `[getGradeSubjectIdByDetails] Subject not found: subjectName="${normalizedSubjectName}", ` +
+        `classId=${classId}, gradeLevelId=${classData.grade_level_id}, schoolId=${schoolId}. ` +
+        `Available subjects: ${gradeSubjects.map(gs => gs.subjects_master?.name).filter(Boolean).join(', ')}`
+      );
+      return null;
+    }
+
+    // Ensure we return just the ID string
+    const gradeSubjectId = gradeSubject.id;
+    console.log(`[getGradeSubjectIdByDetails] Returning gradeSubjectId: ${gradeSubjectId} (type: ${typeof gradeSubjectId})`);
+    return gradeSubjectId;
   }
 
   async getExamTypeIdByName(
     examTypeName: string,
     schoolId: string,
   ): Promise<number | null> {
-    const examType = await this.prisma.exam_types.findFirst({
+    // Trim and normalize exam type name for matching
+    const normalizedExamTypeName = examTypeName.trim();
+
+    // Get all exam types for this school and find case-insensitive match
+    const examTypes = await this.prisma.exam_types.findMany({
       where: {
-        name: examTypeName,
         school_id: schoolId,
       },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
-    return examType?.id || null;
+    // Find matching exam type (case-insensitive)
+    const examType = examTypes.find(
+      (et) => et.name?.trim().toLowerCase() === normalizedExamTypeName.toLowerCase()
+    );
+
+    if (!examType) {
+      console.error(
+        `[getExamTypeIdByName] Exam type not found: examTypeName="${normalizedExamTypeName}", ` +
+        `schoolId=${schoolId}. Available types: ${examTypes.map(et => et.name).filter(Boolean).join(', ')}`
+      );
+      return null;
+    }
+
+    return examType.id;
   }
 }

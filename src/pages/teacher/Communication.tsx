@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MessageSquare, Send, Users, Shield, Smartphone } from 'lucide-react';
+import { Mail, MessageSquare, Send, Users, Shield, Smartphone, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const TeacherCommunication = () => {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
 
     // Form states
@@ -50,7 +52,15 @@ const TeacherCommunication = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="max-w-4xl mx-auto space-y-6 relative z-10"
             >
-                <div className="flex items-center gap-4 mb-8">
+                <div className="flex items-center gap-2 sm:gap-4 mb-8">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => navigate("/teacher")}
+                        className="shrink-0"
+                    >
+                        <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </Button>
                     <div className="p-3 rounded-xl bg-primary/20 backdrop-blur-sm border border-primary/20">
                         <MessageSquare className="w-8 h-8 text-primary" />
                     </div>

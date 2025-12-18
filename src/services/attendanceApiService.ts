@@ -31,6 +31,52 @@ export interface MarkAttendanceResponse {
   totalCount: number;
 }
 
+export interface SubjectAttendance {
+  subject: string;
+  present: number;
+  total: number;
+  percentage: number;
+  trend: 'up' | 'down';
+  recentClasses: Array<{
+    date: string;
+    status: 'present' | 'absent';
+  }>;
+}
+
+export interface DailyAttendanceData {
+  date: string;
+  day: number;
+  dayName: string;
+  status: 'present' | 'absent' | null;
+  isWeekend: boolean;
+  present: number;
+  absent: number;
+}
+
+export interface MonthlyAttendance {
+  year: number;
+  month: number;
+  monthName: string;
+  dailyData: DailyAttendanceData[];
+  summary: {
+    presentDays: number;
+    absentDays: number;
+    totalDays: number;
+    percentage: number;
+  };
+}
+
+export interface MonthlyAttendanceSummary {
+  year: number;
+  month: number;
+  monthKey: string;
+  monthName: string;
+  present: number;
+  absent: number;
+  total: number;
+  percentage: number;
+}
+
 // ==================== ATTENDANCE SERVICE ====================
 export const attendanceApi = {
   /**
@@ -96,7 +142,25 @@ export const attendanceApi = {
   /**
    * Get student attendance breakdown by subject
    */
-  async getStudentAttendanceBySubject(studentId: string): Promise<any[]> {
+  async getStudentAttendanceBySubject(studentId: string): Promise<SubjectAttendance[]> {
     return apiClient.get(`/attendance/student/${studentId}/by-subject`);
+  },
+
+  /**
+   * Get monthly attendance data for a student
+   */
+  async getStudentMonthlyAttendance(
+    studentId: string,
+    year: number,
+    month: number,
+  ): Promise<MonthlyAttendance> {
+    return apiClient.get(`/attendance/student/${studentId}/monthly?year=${year}&month=${month}`);
+  },
+
+  /**
+   * Get monthly attendance summary (all months)
+   */
+  async getStudentMonthlyAttendanceSummary(studentId: string): Promise<MonthlyAttendanceSummary[]> {
+    return apiClient.get(`/attendance/student/${studentId}/monthly-summary`);
   },
 };

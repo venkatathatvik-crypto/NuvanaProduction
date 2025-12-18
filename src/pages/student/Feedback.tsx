@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Star, Send, CheckCircle } from "lucide-react";
+import { Star, Send, CheckCircle, ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,9 +68,6 @@ const StudentFeedback = () => {
                         <p className="text-muted-foreground">
                             Your feedback has been recorded. We appreciate your input in helping us improve.
                         </p>
-                        <Button onClick={() => navigate("/student")} className="w-full">
-                            Return to Dashboard
-                        </Button>
                     </Card>
                 </motion.div>
             </div>
@@ -83,12 +80,17 @@ const StudentFeedback = () => {
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between"
+                    className="flex items-center gap-2 sm:gap-4"
                 >
-                    <h1 className="text-3xl font-bold neon-text">Annual Feedback</h1>
-                    <Button variant="ghost" onClick={() => navigate("/student/profile")}>
-                        Cancel
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => navigate("/student")}
+                        className="shrink-0"
+                    >
+                        <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                     </Button>
+                    <h1 className="text-3xl font-bold neon-text">Annual Feedback</h1>
                 </motion.div>
 
                 <motion.div

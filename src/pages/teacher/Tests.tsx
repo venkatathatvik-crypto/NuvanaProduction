@@ -1,8 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Edit, Trash2, FileText, ArrowLeft } from "lucide-react";
+import { Plus, Edit, Trash2, FileText, ArrowLeft, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
@@ -16,16 +24,20 @@ import {
   sendTestPublishedEmail,
   TeacherTest,
 } from "@/services/academic";
+import { getTeacherClasses, FlattenedClass } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TeacherTests = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
   const [tests, setTests] = useState<TeacherTest[]>([]);
+  const [classes, setClasses] = useState<FlattenedClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTab, setSelectedTab] = useState<"Internal Assessment" | "School Exam">("School Exam");
+  const [selectedClassId, setSelectedClassId] = useState<string>("all");
 
   useEffect(() => {
-    const fetchTests = async () => {
+    const fetchData = async () => {
       if (profileLoading) return;
 
       if (!profile) {
@@ -34,18 +46,43 @@ const TeacherTests = () => {
       }
 
       try {
-        const testsData = await getTeacherTests(profile.id);
+        const [testsData, classesData] = await Promise.all([
+          getTeacherTests(profile.id),
+          getTeacherClasses(profile.id, profile.school_id),
+        ]);
         setTests(testsData);
+        setClasses(classesData || []);
       } catch (error: any) {
-        console.error("Error fetching tests:", error);
+        console.error("Error fetching data:", error);
         toast.error("Failed to load tests");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTests();
+    fetchData();
   }, [profile, profileLoading]);
+
+  // Filter tests based on selected tab and class
+  const filteredTests = useMemo(() => {
+    let filtered = tests;
+
+    // Filter by exam type category
+    filtered = filtered.filter((test) => {
+      if (selectedTab === "Internal Assessment") {
+        return test.examTypeCategory === "Internal Assessment";
+      } else {
+        return test.examTypeCategory === "School Exam";
+      }
+    });
+
+    // Filter by class if a specific class is selected
+    if (selectedClassId !== "all") {
+      filtered = filtered.filter((test) => test.classId === selectedClassId);
+    }
+
+    return filtered;
+  }, [tests, selectedTab, selectedClassId]);
 
   const handleDelete = async (id: string) => {
     if (!profile) return;
@@ -118,17 +155,23 @@ const TeacherTests = () => {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
       >
-        <div className="min-w-0">
-          <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Manage Tests 📝</h1>
-          <p className="text-muted-foreground text-sm sm:text-base">
-            Create and manage MCQ assessments
-          </p>
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/teacher")}
+            className="shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Manage Tests 📝</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
+              Create and manage MCQ assessments
+            </p>
+          </div>
         </div>
         <div className="flex gap-2 sm:gap-4 shrink-0">
-          <Button variant="outline" onClick={() => navigate("/teacher")}>
-            <ArrowLeft className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Back</span>
-          </Button>
           <Button
             onClick={() => navigate("/teacher/tests/create")}
             className="gap-2"
@@ -145,9 +188,38 @@ const TeacherTests = () => {
           <LoadingSpinner />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tests.map((test, index) => {
-            const questionCount = test.questions?.length || 0;
+        <div className="space-y-6">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as "Internal Assessment" | "School Exam")} className="w-full sm:w-auto">
+              <TabsList className="grid w-full sm:w-auto grid-cols-2">
+                <TabsTrigger value="School Exam">School Exams</TabsTrigger>
+                <TabsTrigger value="Internal Assessment">Internal Assessments</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <SelectValue placeholder="Filter by class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes</SelectItem>
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.class_id} value={cls.class_id}>
+                      {cls.class_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Tests Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTests.map((test, index) => {
+            const questionCount = test.questionCount || test.questions?.length || 0;
 
             return (
               <motion.div
@@ -178,11 +250,18 @@ const TeacherTests = () => {
                       <span>{questionCount} Questions</span>
                       <span>{test.durationMinutes} mins</span>
                     </div>
-                    {test.examTypeName && (
-                      <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded w-fit">
-                        {test.examTypeName}
-                      </div>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {test.className && (
+                        <div className="text-xs text-blue-500 bg-blue-500/10 px-2 py-1 rounded w-fit">
+                          📚 {test.className}
+                        </div>
+                      )}
+                      {test.examTypeName && (
+                        <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded w-fit">
+                          {test.examTypeName}
+                        </div>
+                      )}
+                    </div>
                     {test.dueDate && (
                       <div className="text-xs text-orange-500 bg-orange-500/10 px-2 py-1 rounded w-fit flex items-center gap-1">
                         <span>📅</span>
@@ -226,14 +305,17 @@ const TeacherTests = () => {
             );
           })}
 
-          {tests.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground">
-              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>
-                No tests created yet. Click "Create New Test" to get started.
-              </p>
-            </div>
-          )}
+            {filteredTests.length === 0 && (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>
+                  {tests.length === 0
+                    ? "No tests created yet. Click 'Create New Test' to get started."
+                    : `No ${selectedTab.toLowerCase()} found${selectedClassId !== "all" ? " for the selected class" : ""}.`}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

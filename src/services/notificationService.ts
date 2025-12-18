@@ -1,5 +1,5 @@
 // Notification service for creating and managing notifications
-import { supabase } from "./types";
+import { apiClient } from "@/lib/apiClient";
 
 export interface Notification {
   id: string;
@@ -30,19 +30,17 @@ export interface CreateNotificationParams {
 export const createNotification = async (
   params: CreateNotificationParams
 ): Promise<void> => {
-  const { error } = await supabase.from("notifications").insert({
-    recipient_id: params.recipient_id,
-    school_id: params.school_id,
-    title: params.title,
-    message: params.message,
-    notification_type: params.notification_type,
-    source_id: params.source_id || null,
-    target_url: params.target_url || null,
-    is_read: false,
-    is_urgent: params.is_urgent || false,
-  });
-
-  if (error) {
+  try {
+    await apiClient.post('/notifications', {
+      recipient_id: params.recipient_id,
+      title: params.title,
+      message: params.message,
+      notification_type: params.notification_type,
+      source_id: params.source_id,
+      target_url: params.target_url,
+      is_urgent: params.is_urgent || false,
+    });
+  } catch (error) {
     console.error("Error creating notification:", error);
     throw new Error("Failed to create notification");
   }
@@ -55,21 +53,17 @@ export const createNotificationsForClass = async (
 ): Promise<void> => {
   if (recipientIds.length === 0) return;
 
-  const notifications = recipientIds.map((recipientId) => ({
-    recipient_id: recipientId,
-    school_id: params.school_id,
-    title: params.title,
-    message: params.message,
-    notification_type: params.notification_type,
-    source_id: params.source_id || null,
-    target_url: params.target_url || null,
-    is_read: false,
-    is_urgent: params.is_urgent || false,
-  }));
-
-  const { error } = await supabase.from("notifications").insert(notifications);
-
-  if (error) {
+  try {
+    await apiClient.post('/notifications/batch', {
+      recipient_ids: recipientIds,
+      title: params.title,
+      message: params.message,
+      notification_type: params.notification_type,
+      source_id: params.source_id,
+      target_url: params.target_url,
+      is_urgent: params.is_urgent || false,
+    });
+  } catch (error) {
     console.error("Error creating batch notifications:", error);
     // Don't throw - notifications should not block main actions
   }
@@ -80,49 +74,36 @@ export const getNotifications = async (
   recipientId: string,
   limit: number = 20
 ): Promise<Notification[]> => {
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("recipient_id", recipientId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (error) {
+  try {
+    const notifications = await apiClient.get(`/notifications/recipient/${recipientId}?limit=${limit}`);
+    return notifications || [];
+  } catch (error) {
     console.error("Error fetching notifications:", error);
     return [];
   }
-
-  return data || [];
 };
 
 // Get unread notification count
 export const getUnreadNotificationCount = async (
   recipientId: string
 ): Promise<number> => {
-  const { count, error } = await supabase
-    .from("notifications")
-    .select("*", { count: "exact", head: true })
-    .eq("recipient_id", recipientId)
-    .eq("is_read", false);
-
-  if (error) {
+  try {
+    const result = await apiClient.get(`/notifications/recipient/${recipientId}/unread-count`);
+    return result.count || 0;
+  } catch (error) {
     console.error("Error fetching unread count:", error);
     return 0;
   }
-
-  return count || 0;
 };
 
 // Mark a single notification as read
 export const markNotificationAsRead = async (
-  notificationId: string
+  notificationId: string,
+  recipientId: string
 ): Promise<void> => {
-  const { error } = await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("id", notificationId);
-
-  if (error) {
+  try {
+    await apiClient.patch(`/notifications/${notificationId}/read/recipient/${recipientId}`);
+  } catch (error) {
     console.error("Error marking notification as read:", error);
   }
 };
@@ -131,13 +112,9 @@ export const markNotificationAsRead = async (
 export const markAllNotificationsAsRead = async (
   recipientId: string
 ): Promise<void> => {
-  const { error } = await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("recipient_id", recipientId)
-    .eq("is_read", false);
-
-  if (error) {
+  try {
+    await apiClient.patch(`/notifications/recipient/${recipientId}/read-all`);
+  } catch (error) {
     console.error("Error marking all as read:", error);
   }
 };
@@ -146,16 +123,11 @@ export const markAllNotificationsAsRead = async (
 export const getStudentIdsInClass = async (
   classId: string
 ): Promise<string[]> => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("class_id", classId)
-    .eq("role_id", 4); // role_id 4 = student
-
-  if (error) {
+  try {
+    const result = await apiClient.get(`/notifications/class/${classId}/student-ids`);
+    return result.student_ids || [];
+  } catch (error) {
     console.error("Error fetching student IDs:", error);
     return [];
   }
-
-  return data?.map((s) => s.id) || [];
 };

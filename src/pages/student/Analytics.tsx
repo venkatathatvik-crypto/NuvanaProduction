@@ -127,6 +127,24 @@ const StudentAnalytics = () => {
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 sm:gap-4"
+            >
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => navigate("/student")}
+                    className="shrink-0"
+                >
+                    <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                </Button>
+                <div>
+                    <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Analytics Dashboard 📊</h1>
+                    <p className="text-muted-foreground text-sm sm:text-base">Deep insights into your performance</p>
+                </div>
+            </motion.div>
+            <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
                 className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
             >
                 <div className="min-w-0">

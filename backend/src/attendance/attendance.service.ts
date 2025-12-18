@@ -312,7 +312,7 @@ export class AttendanceService {
   }
 
   async getStudentAttendanceBySubject(studentId: string, schoolId: string) {
-    // Get student's class and grade level
+    // Get student's class
     const student = await this.prisma.profiles.findFirst({
       where: {
         id: studentId,
@@ -324,6 +324,7 @@ export class AttendanceService {
           include: {
             classes: {
               select: {
+                id: true,
                 grade_level_id: true,
               },
             },
@@ -336,24 +337,53 @@ export class AttendanceService {
       return [];
     }
 
-    const gradeLevel = student.student_details.classes.grade_level_id;
+    const classId = student.student_details.classes.id;
 
-    // Get all subjects for this grade level
-    const gradeSubjects = await this.prisma.grade_subjects.findMany({
+    // Get timetable for this class to find which subjects are actually taught
+    const timetableDays = await this.prisma.timetable_days.findMany({
       where: {
-        grade_level_id: gradeLevel,
+        class_id: classId,
         school_id: schoolId,
       },
       include: {
-        subjects_master: {
-          select: {
-            name: true,
+        timetable_periods: {
+          include: {
+            grade_subjects: {
+              include: {
+                subjects_master: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
     });
 
-    if (!gradeSubjects || gradeSubjects.length === 0) {
+    // Extract unique subjects from timetable
+    const subjectMap = new Map<
+      string,
+      { subjectId: string; subjectName: string; dayOfWeek: number }
+    >();
+
+    timetableDays.forEach((day) => {
+      day.timetable_periods.forEach((period) => {
+        const subjectId = period.subject_id;
+        const subjectName =
+          period.grade_subjects?.subjects_master?.name || 'Unknown Subject';
+        if (!subjectMap.has(subjectId)) {
+          subjectMap.set(subjectId, {
+            subjectId,
+            subjectName,
+            dayOfWeek: day.day_of_week,
+          });
+        }
+      });
+    });
+
+    if (subjectMap.size === 0) {
       return [];
     }
 
@@ -372,38 +402,84 @@ export class AttendanceService {
       },
     });
 
-    // Process each subject with attendance data
-    const subjectAttendance = gradeSubjects.map((gs) => {
-      const subjectName = gs.subjects_master.name || 'Unknown Subject';
+    // Create a map of attendance by date for quick lookup
+    const attendanceByDate = new Map<string, boolean>();
+    attendanceData.forEach((record) => {
+      const dateKey = record.attendance_date.toISOString().split('T')[0];
+      attendanceByDate.set(dateKey, record.status === 'present');
+    });
 
-      const totalRecords = attendanceData.length;
-      const presentRecords = attendanceData.filter(
-        (a) => a.status === 'present',
-      ).length;
+    // Process each subject from timetable
+    const subjectAttendance = Array.from(subjectMap.values()).map((subject) => {
+      const subjectName = subject.subjectName;
+
+      // Find all days this subject has classes (from timetable)
+      const daysWithSubject = timetableDays
+        .filter((day) =>
+          day.timetable_periods.some((p) => p.subject_id === subject.subjectId),
+        )
+        .map((day) => day.day_of_week);
+
+      // Calculate attendance for this subject
+      // Count total days with this subject (based on attendance records that fall on those days of week)
+      let totalDaysWithSubject = 0;
+      let presentDaysForSubject = 0;
+
+      attendanceData.forEach((record) => {
+        const recordDate = new Date(record.attendance_date);
+        const dayOfWeek = recordDate.getDay(); // 0=Sunday, 1=Monday, etc.
+        // Convert to our format: 1=Monday, 2=Tuesday, etc.
+        const normalizedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+
+        // Check if this day of week has classes for this subject
+        if (daysWithSubject.includes(normalizedDayOfWeek)) {
+          totalDaysWithSubject++;
+          if (record.status === 'present') {
+            presentDaysForSubject++;
+          }
+        }
+      });
 
       const percentage =
-        totalRecords > 0 ? (presentRecords / totalRecords) * 100 : 0;
+        totalDaysWithSubject > 0
+          ? (presentDaysForSubject / totalDaysWithSubject) * 100
+          : 0;
 
-      // Get recent 5 classes
-      const recentClasses = attendanceData.slice(0, 5).map((record) => ({
-        date: record.attendance_date.toISOString().split('T')[0],
-        status: record.status === 'present' ? ('present' as const) : ('absent' as const),
-      }));
+      // Get recent 5 attendance records for days when this subject had classes
+      const recentClassesForSubject = attendanceData
+        .filter((record) => {
+          const recordDate = new Date(record.attendance_date);
+          const dayOfWeek = recordDate.getDay();
+          const normalizedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+          return daysWithSubject.includes(normalizedDayOfWeek);
+        })
+        .slice(0, 5)
+        .map((record) => ({
+          date: record.attendance_date.toISOString().split('T')[0],
+          status: record.status === 'present' ? ('present' as const) : ('absent' as const),
+        }));
 
-      // Determine trend (compare first 50% vs last 50%)
-      const midpoint = Math.floor(attendanceData.length / 2);
-      const firstHalf = attendanceData
+      // Determine trend (compare first 50% vs last 50% of subject-specific records)
+      const subjectRecords = attendanceData.filter((record) => {
+        const recordDate = new Date(record.attendance_date);
+        const dayOfWeek = recordDate.getDay();
+        const normalizedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+        return daysWithSubject.includes(normalizedDayOfWeek);
+      });
+
+      const midpoint = Math.floor(subjectRecords.length / 2);
+      const firstHalf = subjectRecords
         .slice(0, midpoint)
         .filter((a) => a.status === 'present').length;
-      const secondHalf = attendanceData
+      const secondHalf = subjectRecords
         .slice(midpoint)
         .filter((a) => a.status === 'present').length;
 
       const firstHalfPercentage =
         midpoint > 0 ? (firstHalf / midpoint) * 100 : 0;
       const secondHalfPercentage =
-        attendanceData.length - midpoint > 0
-          ? (secondHalf / (attendanceData.length - midpoint)) * 100
+        subjectRecords.length - midpoint > 0
+          ? (secondHalf / (subjectRecords.length - midpoint)) * 100
           : 0;
 
       const trend: 'up' | 'down' =
@@ -411,14 +487,208 @@ export class AttendanceService {
 
       return {
         subject: subjectName,
-        present: presentRecords,
-        total: totalRecords,
+        present: presentDaysForSubject,
+        total: totalDaysWithSubject,
         percentage: Math.round(percentage * 10) / 10,
         trend,
-        recentClasses,
+        recentClasses: recentClassesForSubject,
       };
     });
 
+    // Sort by subject name for consistent display
+    subjectAttendance.sort((a, b) => a.subject.localeCompare(b.subject));
+
     return subjectAttendance;
+  }
+
+  async getStudentMonthlyAttendance(
+    studentId: string,
+    schoolId: string,
+    year: number,
+    month: number,
+  ) {
+    // Verify student exists
+    const student = await this.prisma.profiles.findFirst({
+      where: {
+        id: studentId,
+        school_id: schoolId,
+        role_id: 4,
+      },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    // Get start and end dates for the month
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    // Fetch all attendance records for this student in the specified month
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: {
+        student_id: studentId,
+        school_id: schoolId,
+        attendance_date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        attendance_date: true,
+        status: true,
+      },
+      orderBy: {
+        attendance_date: 'asc',
+      },
+    });
+
+    // Create a map of date to status
+    const attendanceMap = new Map<string, 'present' | 'absent'>();
+    attendanceRecords.forEach((record) => {
+      const dateKey = record.attendance_date.toISOString().split('T')[0];
+      attendanceMap.set(dateKey, record.status === 'present' ? 'present' : 'absent');
+    });
+
+    // Check if this is the current month
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to start of day
+    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
+    const todayDate = today.getDate();
+    const tomorrowDate = todayDate + 1;
+    
+    // Generate data for all days in the month
+    const daysInMonth = endDate.getDate();
+    const monthlyData = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const currentDate = new Date(year, month - 1, day);
+      const dateKey = currentDate.toISOString().split('T')[0];
+      const dayOfWeek = currentDate.getDay();
+      const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek];
+      
+      // Check if it's a weekend
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      
+      // For current month: show up to today, and include tomorrow
+      if (isCurrentMonth) {
+        if (day > tomorrowDate) {
+          continue; // Skip future days beyond tomorrow
+        }
+      } else {
+        // For older months: skip weekends (Saturdays and Sundays)
+        if (isWeekend) {
+          continue;
+        }
+      }
+      
+      const status = attendanceMap.get(dateKey);
+      
+      monthlyData.push({
+        date: dateKey,
+        day: day,
+        dayName: dayName,
+        status: status || null, // null means no attendance record
+        isWeekend: isWeekend,
+        present: status === 'present' ? 1 : 0,
+        absent: status === 'absent' ? 1 : 0,
+      });
+    }
+
+    // Calculate monthly summary
+    const presentDays = attendanceRecords.filter((r) => r.status === 'present').length;
+    const absentDays = attendanceRecords.filter((r) => r.status === 'absent').length;
+    const totalDays = presentDays + absentDays;
+    const percentage = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
+
+    return {
+      year,
+      month,
+      monthName: new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' }),
+      dailyData: monthlyData,
+      summary: {
+        presentDays,
+        absentDays,
+        totalDays,
+        percentage: Math.round(percentage * 10) / 10,
+      },
+    };
+  }
+
+  async getStudentMonthlyAttendanceSummary(
+    studentId: string,
+    schoolId: string,
+  ) {
+    // Verify student exists
+    const student = await this.prisma.profiles.findFirst({
+      where: {
+        id: studentId,
+        school_id: schoolId,
+        role_id: 4,
+      },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    // Get all attendance records
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: {
+        student_id: studentId,
+        school_id: schoolId,
+      },
+      select: {
+        attendance_date: true,
+        status: true,
+      },
+      orderBy: {
+        attendance_date: 'desc',
+      },
+    });
+
+    // Group by month
+    const monthlyMap = new Map<string, { present: number; absent: number }>();
+
+    attendanceRecords.forEach((record) => {
+      const date = new Date(record.attendance_date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyMap.has(monthKey)) {
+        monthlyMap.set(monthKey, { present: 0, absent: 0 });
+      }
+
+      const monthData = monthlyMap.get(monthKey)!;
+      if (record.status === 'present') {
+        monthData.present++;
+      } else {
+        monthData.absent++;
+      }
+    });
+
+    // Convert to array and format
+    const monthlySummary = Array.from(monthlyMap.entries())
+      .map(([monthKey, data]) => {
+        const [year, month] = monthKey.split('-').map(Number);
+        const total = data.present + data.absent;
+        const percentage = total > 0 ? (data.present / total) * 100 : 0;
+
+        return {
+          year,
+          month,
+          monthKey,
+          monthName: new Date(year, month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
+          present: data.present,
+          absent: data.absent,
+          total,
+          percentage: Math.round(percentage * 10) / 10,
+        };
+      })
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.month - a.month;
+      });
+
+    return monthlySummary;
   }
 }

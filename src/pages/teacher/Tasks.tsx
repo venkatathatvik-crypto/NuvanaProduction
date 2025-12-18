@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckSquare, AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { CheckSquare, AlertCircle, ArrowRight, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,13 +64,20 @@ const TeacherTasks = () => {
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between"
+                    className="flex items-center gap-2 sm:gap-4"
                 >
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => navigate("/teacher")}
+                        className="shrink-0"
+                    >
+                        <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </Button>
                     <div>
                         <h1 className="text-4xl font-bold neon-text mb-2">My Tasks 📝</h1>
                         <p className="text-muted-foreground">Manage your grading queue</p>
                     </div>
-
                 </motion.div>
 
                 {/* Grading Section */}

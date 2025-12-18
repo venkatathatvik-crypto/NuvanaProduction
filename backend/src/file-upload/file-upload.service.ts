@@ -567,6 +567,13 @@ export class FileUploadService {
 
     return voiceNotes.map((vn) => {
       const publicUrl = this.storage.getPublicUrl('voice_notes', vn.storage_url);
+      // Ensure created_at is never null - use current date as fallback
+      const createdAt = vn.created_at || new Date();
+      // Format as ISO string for consistent frontend handling
+      const uploadDate = createdAt instanceof Date 
+        ? createdAt.toISOString() 
+        : new Date(createdAt).toISOString();
+      
       return {
         id: vn.id,
         title: vn.title,
@@ -576,9 +583,9 @@ export class FileUploadService {
         duration: vn.duration_seconds, // For compatibility
         fileSizeBytes: Number(vn.file_size_bytes),
         fileSize: Number(vn.file_size_bytes), // For compatibility
-        subject: vn.grade_subjects.subjects_master?.name || 'Unknown',
-        uploadDate: vn.created_at,
-        createdAt: vn.created_at, // For compatibility
+        subject: vn.grade_subjects?.subjects_master?.name || 'Unknown',
+        uploadDate: uploadDate,
+        createdAt: uploadDate, // For compatibility
       };
     });
   }

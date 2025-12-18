@@ -285,43 +285,81 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
 
         reader.onload = (e) => {
             const content = e.target?.result as string;
-            const lines = content.split("\n");
-            const newQuestions: any[] = [];
+            const lines = content.split("\n").filter(line => line.trim());
+            
+            if (lines.length === 0) {
+                toast.error("CSV file is empty");
+                return;
+            }
 
-            const startIndex = lines[0].toLowerCase().includes("question") ? 1 : 0;
+            const newQuestions: any[] = [];
+            
+            // Check header row
+            const header = lines[0].toLowerCase();
+            const expectedHeaders = ["question", "opt1", "opt2", "opt3", "opt4", "correctindex", "marks", "chapter", "topic"];
+            const hasHeader = expectedHeaders.some(h => header.includes(h));
+            
+            // Validate header format
+            if (hasHeader) {
+                const headerParts = lines[0].split(",").map(h => h.trim().toLowerCase());
+                const missingHeaders = expectedHeaders.filter(h => !headerParts.some(headerPart => headerPart.includes(h)));
+                
+                if (missingHeaders.length > 0) {
+                    toast.error(
+                        `CSV header is missing required columns: ${missingHeaders.join(", ")}. ` +
+                        `Expected format: Question, Opt1, Opt2, Opt3, Opt4, CorrectIndex, Marks, Chapter, Topic`
+                    );
+                    return;
+                }
+            }
+
+            const startIndex = hasHeader ? 1 : 0;
 
             for (let i = startIndex; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line) continue;
 
-                const parts = line.split(",");
+                const parts = line.split(",").map(p => p.trim());
                 if (parts.length >= 8) {
+                    const correctIndex = parseInt(parts[5].trim());
+                    if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
+                        toast.warning(`Row ${i + 1}: Invalid CorrectIndex (must be 0-3), using 0`);
+                    }
+                    
                     newQuestions.push({
-                        text: parts[0].trim(),
+                        text: parts[0].trim() || `Question ${newQuestions.length + 1}`,
                         options: [
-                            parts[1].trim(),
-                            parts[2].trim(),
-                            parts[3].trim(),
-                            parts[4].trim(),
+                            parts[1].trim() || "Option A",
+                            parts[2].trim() || "Option B",
+                            parts[3].trim() || "Option C",
+                            parts[4].trim() || "Option D",
                         ].filter(Boolean),
-                        correctOptionIndex: parseInt(parts[5].trim()) || 0,
+                        correctOptionIndex: (correctIndex >= 0 && correctIndex <= 3) ? correctIndex : 0,
                         marks: parseInt(parts[6]?.trim()) || 1,
                         chapter: parts[7]?.trim() || "General",
                         topic: parts[8]?.trim() || "General",
                         questionType: "MCQ",
                         negativeMarks: 0,
                     });
+                } else {
+                    toast.warning(`Row ${i + 1}: Insufficient columns (expected 9, found ${parts.length}). Skipping.`);
                 }
             }
 
             if (newQuestions.length > 0) {
                 newQuestions.forEach((q) => append(q));
-                toast.success(`Imported ${newQuestions.length} questions`);
+                toast.success(`Imported ${newQuestions.length} question${newQuestions.length > 1 ? 's' : ''} from CSV`);
             } else {
                 toast.error(
-                    "Failed to parse CSV. Format: Question, Opt1, Opt2, Opt3, Opt4, CorrectIndex, Marks, Chapter, Topic"
+                    "Failed to parse CSV. Please ensure your CSV has the correct format:\n" +
+                    "Header: Question, Opt1, Opt2, Opt3, Opt4, CorrectIndex, Marks, Chapter, Topic\n" +
+                    "CorrectIndex should be 0-3 (0 for first option, 3 for fourth option)"
                 );
             }
+        };
+
+        reader.onerror = () => {
+            toast.error("Error reading CSV file");
         };
 
         reader.readAsText(file);
@@ -654,7 +692,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                 Questions ({fields.length})
                             </h2>
                             <div className="flex gap-2">
-                                <div className="relative">
+                                <div className="relative group">
                                     <input
                                         type="file"
                                         accept=".csv"
@@ -665,6 +703,18 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                         <Upload className="w-4 h-4 sm:mr-2" />
                                         <span className="hidden sm:inline">Import CSV</span>
                                     </Button>
+                                    {/* Tooltip */}
+                                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
+                                        <div className="bg-popover text-popover-foreground text-xs rounded-md p-2 shadow-lg border border-border max-w-xs">
+                                            <p className="font-semibold mb-1">CSV Format:</p>
+                                            <p className="text-muted-foreground">
+                                                Header: <span className="font-mono">Question, Opt1, Opt2, Opt3, Opt4, CorrectIndex, Marks, Chapter, Topic</span>
+                                            </p>
+                                            <p className="text-muted-foreground mt-1">
+                                                CorrectIndex: 0-3 (0 = first option, 3 = fourth option)
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                                 <Button
                                     type="button"

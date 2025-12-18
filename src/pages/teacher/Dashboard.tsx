@@ -22,7 +22,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
 import NotificationBell from "@/components/NotificationBell";
-import { supabase } from "@/lib/mockBackend";
+import { getNotifications, type Notification } from "@/services/notificationService";
 import { formatDistanceToNow } from "date-fns";
 
 const TeacherDashboard = () => {
@@ -30,7 +30,7 @@ const TeacherDashboard = () => {
   const { logout, profile } = useAuth();
   const [classes, setClasses] = useState<FlattenedClass[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ const TeacherDashboard = () => {
     };
 
     fetchClasses();
-  }, [profile?.id]);
+  }, [profile?.id, profile?.school_id]);
 
   useEffect(() => {
     const fetchRecentNotifications = async () => {
@@ -62,15 +62,8 @@ const TeacherDashboard = () => {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('recipient_id', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (error) throw error;
-        setNotifications(data || []);
+        const recentNotifications = await getNotifications(profile.id, 5);
+        setNotifications(recentNotifications || []);
       } catch (error) {
         console.error('Error fetching notifications:', error);
         setNotifications([]);
@@ -98,7 +91,7 @@ const TeacherDashboard = () => {
     { label: "Communication", icon: MessageSquare, color: "text-green-500", path: "/teacher/communication" },
   ];
 
-  const handleNotificationClick = (notification: any) => {
+  const handleNotificationClick = (notification: Notification) => {
     if (notification.target_url) {
       navigate(notification.target_url);
     }

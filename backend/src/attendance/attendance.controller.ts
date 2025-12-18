@@ -4,7 +4,9 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto';
@@ -100,6 +102,32 @@ export class AttendanceController {
     @Tenant() schoolId: string,
   ) {
     return this.attendanceService.getStudentAttendanceBySubject(
+      studentId,
+      schoolId,
+    );
+  }
+
+  @Get('student/:studentId/monthly')
+  async getStudentMonthlyAttendance(
+    @Param('studentId') studentId: string,
+    @Query('year', ParseIntPipe) year: number,
+    @Query('month', ParseIntPipe) month: number,
+    @Tenant() schoolId: string,
+  ) {
+    return this.attendanceService.getStudentMonthlyAttendance(
+      studentId,
+      schoolId,
+      year,
+      month,
+    );
+  }
+
+  @Get('student/:studentId/monthly-summary')
+  async getStudentMonthlyAttendanceSummary(
+    @Param('studentId') studentId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.attendanceService.getStudentMonthlyAttendanceSummary(
       studentId,
       schoolId,
     );

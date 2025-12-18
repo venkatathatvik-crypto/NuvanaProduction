@@ -318,24 +318,28 @@ export class AcademicController {
   // ==================== HELPER ENDPOINTS ====================
   
   @Get('helper/grade-subject/:classId/:subjectName')
-  getGradeSubjectIdByDetails(
+  async getGradeSubjectIdByDetails(
     @Param('classId') classId: string,
     @Param('subjectName') subjectName: string,
     @Tenant() schoolId: string,
   ) {
-    return this.academicService.getGradeSubjectIdByDetails(
+    const gradeSubjectId = await this.academicService.getGradeSubjectIdByDetails(
       classId,
       subjectName,
       schoolId,
     );
+    // Return as JSON object to avoid JSON parsing issues
+    return { id: gradeSubjectId };
   }
 
   @Get('helper/exam-type/:examTypeName')
-  getExamTypeIdByName(
+  async getExamTypeIdByName(
     @Param('examTypeName') examTypeName: string,
     @Tenant() schoolId: string,
   ) {
-    return this.academicService.getExamTypeIdByName(examTypeName, schoolId);
+    const examTypeId = await this.academicService.getExamTypeIdByName(examTypeName, schoolId);
+    // Return as JSON object to avoid JSON parsing issues
+    return { id: examTypeId };
   }
 
   

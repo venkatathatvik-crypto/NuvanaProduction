@@ -1,11 +1,19 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Check, X, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Users, Check, X, Calendar as CalendarIcon, Upload, FileText, Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   getTeacherClasses,
   getStudentsByClass,
@@ -38,6 +46,8 @@ const TeacherAttendance = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const [students, setStudents] = useState<StudentAttendance[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [csvDialogOpen, setCsvDialogOpen] = useState(false);
 
   // Load classes dynamically for the logged-in teacher
   useEffect(() => {
@@ -140,6 +150,150 @@ const TeacherAttendance = () => {
   const markAllAbsent = () => {
     setStudents(students.map((student) => ({ ...student, present: false })));
     toast.success("Marked all students absent");
+  };
+
+  const parseCSV = (csvText: string): Array<{ roll_number: string; name: string; present: boolean }> => {
+    const lines = csvText.trim().split('\n');
+    if (lines.length < 2) {
+      throw new Error("CSV file must have at least a header row and one data row");
+    }
+
+    // Parse header row
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const rollNumberIndex = header.findIndex(h => h === 'roll_number' || h === 'roll number' || h === 'roll');
+    const nameIndex = header.findIndex(h => h === 'name' || h === 'student name' || h === 'student_name');
+    const presentIndex = header.findIndex(h => 
+      h === 'present' || h === 'status' || h === 'attendance' || h === 'attendance_status'
+    );
+
+    if (rollNumberIndex === -1) {
+      throw new Error("CSV must have a 'roll_number' or 'roll number' column");
+    }
+    if (nameIndex === -1) {
+      throw new Error("CSV must have a 'name' or 'student name' column");
+    }
+    if (presentIndex === -1) {
+      throw new Error("CSV must have a 'present' or 'status' column");
+    }
+
+    // Parse data rows
+    const results: Array<{ roll_number: string; name: string; present: boolean }> = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      if (values.length < Math.max(rollNumberIndex, nameIndex, presentIndex) + 1) {
+        continue; // Skip incomplete rows
+      }
+
+      const rollNumber = values[rollNumberIndex];
+      const name = values[nameIndex];
+      const presentValue = values[presentIndex].toLowerCase().trim();
+
+      // Parse present value - accept multiple formats
+      let present = false;
+      if (presentValue === 'true' || presentValue === 'yes' || presentValue === 'present' || presentValue === '1' || presentValue === 'p') {
+        present = true;
+      } else if (presentValue === 'false' || presentValue === 'no' || presentValue === 'absent' || presentValue === '0' || presentValue === 'a') {
+        present = false;
+      } else {
+        throw new Error(`Invalid attendance value "${presentValue}" in row ${i + 1}. Use: true/false, yes/no, present/absent, 1/0, or p/a`);
+      }
+
+      if (rollNumber && name) {
+        results.push({ roll_number: rollNumber, name, present });
+      }
+    }
+
+    return results;
+  };
+
+  const handleCSVImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv')) {
+      toast.error("Please select a CSV file");
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const csvData = parseCSV(text);
+
+      if (csvData.length === 0) {
+        toast.error("CSV file is empty or has no valid data rows");
+        return;
+      }
+
+      // Match CSV data to students by roll_number
+      let matchedCount = 0;
+      let unmatchedCount = 0;
+      const unmatchedRollNumbers: string[] = [];
+
+      const updatedStudents = students.map(student => {
+        const csvRow = csvData.find(row => 
+          row.roll_number.toLowerCase().trim() === student.roll_number.toLowerCase().trim()
+        );
+
+        if (csvRow) {
+          matchedCount++;
+          return { ...student, present: csvRow.present };
+        } else {
+          unmatchedCount++;
+          unmatchedRollNumbers.push(student.roll_number);
+          return student;
+        }
+      });
+
+      setStudents(updatedStudents);
+      setCsvDialogOpen(false);
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      toast.success(
+        `CSV imported successfully! ${matchedCount} students matched, ${unmatchedCount} not found in CSV.`
+      );
+
+      if (unmatchedCount > 0) {
+        toast.warning(
+          `Some students were not found in CSV: ${unmatchedRollNumbers.slice(0, 5).join(', ')}${unmatchedRollNumbers.length > 5 ? '...' : ''}`
+        );
+      }
+    } catch (error) {
+      console.error("Error importing CSV:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to import CSV file";
+      toast.error(errorMessage);
+    }
+  };
+
+  const downloadCSVTemplate = () => {
+    if (students.length === 0) {
+      toast.error("No students available to generate template");
+      return;
+    }
+
+    // Create CSV header
+    const header = "roll_number,name,present\n";
+    
+    // Create CSV rows for all students
+    const rows = students.map(student => 
+      `${student.roll_number},${student.name},false`
+    ).join('\n');
+
+    const csvContent = header + rows;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance_template_${selectedClass?.class_name || 'class'}_${selectedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("CSV template downloaded!");
   };
 
   const submitAttendance = async () => {
@@ -314,15 +468,95 @@ const TeacherAttendance = () => {
           </Card>
         </motion.div>
 
-        <div className="flex gap-4 justify-end">
-          <Button variant="outline" onClick={markAllPresent} className="glass">
-            <Check className="w-4 h-4 mr-2" />
-            Mark All Present
-          </Button>
-          <Button variant="outline" onClick={markAllAbsent} className="glass">
-            <X className="w-4 h-4 mr-2" />
-            Mark All Absent
-          </Button>
+        <div className="flex gap-4 justify-between flex-wrap">
+          <div className="flex gap-4">
+            <Dialog open={csvDialogOpen} onOpenChange={setCsvDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="glass">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import from CSV
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Import Attendance from CSV</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file to mark attendance for multiple students at once.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                    <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Select a CSV file with attendance data
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      onChange={handleCSVImport}
+                      className="hidden"
+                      id="csv-upload"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mb-4"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Choose CSV File
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={downloadCSVTemplate}
+                      className="ml-2"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Template
+                    </Button>
+                  </div>
+                  <div className="bg-muted/50 p-4 rounded-lg">
+                    <h4 className="font-semibold mb-2">CSV Format:</h4>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Your CSV file must have the following columns:
+                    </p>
+                    <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                      <li><strong>roll_number</strong> - Student roll number (required)</li>
+                      <li><strong>name</strong> - Student name (required)</li>
+                      <li><strong>present</strong> - Attendance status (required)</li>
+                    </ul>
+                    <div className="mt-3 p-3 bg-background rounded border border-border">
+                      <p className="text-xs font-mono text-muted-foreground mb-1">Example CSV:</p>
+                      <pre className="text-xs font-mono">
+{`roll_number,name,present
+1,John Doe,true
+2,Jane Smith,false
+3,Bob Johnson,true`}
+                      </pre>
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-xs text-muted-foreground">
+                        <strong>Accepted values for "present" column:</strong>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        true/false, yes/no, present/absent, 1/0, or p/a
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <div className="flex gap-4">
+            <Button variant="outline" onClick={markAllPresent} className="glass">
+              <Check className="w-4 h-4 mr-2" />
+              Mark All Present
+            </Button>
+            <Button variant="outline" onClick={markAllAbsent} className="glass">
+              <X className="w-4 h-4 mr-2" />
+              Mark All Absent
+            </Button>
+          </div>
         </div>
 
         <motion.div
