@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock, Plus, Save, Trash2, Edit, Loader2 } from "lucide-react";
+import { Calendar, Clock, Plus, Save, Trash2, Edit, Loader2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService, type WeeklyTimetable } from "@/services/academicApiService";
@@ -42,6 +43,17 @@ export default function AdminTimetable() {
   });
   const [isEditingPeriod, setIsEditingPeriod] = useState(false);
   const [addingPeriod, setAddingPeriod] = useState(false);
+  const [activeTab, setActiveTab] = useState<"manual" | "csv">("manual");
+
+  // Timetable CSV Import states
+  const [isImportingTimetable, setIsImportingTimetable] = useState(false);
+  const [timetableImportProgress, setTimetableImportProgress] = useState<{
+    total: number;
+    current: number;
+    success: number;
+    failed: number;
+    errors: Array<{ row: number; class_name: string; error: string }>;
+  } | null>(null);
 
   useEffect(() => {
     if (profile?.school_id) {
@@ -151,6 +163,352 @@ export default function AdminTimetable() {
     setIsEditingPeriod(false);
   };
 
+  // Helper function to map day name to number
+  const getDayOfWeekNumber = (dayInput: string): number | null => {
+    const dayLower = dayInput.trim().toLowerCase();
+    const dayMap: Record<string, number> = {
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+      sunday: 7,
+      mon: 1,
+      tue: 2,
+      wed: 3,
+      thu: 4,
+      fri: 5,
+      sat: 6,
+      sun: 7,
+    };
+    
+    if (dayMap[dayLower]) {
+      return dayMap[dayLower];
+    }
+    
+    const dayNum = parseInt(dayInput);
+    if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 7) {
+      return dayNum;
+    }
+    
+    return null;
+  };
+
+  // Helper function to find teacher by email or name
+  const findTeacherId = (teacherInput: string): string | null => {
+    const teacherLower = teacherInput.trim().toLowerCase();
+    const teacher = teachers.find(
+      (t) =>
+        t.email?.toLowerCase() === teacherLower ||
+        t.name?.toLowerCase() === teacherLower
+    );
+    return teacher?.id || null;
+  };
+
+  // Helper function to find class by name
+  const findClassId = (className: string): string | null => {
+    const classLower = className.trim().toLowerCase();
+    const classItem = classes.find(
+      (c) => c.name?.toLowerCase() === classLower
+    );
+    return classItem?.id || null;
+  };
+
+  // Helper function to get grade subject ID by class and subject name
+  const getGradeSubjectIdBySubjectName = async (
+    classId: string,
+    subjectName: string
+  ): Promise<string | null> => {
+    try {
+      const { apiClient } = await import("@/lib/apiClient");
+      const result = await apiClient.get(
+        `/academic/helper/grade-subject/${classId}/${encodeURIComponent(
+          subjectName
+        )}`
+      );
+
+      if (result && typeof result === "object" && result !== null && "id" in result) {
+        const id = result.id;
+        if (id === null || id === undefined) {
+          return null;
+        }
+        return String(id);
+      }
+
+      if (typeof result === "string") {
+        return result;
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error getting grade subject ID:", error);
+      return null;
+    }
+  };
+
+  const handleTimetableCsvImport = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    event.target.value = "";
+
+    if (!file.name.endsWith(".csv")) {
+      toast.error("Please upload a CSV file");
+      return;
+    }
+
+    setIsImportingTimetable(true);
+    setTimetableImportProgress(null);
+
+    try {
+      const text = await file.text();
+      const lines = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line);
+
+      if (lines.length < 2) {
+        toast.error("CSV file is empty or has no data rows");
+        setIsImportingTimetable(false);
+        return;
+      }
+
+      // Parse header
+      const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const classNameIndex = header.findIndex(
+        (h) => h === "class_name" || h === "class" || h === "classname"
+      );
+      const dayIndex = header.findIndex(
+        (h) =>
+          h === "day_of_week" ||
+          h === "day" ||
+          h === "dayofweek" ||
+          h === "weekday"
+      );
+      const periodNumberIndex = header.findIndex(
+        (h) =>
+          h === "period_number" ||
+          h === "period" ||
+          h === "periodnumber" ||
+          h === "period_num"
+      );
+      const subjectNameIndex = header.findIndex(
+        (h) =>
+          h === "subject_name" ||
+          h === "subject" ||
+          h === "subjectname"
+      );
+      const teacherIndex = header.findIndex(
+        (h) =>
+          h === "teacher_email" ||
+          h === "teacher_name" ||
+          h === "teacher" ||
+          h === "teacheremail" ||
+          h === "teachername"
+      );
+      const startTimeIndex = header.findIndex(
+        (h) =>
+          h === "start_time" ||
+          h === "starttime" ||
+          h === "start" ||
+          h === "from"
+      );
+      const endTimeIndex = header.findIndex(
+        (h) =>
+          h === "end_time" ||
+          h === "endtime" ||
+          h === "end" ||
+          h === "to"
+      );
+      const roomIndex = header.findIndex(
+        (h) => h === "room" || h === "room_number" || h === "roomnumber"
+      );
+
+      // Validate required columns
+      if (
+        classNameIndex === -1 ||
+        dayIndex === -1 ||
+        periodNumberIndex === -1 ||
+        subjectNameIndex === -1 ||
+        teacherIndex === -1 ||
+        startTimeIndex === -1 ||
+        endTimeIndex === -1
+      ) {
+        toast.error(
+          "CSV must have: class_name, day_of_week, period_number, subject_name, teacher_email/name, start_time, end_time"
+        );
+        setIsImportingTimetable(false);
+        return;
+      }
+
+      // Parse data rows
+      const periods = lines.slice(1).map((line, index) => {
+        const values = line.split(",").map((v) => v.trim());
+        return {
+          row: index + 2,
+          class_name: values[classNameIndex] || "",
+          day_of_week: values[dayIndex] || "",
+          period_number: values[periodNumberIndex] || "",
+          subject_name: values[subjectNameIndex] || "",
+          teacher: values[teacherIndex] || "",
+          start_time: values[startTimeIndex] || "",
+          end_time: values[endTimeIndex] || "",
+          room: roomIndex !== -1 ? values[roomIndex] : "",
+        };
+      });
+
+      // Filter out empty rows
+      const validPeriods = periods.filter(
+        (p) =>
+          p.class_name &&
+          p.day_of_week &&
+          p.period_number &&
+          p.subject_name &&
+          p.teacher &&
+          p.start_time &&
+          p.end_time
+      );
+
+      if (validPeriods.length === 0) {
+        toast.error("No valid timetable data found in CSV");
+        setIsImportingTimetable(false);
+        return;
+      }
+
+      // Initialize progress
+      setTimetableImportProgress({
+        total: validPeriods.length,
+        current: 0,
+        success: 0,
+        failed: 0,
+        errors: [],
+      });
+
+      let successCount = 0;
+      let failedCount = 0;
+      const errors: Array<{
+        row: number;
+        class_name: string;
+        error: string;
+      }> = [];
+
+      // Process periods one by one
+      for (let i = 0; i < validPeriods.length; i++) {
+        const period = validPeriods[i];
+        try {
+          // Find class ID
+          const classId = findClassId(period.class_name);
+          if (!classId) {
+            throw new Error(`Class "${period.class_name}" not found`);
+          }
+
+          // Convert day to number
+          const dayOfWeek = getDayOfWeekNumber(period.day_of_week);
+          if (!dayOfWeek) {
+            throw new Error(
+              `Invalid day_of_week: "${period.day_of_week}". Use 1-7 or day name (Monday, Tuesday, etc.)`
+            );
+          }
+
+          // Parse period number
+          const periodNumber = parseInt(period.period_number);
+          if (isNaN(periodNumber) || periodNumber < 1) {
+            throw new Error(`Invalid period_number: "${period.period_number}"`);
+          }
+
+          // Find teacher ID
+          const teacherId = findTeacherId(period.teacher);
+          if (!teacherId) {
+            throw new Error(`Teacher "${period.teacher}" not found`);
+          }
+
+          // Get subject ID using helper endpoint
+          const subjectId = await getGradeSubjectIdBySubjectName(
+            classId,
+            period.subject_name
+          );
+          if (!subjectId) {
+            throw new Error(
+              `Subject "${period.subject_name}" not found for this class`
+            );
+          }
+
+          // Validate time format (HH:MM)
+          const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+          if (!timeRegex.test(period.start_time)) {
+            throw new Error(
+              `Invalid start_time format: "${period.start_time}". Use HH:MM format`
+            );
+          }
+          if (!timeRegex.test(period.end_time)) {
+            throw new Error(
+              `Invalid end_time format: "${period.end_time}". Use HH:MM format`
+            );
+          }
+
+          // Create or update period
+          await academicService.createOrUpdatePeriod({
+            class_id: classId,
+            day_of_week: dayOfWeek,
+            period_number: periodNumber,
+            subject_id: subjectId,
+            teacher_id: teacherId,
+            start_time: period.start_time,
+            end_time: period.end_time,
+            room: period.room || undefined,
+          });
+
+          successCount++;
+        } catch (error: any) {
+          failedCount++;
+          errors.push({
+            row: period.row,
+            class_name: period.class_name,
+            error: error.message || "Unknown error",
+          });
+        }
+
+        // Update progress
+        setTimetableImportProgress({
+          total: validPeriods.length,
+          current: i + 1,
+          success: successCount,
+          failed: failedCount,
+          errors,
+        });
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // Show final results
+      if (successCount > 0) {
+        toast.success(
+          `Successfully imported ${successCount} timetable period(s)`
+        );
+        // Refresh timetable if a class is selected
+        if (selectedTimetableClass) {
+          fetchTimetable(selectedTimetableClass);
+        }
+        // Refresh data to update classes list
+        fetchData();
+      }
+      if (failedCount > 0) {
+        toast.error(
+          `Failed to import ${failedCount} period(s). Check details below.`
+        );
+      }
+    } catch (error: any) {
+      console.error("Timetable CSV Import Error:", error);
+      toast.error("Failed to process CSV file");
+    } finally {
+      setIsImportingTimetable(false);
+    }
+  };
+
   const selectedClassData = classes.find((c) => c.id === selectedTimetableClass);
   const filteredSubjectsForClass = selectedClassData
     ? gradeSubjects
@@ -213,141 +571,279 @@ export default function AdminTimetable() {
             </div>
           </div>
 
-          {!selectedTimetableClass ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>Select a class to manage its timetable</p>
-            </div>
-          ) : timetableLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="animate-spin" />
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="flex gap-2 flex-wrap">
-                {DAY_NAMES.map((day, index) => (
-                  <Button
-                    key={day}
-                    variant={selectedTimetableDay === index + 1 ? "default" : "outline"}
-                    onClick={() => setSelectedTimetableDay(index + 1)}
-                    size="sm"
-                  >
-                    {day.slice(0, 3)}
-                  </Button>
-                ))}
-              </div>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "manual" | "csv")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+              <TabsTrigger value="csv">CSV Import</TabsTrigger>
+            </TabsList>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="font-semibold">{DAY_NAMES[selectedTimetableDay - 1]} Schedule</h3>
-                  {timetableData[selectedTimetableDay]?.timetable_periods?.length > 0 ? (
-                    <div className="space-y-2">
-                      {timetableData[selectedTimetableDay]?.timetable_periods.map((period: any) => (
-                        <div key={period.id} className="p-4 rounded-lg bg-secondary/20 border border-border/50 flex justify-between items-center">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">P{period.period_number}</Badge>
-                              <span className="font-medium">{period.subject_name || "Unknown"}</span>
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {period.start_time?.slice(0, 5)} - {period.end_time?.slice(0, 5)} | {period.teacher_name || "TBA"} | {period.room || "-"}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleEditPeriod(period)}>
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDeletePeriod(period.id)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-                      <p>No periods added for {DAY_NAMES[selectedTimetableDay - 1]}</p>
-                      <p className="text-sm">Use the form to add periods</p>
-                    </div>
-                  )}
+            {/* Manual Tab */}
+            <TabsContent value="manual" className="space-y-6 mt-6">
+              {!selectedTimetableClass ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Select a class to manage its timetable</p>
                 </div>
-
-                <Card className="glass-card p-4">
-                  <h3 className="font-semibold mb-4">{isEditingPeriod ? "Edit Period" : "Add Period"}</h3>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-sm text-muted-foreground">Period #</label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={periodForm.period_number}
-                          onChange={(e) => setPeriodForm({ ...periodForm, period_number: parseInt(e.target.value) || 1 })}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm text-muted-foreground">Room</label>
-                        <Input placeholder="e.g. Lab 1" value={periodForm.room} onChange={(e) => setPeriodForm({ ...periodForm, room: e.target.value })} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Subject *</label>
-                      <select className="w-full bg-muted border border-border rounded-md h-10 px-3" value={periodForm.subject_id} onChange={(e) => setPeriodForm({ ...periodForm, subject_id: e.target.value })}>
-                        <option value="">Select Subject</option>
-                        {filteredSubjectsForClass.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Teacher *</label>
-                      <select className="w-full bg-muted border border-border rounded-md h-10 px-3" value={periodForm.teacher_id} onChange={(e) => setPeriodForm({ ...periodForm, teacher_id: e.target.value })}>
-                        <option value="">Select Teacher</option>
-                        {teachers.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-sm text-muted-foreground">Start Time</label>
-                        <Input type="time" value={periodForm.start_time} onChange={(e) => setPeriodForm({ ...periodForm, start_time: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="text-sm text-muted-foreground">End Time</label>
-                        <Input type="time" value={periodForm.end_time} onChange={(e) => setPeriodForm({ ...periodForm, end_time: e.target.value })} />
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button className="flex-1" onClick={handleAddPeriod} disabled={addingPeriod}>
-                        {addingPeriod ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            {isEditingPeriod ? "Updating..." : "Adding..."}
-                          </>
-                        ) : (
-                          <>
-                            {isEditingPeriod ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                            {isEditingPeriod ? "Update Period" : "Add Period"}
-                          </>
-                        )}
+              ) : timetableLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex gap-2 flex-wrap">
+                    {DAY_NAMES.map((day, index) => (
+                      <Button
+                        key={day}
+                        variant={selectedTimetableDay === index + 1 ? "default" : "outline"}
+                        onClick={() => setSelectedTimetableDay(index + 1)}
+                        size="sm"
+                      >
+                        {day.slice(0, 3)}
                       </Button>
-                      {isEditingPeriod && (
-                        <Button variant="outline" onClick={resetPeriodForm}>
-                          Cancel
-                        </Button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">{DAY_NAMES[selectedTimetableDay - 1]} Schedule</h3>
+                      {timetableData[selectedTimetableDay]?.timetable_periods?.length > 0 ? (
+                        <div className="space-y-2">
+                          {timetableData[selectedTimetableDay]?.timetable_periods.map((period: any) => (
+                            <div key={period.id} className="p-4 rounded-lg bg-secondary/20 border border-border/50 flex justify-between items-center">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">P{period.period_number}</Badge>
+                                  <span className="font-medium">{period.subject_name || "Unknown"}</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {period.start_time?.slice(0, 5)} - {period.end_time?.slice(0, 5)} | {period.teacher_name || "TBA"} | {period.room || "-"}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => handleEditPeriod(period)}>
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button size="sm" variant="destructive" onClick={() => handleDeletePeriod(period.id)}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                          <p>No periods added for {DAY_NAMES[selectedTimetableDay - 1]}</p>
+                          <p className="text-sm">Use the form to add periods</p>
+                        </div>
                       )}
                     </div>
+
+                    <Card className="glass-card p-4">
+                      <h3 className="font-semibold mb-4">{isEditingPeriod ? "Edit Period" : "Add Period"}</h3>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-sm text-muted-foreground">Period #</label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={periodForm.period_number}
+                              onChange={(e) => setPeriodForm({ ...periodForm, period_number: parseInt(e.target.value) || 1 })}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm text-muted-foreground">Room</label>
+                            <Input placeholder="e.g. Lab 1" value={periodForm.room} onChange={(e) => setPeriodForm({ ...periodForm, room: e.target.value })} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm text-muted-foreground">Subject *</label>
+                          <select className="w-full bg-muted border border-border rounded-md h-10 px-3" value={periodForm.subject_id} onChange={(e) => setPeriodForm({ ...periodForm, subject_id: e.target.value })}>
+                            <option value="">Select Subject</option>
+                            {filteredSubjectsForClass.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-sm text-muted-foreground">Teacher *</label>
+                          <select className="w-full bg-muted border border-border rounded-md h-10 px-3" value={periodForm.teacher_id} onChange={(e) => setPeriodForm({ ...periodForm, teacher_id: e.target.value })}>
+                            <option value="">Select Teacher</option>
+                            {teachers.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-sm text-muted-foreground">Start Time</label>
+                            <Input type="time" value={periodForm.start_time} onChange={(e) => setPeriodForm({ ...periodForm, start_time: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-sm text-muted-foreground">End Time</label>
+                            <Input type="time" value={periodForm.end_time} onChange={(e) => setPeriodForm({ ...periodForm, end_time: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button className="flex-1" onClick={handleAddPeriod} disabled={addingPeriod}>
+                            {addingPeriod ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                {isEditingPeriod ? "Updating..." : "Adding..."}
+                              </>
+                            ) : (
+                              <>
+                                {isEditingPeriod ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                                {isEditingPeriod ? "Update Period" : "Add Period"}
+                              </>
+                            )}
+                          </Button>
+                          {isEditingPeriod && (
+                            <Button variant="outline" onClick={resetPeriodForm}>
+                              Cancel
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
                   </div>
-                </Card>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* CSV Import Tab */}
+            <TabsContent value="csv" className="space-y-6 mt-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-primary" /> Import Timetable from CSV
+                </h3>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    CSV Format: class_name, day_of_week (1-7 or Monday-Sunday), period_number, subject_name, teacher_email (or teacher_name), start_time (HH:MM), end_time (HH:MM), room (optional)
+                  </p>
+                  <label className="block">
+                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-secondary/20 transition">
+                      <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm font-medium">
+                        {isImportingTimetable ? "Importing..." : "Upload CSV File"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Click to upload or drag and drop
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleTimetableCsvImport}
+                      disabled={isImportingTimetable}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {isImportingTimetable && timetableImportProgress && (
+                  <div className="space-y-2 p-4 bg-secondary/10 rounded-lg">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress:</span>
+                      <span>
+                        {timetableImportProgress.current} / {timetableImportProgress.total}
+                      </span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all"
+                        style={{
+                          width: `${(timetableImportProgress.current / timetableImportProgress.total) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Success: {timetableImportProgress.success}</span>
+                      <span>Failed: {timetableImportProgress.failed}</span>
+                    </div>
+                    {timetableImportProgress.errors.length > 0 && (
+                      <div className="mt-2 max-h-32 overflow-y-auto">
+                        <p className="text-xs font-medium text-destructive mb-1">Errors:</p>
+                        {timetableImportProgress.errors.map((error, idx) => (
+                          <p key={idx} className="text-xs text-destructive">
+                            Row {error.row} ({error.class_name}): {error.error}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+
+              {!selectedTimetableClass ? (
+                <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
+                  <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Select a class to view its timetable</p>
+                </div>
+              ) : timetableLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex gap-2 flex-wrap">
+                    {DAY_NAMES.map((day, index) => (
+                      <Button
+                        key={day}
+                        variant={selectedTimetableDay === index + 1 ? "default" : "outline"}
+                        onClick={() => setSelectedTimetableDay(index + 1)}
+                        size="sm"
+                      >
+                        {day.slice(0, 3)}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">{DAY_NAMES[selectedTimetableDay - 1]} Schedule</h3>
+                    {timetableData[selectedTimetableDay]?.timetable_periods?.length > 0 ? (
+                      <div className="space-y-2">
+                        {timetableData[selectedTimetableDay]?.timetable_periods.map((period: any) => (
+                          <div key={period.id} className="p-4 rounded-lg bg-secondary/20 border border-border/50 flex justify-between items-center">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">P{period.period_number}</Badge>
+                                <span className="font-medium">{period.subject_name || "Unknown"}</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {period.start_time?.slice(0, 5)} - {period.end_time?.slice(0, 5)} | {period.teacher_name || "TBA"} | {period.room || "-"}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setActiveTab("manual");
+                                handleEditPeriod(period);
+                              }}>
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => handleDeletePeriod(period.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                        <p>No periods added for {DAY_NAMES[selectedTimetableDay - 1]}</p>
+                        <p className="text-sm">Import CSV or use Manual Entry tab to add periods</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </Card>
       </div>
     </div>

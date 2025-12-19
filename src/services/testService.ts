@@ -334,16 +334,62 @@ export const submitStudentTest = async (
   }
 
   // Convert answers Record to array format expected by API
-  const answerArray = test.questions.map((q) => {
-    const answerValue = answers[q.id];
-    const isMCQ = q.questionType === 'MCQ';
+  console.log('[submitStudentTest] Raw answers object:', answers);
+  console.log('[submitStudentTest] Test questions:', test.questions.map(q => ({ 
+    id: q.id, 
+    type: q.question_type || q.questionType,
+    rawQuestion: q 
+  })));
+  
+  const answerArray = test.questions.map((q: any) => {
+    const answerValue = answers[q.id]; // This will be undefined if question wasn't answered
+    // API returns question_type (snake_case), handle both formats
+    const questionType = q.question_type || q.questionType;
+    const isMCQ = questionType === 'MCQ';
     
-    return {
+    console.log('[submitStudentTest] Processing question:', {
       question_id: q.id,
-      student_selected_option_index: isMCQ && typeof answerValue === 'number' ? answerValue : undefined,
-      subjective_answer_text: !isMCQ && typeof answerValue === 'string' ? answerValue : undefined,
+      question_type_raw: q.question_type,
+      questionType_camel: q.questionType,
+      questionType_resolved: questionType,
+      answerValue,
+      answerValueType: typeof answerValue,
+      isMCQ,
+    });
+    
+    // Explicitly handle the answer value
+    // For MCQ: always include student_selected_option_index (null if not answered, number if answered)
+    // For subjective: include subjective_answer_text
+    const answerObj: any = {
+      question_id: q.id,
     };
+    
+    if (isMCQ) {
+      // For MCQ questions - check if answerValue exists and is a number
+      if (answerValue !== undefined && answerValue !== null && typeof answerValue === 'number') {
+        // Student selected an option (including 0)
+        answerObj.student_selected_option_index = answerValue;
+        console.log('[submitStudentTest] MCQ answer found:', answerValue);
+      } else {
+        // Student didn't answer - explicitly set to null
+        answerObj.student_selected_option_index = null;
+        console.log('[submitStudentTest] MCQ answer not found, setting to null');
+      }
+      // Don't include subjective_answer_text for MCQ
+    } else {
+      // For subjective questions
+      if (answerValue !== undefined && answerValue !== null && typeof answerValue === 'string' && answerValue.trim() !== '') {
+        answerObj.subjective_answer_text = answerValue;
+      } else {
+        answerObj.subjective_answer_text = null;
+      }
+      // Don't include student_selected_option_index for subjective
+    }
+    
+    return answerObj;
   });
+  
+  console.log('[submitStudentTest] Final answer array to send:', JSON.stringify(answerArray, null, 2));
 
   // Submit test
   const result = await testApi.submitTest(testId, studentId, answerArray);

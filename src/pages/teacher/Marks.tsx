@@ -500,8 +500,9 @@ const TeacherMarks = () => {
                           
                           // For MCQ: show selected option text
                           // For subjective: show the text answer
+                          // Explicitly check for null/undefined, not truthiness (0 is a valid option index)
                           const studentAnswer = isMCQ
-                            ? (answer.selectedOptionIndex !== null 
+                            ? (answer.selectedOptionIndex !== null && answer.selectedOptionIndex !== undefined
                                 ? answer.options[answer.selectedOptionIndex] 
                                 : "Not answered")
                             : (answer.subjectiveAnswerText || "Not answered");

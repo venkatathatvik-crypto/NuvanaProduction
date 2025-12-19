@@ -160,13 +160,17 @@ export class AcademicService {
 
   // ==================== MASTER SUBJECTS ====================
   async createSubject(dto: CreateSubjectDto, schoolId: string) {
-    // Check for duplicates
+    // Check for duplicates only within the same school (case-insensitive)
+    // This allows the same subject name in different schools
     const existing = await this.prisma.subjects_master.findFirst({
-      where: { name: dto.name, school_id: schoolId },
+      where: { 
+        name: { equals: dto.name, mode: 'insensitive' },
+        school_id: schoolId 
+      },
     });
 
     if (existing) {
-      throw new ConflictException("Subject with this name already exists");
+      throw new ConflictException("Subject with this name already exists in this school");
     }
 
     return this.prisma.subjects_master.create({

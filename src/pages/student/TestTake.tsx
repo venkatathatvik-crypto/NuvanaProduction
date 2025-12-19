@@ -89,6 +89,14 @@ const TestTake = () => {
     const handleComplete = async (answers: Record<string, number | string>, timeTakenSeconds: number) => {
         if (!profile || !testId) return;
 
+        console.log('[TestTake] handleComplete called with answers:', answers);
+        console.log('[TestTake] Answers keys:', Object.keys(answers));
+        console.log('[TestTake] Answers entries:', Object.entries(answers).map(([key, value]) => ({
+            questionId: key,
+            value,
+            type: typeof value,
+        })));
+
         setSubmitting(true);
         try {
             const submission = await submitStudentTest({

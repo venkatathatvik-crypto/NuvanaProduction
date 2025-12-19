@@ -155,6 +155,8 @@ export class TestService {
       }
 
       return test;
+    }, {
+      timeout: 30000, // 30 seconds timeout for large transactions
     });
 
     // Fetch complete test with relations
@@ -413,6 +415,8 @@ export class TestService {
       }
 
       return testId;
+    }, {
+      timeout: 30000, // 30 seconds timeout for large transactions
     });
 
     return this.getTeacherTest(result, teacherId, schoolId);
@@ -678,6 +682,8 @@ export class TestService {
           is_graded: true,
         },
       });
+    }, {
+      timeout: 30000, // 30 seconds timeout for large transactions
     });
 
     return { message: 'Submission graded successfully' };
@@ -884,13 +890,36 @@ export class TestService {
       });
 
       // Create student answers
-      const answersData = dto.answers.map((ans) => ({
-        submission_id: submission.id,
-        question_id: ans.question_id,
-        student_selected_option_index: ans.student_selected_option_index,
-        subjective_answer_text: ans.subjective_answer_text,
-        marks_awarded: null, // Will be graded later
-      }));
+      const answersData = dto.answers.map((ans) => {
+        // Explicitly handle student_selected_option_index
+        // 0 is a valid option index, so we need to check for undefined/null specifically
+        // Check if the value is explicitly provided (including 0)
+        let selectedOptionIndex: number | null = null;
+        if (ans.student_selected_option_index !== undefined && ans.student_selected_option_index !== null) {
+          selectedOptionIndex = Number(ans.student_selected_option_index);
+        }
+        
+        // Debug logging
+        console.log('[submitTest] Processing answer:', {
+          question_id: ans.question_id,
+          raw_value: ans.student_selected_option_index,
+          processed_value: selectedOptionIndex,
+          type: typeof ans.student_selected_option_index,
+          isNumber: typeof ans.student_selected_option_index === 'number',
+        });
+        
+        // Always include student_selected_option_index in the object (even if null)
+        // This ensures Prisma will insert the field
+        return {
+          submission_id: submission.id,
+          question_id: ans.question_id,
+          student_selected_option_index: selectedOptionIndex, // Explicitly set to null or number
+          subjective_answer_text: ans.subjective_answer_text || null,
+          marks_awarded: null,
+        };
+      });
+
+      console.log('[submitTest] Answers data to insert:', JSON.stringify(answersData, null, 2));
 
       await tx.student_answers.createMany({
         data: answersData,
@@ -902,7 +931,10 @@ export class TestService {
         const question = test.questions.find((q) => q.id === answer.question_id);
         
         if (question && question.question_type === 'MCQ' && question.correct_option_index !== null) {
-          const isCorrect = answer.student_selected_option_index === question.correct_option_index;
+          // Handle null/undefined - if student didn't answer, they got it wrong
+          // But preserve 0 as a valid option index
+          const studentAnswer = answer.student_selected_option_index ?? null;
+          const isCorrect = studentAnswer !== null && studentAnswer === question.correct_option_index;
           const marksAwarded = isCorrect ? question.marks : 0;
           
           await tx.student_answers.updateMany({
@@ -919,19 +951,25 @@ export class TestService {
         }
       }
 
-      // Update submission with total marks if all MCQ
+      // Calculate total marks for MCQ questions (auto-graded)
+      // But don't set is_graded to true - teacher must review and finalize grading
+      // This ensures students only see results after teacher has reviewed them
       const allMCQ = test.questions.every((q) => q.question_type === 'MCQ');
       if (allMCQ) {
+        // Store the auto-calculated marks, but keep is_graded as false
+        // Teacher will finalize grading which will set is_graded to true
         await tx.test_submissions.update({
           where: { id: submission.id },
           data: {
             total_marks_obtained: totalMarks,
-            is_graded: true,
+            // Keep is_graded as false - teacher must review and finalize
           },
         });
       }
 
       return submission;
+    }, {
+      timeout: 30000, // 30 seconds timeout for large transactions
     });
 
     return {

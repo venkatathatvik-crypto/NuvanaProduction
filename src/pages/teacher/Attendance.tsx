@@ -25,6 +25,7 @@ import {
   getStudentEmailsInClass,
   sendAttendanceEmail,
 } from "@/services/academic";
+import { academicService } from "@/services/academicApiService";
 import type { FlattenedClass } from "@/schemas/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useAuth } from "@/auth/AuthContext";
@@ -49,7 +50,7 @@ const TeacherAttendance = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvDialogOpen, setCsvDialogOpen] = useState(false);
 
-  // Load classes dynamically for the logged-in teacher
+  // Load classes dynamically for the logged-in teacher, filtered by current day
   useEffect(() => {
     const fetchClasses = async () => {
       if (profileLoading) return;
@@ -62,13 +63,54 @@ const TeacherAttendance = () => {
       }
 
       try {
-        const classResponse = await getTeacherClasses(profile.id, profile.school_id);
-        if (classResponse && classResponse.length > 0) {
-          setClasses(classResponse);
-          setSelectedClass(classResponse[0]);
-        } else {
+        // Get all classes for the teacher
+        const allClasses = await getTeacherClasses(profile.id, profile.school_id);
+        
+        if (!allClasses || allClasses.length === 0) {
           setClasses([]);
           setSelectedClass(null);
+          setLoading(false);
+          return;
+        }
+
+        // Get current day of week (1=Monday, 2=Tuesday, ..., 7=Sunday)
+        const today = new Date();
+        const jsDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        const currentDayOfWeek = jsDay === 0 ? 7 : jsDay; // Convert to 1-7 format
+
+        // Filter classes that have periods scheduled for today where this teacher teaches
+        const classesWithTodaySchedule: FlattenedClass[] = [];
+        
+        for (const classItem of allClasses) {
+          try {
+            // Fetch timetable for this class
+            const timetable = await academicService.getWeeklyTimetable(classItem.class_id);
+            
+            // Check if this class has any periods for today where this teacher teaches
+            const todaySchedule = timetable[currentDayOfWeek];
+            if (todaySchedule && todaySchedule.timetable_periods && todaySchedule.timetable_periods.length > 0) {
+              // Check if any period is assigned to this teacher
+              const hasTeacherPeriod = todaySchedule.timetable_periods.some(
+                (period: any) => period.teacher_id === profile.id
+              );
+              
+              if (hasTeacherPeriod) {
+                classesWithTodaySchedule.push(classItem);
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching timetable for class ${classItem.class_id}:`, error);
+            // Skip this class if we can't fetch its timetable
+          }
+        }
+
+        // Only show classes that have periods scheduled for today
+        setClasses(classesWithTodaySchedule);
+        if (classesWithTodaySchedule.length > 0) {
+          setSelectedClass(classesWithTodaySchedule[0]);
+        } else {
+          setSelectedClass(null);
+          toast.info("No classes scheduled for today.");
         }
       } catch (error) {
         console.error("Error fetching classes for attendance:", error);
