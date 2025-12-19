@@ -78,17 +78,20 @@ export class AuthService {
   }
 
   async registerUser(dto: RegisterUserDto, createdBySchoolId?: string) {
-    // Check if email already exists
-    const existingUser = await this.prisma.profiles.findUnique({
-      where: { email: dto.email },
+    // Determine school_id: use from DTO if present, otherwise from creator's context
+    const schoolId = dto.school_id || createdBySchoolId;
+    
+    // Check if email already exists in the SAME school (allow same email in different schools)
+    const existingUser = await this.prisma.profiles.findFirst({
+      where: { 
+        email: dto.email,
+        school_id: schoolId 
+      },
     });
 
     if (existingUser) {
-      throw new ConflictException("Email already registered");
+      throw new ConflictException("Email already registered in this school");
     }
-
-    // Determine school_id: use from DTO if present, otherwise from creator's context
-    const schoolId = dto.school_id || createdBySchoolId;
 
     if (!schoolId && dto.role_id !== 1) {
       throw new ForbiddenException(
@@ -128,8 +131,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, expectedRole?: string) {
-    // Validate user credentials
-    const user = await this.validateUser(dto.email, dto.password);
+    // Validate user credentials with school_id if provided
+    const user = await this.validateUser(dto.email, dto.password, dto.school_id);
 
     if (!user) {
       throw new UnauthorizedException("Invalid credentials");
@@ -246,9 +249,15 @@ export class AuthService {
     }
   }
 
-  private async validateUser(email: string, password: string) {
-    const user = await this.prisma.profiles.findUnique({
-      where: { email },
+  private async validateUser(email: string, password: string, schoolId?: string) {
+    // If school_id is provided, find user by email and school_id
+    // Otherwise, find by email only (for backward compatibility and super_admin)
+    const whereClause = schoolId 
+      ? { email, school_id: schoolId }
+      : { email };
+
+    const user = await this.prisma.profiles.findFirst({
+      where: whereClause,
       include: {
         user_roles: true,
       },

@@ -21,7 +21,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   profileLoading: boolean;
-  login: (email: string, password: string, role?: UserRole) => Promise<void>;
+  login: (email: string, password: string, role?: UserRole, schoolId?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -103,10 +103,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   // Login function
-  const login = async (email: string, password: string, role?: UserRole) => {
+  const login = async (email: string, password: string, role?: UserRole, schoolId?: string) => {
     setProfileLoading(true);
     try {
-      const data = await authService.login(email, password, role);
+      const data = await authService.login(email, password, role, schoolId);
 
       if (data) {
         // Set session and profile from login response

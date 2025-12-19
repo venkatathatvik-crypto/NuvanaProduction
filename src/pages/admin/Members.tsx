@@ -24,6 +24,7 @@ export default function AdminMembers() {
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberPassword, setNewMemberPassword] = useState("");
   const [newMemberRollNo, setNewMemberRollNo] = useState("");
+  const [newMemberParentContact, setNewMemberParentContact] = useState("");
   const [newMemberType, setNewMemberType] = useState<"teacher" | "student">("teacher");
   const [isCreatingMember, setIsCreatingMember] = useState(false);
   const [csvImportType, setCsvImportType] = useState<"teacher" | "student">("student");
@@ -65,14 +66,16 @@ export default function AdminMembers() {
     }
   };
 
-  const handleCreateMember = async () => {
+  const handleCreateMember = async (memberType?: "teacher" | "student") => {
     if (!newMemberName || !newMemberEmail || !newMemberPassword) {
       toast.error("Please fill all fields");
       return;
     }
     setIsCreatingMember(true);
     try {
-      const roleId = newMemberType === "teacher" ? 3 : 4;
+      // Use provided memberType or fall back to state
+      const typeToUse = memberType || newMemberType;
+      const roleId = typeToUse === "teacher" ? 3 : 4;
       const createdUser = await userService.createUser({
         email: newMemberEmail,
         name: newMemberName,
@@ -80,18 +83,28 @@ export default function AdminMembers() {
         school_id: profile?.school_id,
         temporaryPassword: newMemberPassword,
       });
-      if (newMemberType === "student" && newMemberRollNo.trim()) {
+      if (typeToUse === "student") {
         try {
-          await userService.updateStudentDetails(createdUser.id, { roll_number: newMemberRollNo.trim() });
-        } catch (rollNumberError: any) {
-          toast.warning("User created but roll number could not be saved. You can update it later.");
+          const studentDetails: { roll_number?: string; parent_contact?: string } = {};
+          if (newMemberRollNo.trim()) {
+            studentDetails.roll_number = newMemberRollNo.trim();
+          }
+          if (newMemberParentContact.trim()) {
+            studentDetails.parent_contact = newMemberParentContact.trim();
+          }
+          if (Object.keys(studentDetails).length > 0) {
+            await userService.updateStudentDetails(createdUser.id, studentDetails);
+          }
+        } catch (studentDetailsError: any) {
+          toast.warning("User created but student details could not be saved. You can update it later.");
         }
       }
-      toast.success(`${newMemberType === "teacher" ? "Teacher" : "Student"} created successfully`);
+      toast.success(`${typeToUse === "teacher" ? "Teacher" : "Student"} created successfully`);
       setNewMemberName("");
       setNewMemberEmail("");
       setNewMemberPassword("");
       setNewMemberRollNo("");
+      setNewMemberParentContact("");
       fetchData();
     } catch (error: any) {
       console.error("Error creating user:", error);
@@ -125,6 +138,7 @@ export default function AdminMembers() {
       const emailIndex = header.findIndex((h) => h === "email");
       const passwordIndex = header.findIndex((h) => h === "password");
       const rollNumberIndex = header.findIndex((h) => h === "roll_number" || h === "roll number" || h === "rollnumber");
+      const parentContactIndex = header.findIndex((h) => h === "parent_contact" || h === "parent contact" || h === "parentcontact");
       if (nameIndex === -1 || emailIndex === -1 || passwordIndex === -1) {
         toast.error("CSV must have 'name', 'email', and 'password' columns");
         setIsImporting(false);
@@ -138,6 +152,7 @@ export default function AdminMembers() {
           email: values[emailIndex] || "",
           password: values[passwordIndex] || "",
           roll_number: rollNumberIndex !== -1 ? values[rollNumberIndex] : undefined,
+          parent_contact: parentContactIndex !== -1 ? values[parentContactIndex] : undefined,
         };
       }).filter((user) => user.name && user.email && user.password);
       if (users.length === 0) {
@@ -160,11 +175,20 @@ export default function AdminMembers() {
             school_id: profile?.school_id,
             temporaryPassword: user.password,
           });
-          if (csvImportType === "student" && user.roll_number?.trim()) {
+          if (csvImportType === "student") {
             try {
-              await userService.updateStudentDetails(createdUser.id, { roll_number: user.roll_number.trim() });
-            } catch (rollNumberError: any) {
-              console.error(`Error saving roll number for ${user.email}:`, rollNumberError);
+              const studentDetails: { roll_number?: string; parent_contact?: string } = {};
+              if (user.roll_number?.trim()) {
+                studentDetails.roll_number = user.roll_number.trim();
+              }
+              if (user.parent_contact?.trim()) {
+                studentDetails.parent_contact = user.parent_contact.trim();
+              }
+              if (Object.keys(studentDetails).length > 0) {
+                await userService.updateStudentDetails(createdUser.id, studentDetails);
+              }
+            } catch (studentDetailsError: any) {
+              console.error(`Error saving student details for ${user.email}:`, studentDetailsError);
             }
           }
           successCount++;
@@ -292,7 +316,7 @@ export default function AdminMembers() {
                       <Input placeholder="Name" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} />
                       <Input placeholder="Email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
                       <Input placeholder="Password" type="password" value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} />
-                      <Button className="w-full" onClick={async () => { setNewMemberType("teacher"); await handleCreateMember(); }} disabled={isCreatingMember}>
+                      <Button className="w-full" onClick={() => handleCreateMember("teacher")} disabled={isCreatingMember}>
                         {isCreatingMember ? (
                           <>
                             <Loader2 className="animate-spin mr-2" />
@@ -475,7 +499,8 @@ export default function AdminMembers() {
                       <Input placeholder="Email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
                       <Input placeholder="Password" type="password" value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} />
                       <Input placeholder="Roll Number (Optional)" value={newMemberRollNo} onChange={(e) => setNewMemberRollNo(e.target.value)} />
-                      <Button className="w-full" onClick={async () => { setNewMemberType("student"); await handleCreateMember(); }} disabled={isCreatingMember}>
+                      <Input placeholder="Parent Contact (Optional)" value={newMemberParentContact} onChange={(e) => setNewMemberParentContact(e.target.value)} />
+                      <Button className="w-full" onClick={() => handleCreateMember("student")} disabled={isCreatingMember}>
                         {isCreatingMember ? (
                           <>
                             <Loader2 className="animate-spin mr-2" />
@@ -500,7 +525,7 @@ export default function AdminMembers() {
                     </h3>
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">CSV Format: name, email, password, roll_number (optional)</p>
+                        <p className="text-sm text-muted-foreground">CSV Format: name, email, password, roll_number (optional), parent_contact (optional)</p>
                         <label className="block">
                           <div className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-secondary/20 transition">
                             <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
