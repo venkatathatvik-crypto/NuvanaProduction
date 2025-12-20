@@ -272,7 +272,7 @@ const AiTeacherChat = () => {
                             <PenTool className="w-5 h-5 text-indigo-400 animate-pulse" />
                         </div>
                         <div>
-                            <h2 className="font-bold text-lg">AI Assistant</h2>
+                            <h2 className="font-bold text-lg">Drona</h2>
                             <div className="flex items-center gap-1.5">
                                 <span className={`w-2 h-2 rounded-full animate-pulse ${activeMode === 'grade_paper' ? 'bg-red-500' : 'bg-green-500'}`} />
                                 <p className="text-xs text-muted-foreground">Teacher Mode • {TEACHER_ACTION_MODES.find(m => m.id === activeMode)?.label}</p>

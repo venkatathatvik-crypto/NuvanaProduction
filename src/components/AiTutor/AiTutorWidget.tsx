@@ -16,6 +16,30 @@ const AiTutorWidget = () => {
 
     // Constraint ref for dragging
     const constraintsRef = useRef(null);
+    const chatRef = useRef<HTMLDivElement>(null);
+    const toggleRef = useRef<HTMLDivElement>(null);
+
+    // Close on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                isOpen &&
+                chatRef.current &&
+                !chatRef.current.contains(event.target as Node) &&
+                toggleRef.current &&
+                !toggleRef.current.contains(event.target as Node)
+            ) {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [isOpen]);
 
     // Visibility Logic
     useEffect(() => {
@@ -51,6 +75,7 @@ const AiTutorWidget = () => {
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
+                        ref={chatRef}
                         drag
                         dragMomentum={false}
                         dragConstraints={constraintsRef}
@@ -102,9 +127,15 @@ const AiTutorWidget = () => {
 
             {/* Floating Toggle Button */}
             <motion.div
+                ref={toggleRef}
+                drag
+                dragMomentum={false}
+                dragConstraints={constraintsRef}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="pointer-events-auto fixed bottom-6 right-6 z-50"
+                className="pointer-events-auto fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing"
             >
                 <Button
                     onClick={() => setIsOpen(!isOpen)}
@@ -124,7 +155,7 @@ const AiTutorWidget = () => {
                     )}
                 </Button>
             </motion.div>
-        </div>
+        </div >
     );
 };
 

@@ -18,6 +18,7 @@ import {
     Cell
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ExpandableChartWidget } from "@/components/charts/ExpandableChart";
 import { TrendingUp, AlertCircle, Award, Target, BookOpen, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -205,18 +206,18 @@ const StudentAnalytics = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.1 }}
                 >
-                    <Card className="glass-card h-[400px]">
-                        <CardHeader>
-                            <CardTitle>Subject Performance</CardTitle>
-                            <CardDescription>Your strengths across different subjects</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[320px]">
-                            {radarData.length > 0 ? (
+                    <ExpandableChartWidget
+                        title="Subject Performance"
+                        description="Your strengths across different subjects"
+                        insights="A balanced performance across subjects indicates a strong foundation. Focus on maintaining consistency in your top subjects while gradually improving others."
+                        className="h-[400px]"
+                        renderSmall={() => (
+                            radarData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
                                         <PolarGrid stroke="#444" />
-                                        <PolarAngleAxis dataKey="subject" stroke="#888" />
-                                        <PolarRadiusAxis angle={30} domain={[0, 150]} stroke="#888" />
+                                        <PolarAngleAxis dataKey="subject" stroke="#888" tick={{ fontSize: 10 }} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 150]} stroke="#888" tick={false} axisLine={false} />
                                         <Radar name="My Score" dataKey="A" stroke={NEON_COLORS.primary} fill={NEON_COLORS.primary} fillOpacity={0.6} />
                                         <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }} />
                                     </RadarChart>
@@ -225,9 +226,43 @@ const StudentAnalytics = () => {
                                 <div className="flex items-center justify-center h-full text-muted-foreground">
                                     No subject data available yet. Complete some tests to see your performance.
                                 </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                            )
+                        )}
+                        renderExpanded={() => (
+                            radarData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                                        <PolarGrid stroke="#555" gridType="polygon" />
+                                        <PolarAngleAxis dataKey="subject" stroke="#CCC" tick={{ fontSize: 14, fontWeight: 'bold' }} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 150]} stroke="#888" tick={{ fill: '#888' }} />
+                                        <Radar
+                                            name="My Score"
+                                            dataKey="A"
+                                            stroke={NEON_COLORS.primary}
+                                            strokeWidth={3}
+                                            fill={NEON_COLORS.primary}
+                                            fillOpacity={0.5}
+                                            activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                                                border: '1px solid #333',
+                                                borderRadius: '8px',
+                                                padding: '12px',
+                                                boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+                                            }}
+                                            itemStyle={{ color: '#fff', fontSize: '14px' }}
+                                        />
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No data available.
+                                </div>
+                            )
+                        )}
+                    />
                 </motion.div>
 
                 <motion.div
@@ -235,13 +270,13 @@ const StudentAnalytics = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.2 }}
                 >
-                    <Card className="glass-card h-[400px]">
-                        <CardHeader>
-                            <CardTitle>Progress Trend</CardTitle>
-                            <CardDescription>Your overall score improvement over time</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[320px]">
-                            {trendData.length > 0 ? (
+                    <ExpandableChartWidget
+                        title="Progress Trend"
+                        description="Your overall score improvement over time"
+                        insights="Your learning curve is looking positive! Consistent scores in recent months show good retention. Keep practicing to maintain this upward trajectory."
+                        className="h-[400px]"
+                        renderSmall={() => (
+                            trendData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={trendData}>
                                         <defs>
@@ -251,8 +286,8 @@ const StudentAnalytics = () => {
                                             </linearGradient>
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                                        <XAxis dataKey="month" stroke="#888" />
-                                        <YAxis stroke="#888" domain={[0, 100]} />
+                                        <XAxis dataKey="month" stroke="#888" tick={{ fontSize: 10 }} />
+                                        <YAxis stroke="#888" domain={[0, 100]} tick={{ fontSize: 10 }} />
                                         <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }} />
                                         <Area type="monotone" dataKey="score" stroke={NEON_COLORS.secondary} fillOpacity={1} fill="url(#colorScoreStudent)" />
                                     </AreaChart>
@@ -261,9 +296,64 @@ const StudentAnalytics = () => {
                                 <div className="flex items-center justify-center h-full text-muted-foreground">
                                     No trend data available yet. Your progress will appear after completing tests.
                                 </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                            )
+                        )}
+                        renderExpanded={() => (
+                            trendData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                        <defs>
+                                            <linearGradient id="colorScoreStudentExpanded" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={NEON_COLORS.secondary} stopOpacity={0.6} />
+                                                <stop offset="95%" stopColor={NEON_COLORS.secondary} stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#444" vertical={false} />
+                                        <XAxis
+                                            dataKey="month"
+                                            stroke="#CCC"
+                                            tick={{ fontSize: 14 }}
+                                            tickMargin={12}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <YAxis
+                                            stroke="#CCC"
+                                            domain={[0, 100]}
+                                            tick={{ fontSize: 14 }}
+                                            tickFormatter={(val) => `${val}%`}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                                                border: '1px solid #333',
+                                                borderRadius: '8px',
+                                                padding: '12px',
+                                                boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+                                            }}
+                                            itemStyle={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}
+                                            cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="score"
+                                            stroke={NEON_COLORS.secondary}
+                                            strokeWidth={4}
+                                            fillOpacity={1}
+                                            fill="url(#colorScoreStudentExpanded)"
+                                            activeDot={{ r: 8, stroke: '#fff', strokeWidth: 2 }}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No data available.
+                                </div>
+                            )
+                        )}
+                    />
                 </motion.div>
             </div>
 
@@ -326,107 +416,174 @@ const StudentAnalytics = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
             >
-                <Card className="glass-card">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <BookOpen className="w-5 h-5 text-purple-500" /> Chapter & Topic Performance
-                        </CardTitle>
-                        <CardDescription>Your performance breakdown by chapters and topics</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {(chapterTopicData.chapters.length > 0 || chapterTopicData.topics.length > 0) ? (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {/* Chapter Performance */}
-                                <div>
-                                    <h3 className="text-lg font-semibold mb-4">Chapter Performance</h3>
-                                    {chapterTopicData.chapters.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={chapterTopicData.chapters.slice(0, 8)} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis type="number" domain={[0, 100]} />
-                                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                                                <Tooltip
-                                                    content={({ active, payload }) => {
-                                                        if (active && payload && payload[0]) {
-                                                            const data = payload[0].payload;
-                                                            return (
-                                                                <div className="bg-background border rounded p-2">
-                                                                    <p className="font-semibold">{data.name}</p>
-                                                                    <p className="text-sm">Score: {data.avgScore}%</p>
-                                                                    <p className="text-sm">Questions: {data.totalQuestions}</p>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    }}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <ExpandableChartWidget
+                        title="Chapter Performance"
+                        description="Average scores by chapter"
+                        insights="Understanding chapter-wise performance helps identify specific knowledge gaps. Focus on chapters with lower scores."
+                        className="h-[400px]"
+                        renderSmall={() => (
+                            chapterTopicData.chapters.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chapterTopicData.chapters.slice(0, 8)} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                                        <XAxis type="number" domain={[0, 100]} hide />
+                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10 }} />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: '#1a1a1a',
+                                                border: '1px solid #333'
+                                            }}
+                                            cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                            content={({ active, payload }) => {
+                                                if (active && payload && payload[0]) {
+                                                    const data = payload[0].payload;
+                                                    return (
+                                                        <div className="bg-background border rounded p-2 text-xs">
+                                                            <p className="font-semibold">{data.name}</p>
+                                                            <p>Score: {data.avgScore}%</p>
+                                                            <p>Questions: {data.totalQuestions}</p>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }}
+                                        />
+                                        <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
+                                            {chapterTopicData.chapters.slice(0, 8).map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#8884d8" : "#ff7373"}
                                                 />
-                                                <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
-                                                    {chapterTopicData.chapters.slice(0, 8).map((entry, index) => (
-                                                        <Cell
-                                                            key={`cell-${index}`}
-                                                            fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#8884d8" : "#ff7373"}
-                                                        />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <p className="text-center text-muted-foreground py-8">No chapter data available.</p>
-                                    )}
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No chapter data available.
                                 </div>
-
-                                {/* Topic Performance */}
-                                <div>
-                                    <h3 className="text-lg font-semibold mb-4">Topic Performance</h3>
-                                    {chapterTopicData.topics.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={chapterTopicData.topics.slice(0, 8)} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis type="number" domain={[0, 100]} />
-                                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                                                <Tooltip
-                                                    content={({ active, payload }) => {
-                                                        if (active && payload && payload[0]) {
-                                                            const data = payload[0].payload;
-                                                            return (
-                                                                <div className="bg-background border rounded p-2">
-                                                                    <p className="font-semibold">{data.name}</p>
-                                                                    <p className="text-sm">Score: {data.avgScore}%</p>
-                                                                    <p className="text-sm">Questions: {data.totalQuestions}</p>
-                                                                    <p className="text-xs text-muted-foreground">Chapters: {data.chapters.join(', ')}</p>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    }}
-                                                />
-                                                <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
-                                                    {chapterTopicData.topics.slice(0, 8).map((entry, index) => (
-                                                        <Cell
-                                                            key={`cell-${index}`}
-                                                            fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#82ca9d" : "#ff7373"}
-                                                        />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <p className="text-center text-muted-foreground py-8">No topic data available.</p>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="text-center py-12 text-muted-foreground">
-                                <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                                <p>No chapter/topic data available yet.</p>
-                                <p className="text-sm">Complete tests with chapter and topic information to see your performance breakdown.</p>
-                            </div>
+                            )
                         )}
+                        renderExpanded={() => (
+                            chapterTopicData.chapters.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chapterTopicData.chapters} layout="vertical" margin={{ left: 40 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#444" horizontal={false} />
+                                        <XAxis type="number" domain={[0, 100]} stroke="#888" />
+                                        <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 14 }} />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: '#1a1a1a',
+                                                border: '1px solid #333',
+                                                fontSize: '14px'
+                                            }}
+                                            cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                        />
+                                        <Bar dataKey="avgScore" radius={[0, 4, 4, 0]} barSize={30}>
+                                            {chapterTopicData.chapters.map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#8884d8" : "#ff7373"}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No  data available.
+                                </div>
+                            )
+                        )}
+                    />
 
-                        {/* Weak Areas Summary */}
-                        {(chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 ||
-                            chapterTopicData.topics.filter(t => t.avgScore < 60).length > 0) && (
-                                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <ExpandableChartWidget
+                        title="Topic Performance"
+                        description="Average scores by topic"
+                        insights="Drill down into specific topics to pinpoint precisely what concepts need review."
+                        className="h-[400px]"
+                        renderSmall={() => (
+                            chapterTopicData.topics.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chapterTopicData.topics.slice(0, 8)} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                                        <XAxis type="number" domain={[0, 100]} hide />
+                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10 }} />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
+                                            cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                            content={({ active, payload }) => {
+                                                if (active && payload && payload[0]) {
+                                                    const data = payload[0].payload;
+                                                    return (
+                                                        <div className="bg-background border rounded p-2 text-xs">
+                                                            <p className="font-semibold">{data.name}</p>
+                                                            <p>Score: {data.avgScore}%</p>
+                                                            <p className="text-muted-foreground">{data.chapters.join(', ')}</p>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }}
+                                        />
+                                        <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
+                                            {chapterTopicData.topics.slice(0, 8).map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#82ca9d" : "#ff7373"}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No topic data available.
+                                </div>
+                            )
+                        )}
+                        renderExpanded={() => (
+                            chapterTopicData.topics.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chapterTopicData.topics} layout="vertical" margin={{ left: 40 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#444" horizontal={false} />
+                                        <XAxis type="number" domain={[0, 100]} stroke="#888" />
+                                        <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 14 }} />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}
+                                            cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                        />
+                                        <Bar dataKey="avgScore" radius={[0, 4, 4, 0]} barSize={30}>
+                                            {chapterTopicData.topics.map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.avgScore >= 80 ? "#00C49F" : entry.avgScore >= 60 ? "#82ca9d" : "#ff7373"}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No data available.
+                                </div>
+                            )
+                        )}
+                    />
+                </div>
+
+                {/* Weak Areas Summary */}
+                {(chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 ||
+                    chapterTopicData.topics.filter(t => t.avgScore < 60).length > 0) && (
+                        <Card className="glass-card mt-6">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <AlertCircle className="w-5 h-5 text-red-500" /> Focus Areas
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {/* Weak Chapters */}
                                     {chapterTopicData.chapters.filter(c => c.avgScore < 60).length > 0 && (
                                         <div className="bg-red-500/5 rounded-lg p-4 border border-red-500/20">
@@ -467,9 +624,9 @@ const StudentAnalytics = () => {
                                         </div>
                                     )}
                                 </div>
-                            )}
-                    </CardContent>
-                </Card>
+                            </CardContent>
+                        </Card>
+                    )}
             </motion.div>
         </div>
     );

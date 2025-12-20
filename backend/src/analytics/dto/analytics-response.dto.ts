@@ -103,5 +103,12 @@ export class StudentAnalyticsForTeacherDto {
   }>;
   strengths: StrengthWeaknessItemDto[];
   weaknesses: StrengthWeaknessItemDto[];
+  progress: ProgressTrendPointDto[];
+  attendance: {
+    percentage: number;
+    presentDays: number;
+    totalDays: number;
+  };
+  chapterTopic: StudentChapterTopicAnalyticsDto;
 }
 
