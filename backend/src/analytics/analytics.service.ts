@@ -18,7 +18,7 @@ import {
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   // ==================== STUDENT ANALYTICS ====================
 
@@ -635,10 +635,10 @@ export class AnalyticsService {
             : 0,
         attendance: monthlyAttendance.get(month)?.total
           ? Math.round(
-              (monthlyAttendance.get(month)!.present /
-                monthlyAttendance.get(month)!.total) *
-                100,
-            )
+            (monthlyAttendance.get(month)!.present /
+              monthlyAttendance.get(month)!.total) *
+            100,
+          )
           : 0,
       }))
       .slice(-6); // Last 6 months
@@ -1057,7 +1057,7 @@ export class AnalyticsService {
         const classMeanMastery =
           data.studentMasteries.length > 0
             ? data.studentMasteries.reduce((a, b) => a + b, 0) /
-              data.studentMasteries.length
+            data.studentMasteries.length
             : 0;
 
         return {
@@ -1075,7 +1075,7 @@ export class AnalyticsService {
         const classMeanMastery =
           data.studentMasteries.length > 0
             ? data.studentMasteries.reduce((a, b) => a + b, 0) /
-              data.studentMasteries.length
+            data.studentMasteries.length
             : 0;
 
         return {
@@ -1330,6 +1330,30 @@ export class AnalyticsService {
       schoolId,
     );
 
+    // Get progress trend
+    const progress = await this.getStudentProgressTrend(studentId, schoolId);
+
+    // Get chapter/topic analytics
+    const chapterTopic = await this.getStudentChapterTopicAnalytics(
+      studentId,
+      schoolId,
+    );
+
+    // Get attendance details
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: {
+        student_id: studentId,
+        school_id: schoolId,
+      },
+    });
+
+    const presentDays = attendanceRecords.filter(
+      (r) => r.status === 'present',
+    ).length;
+    const totalDays = attendanceRecords.length;
+    const attendancePercentage =
+      totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
+
     // Format radar data
     const radar = subjectPerformance.map((s) => ({
       subject: s.subject,
@@ -1341,6 +1365,13 @@ export class AnalyticsService {
       radar,
       strengths: strengthsWeaknesses.strengths,
       weaknesses: strengthsWeaknesses.weaknesses,
+      progress,
+      attendance: {
+        percentage: attendancePercentage,
+        presentDays,
+        totalDays,
+      },
+      chapterTopic,
     };
   }
 

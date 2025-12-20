@@ -49,7 +49,7 @@ const AiTutorChat = () => {
                     const data = await getStudentData(profile.id);
                     setStudentData(data);
                     console.log('[AiTutorChat] Student data loaded:', data);
-                    
+
                     // Load subjects based on grade_id
                     if (data?.grade_id) {
                         console.log('[AiTutorChat] Loading subjects for grade_id:', data.grade_id);
@@ -268,7 +268,7 @@ const AiTutorChat = () => {
                             <Brain className="w-6 h-6 text-neon-blue animate-pulse" />
                         </div>
                         <div>
-                            <h2 className="font-bold text-lg">Nuvana AI</h2>
+                            <h2 className="font-bold text-lg">Archer</h2>
                             <div className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                                 <p className="text-xs text-muted-foreground">Online • {ACTION_MODES.find(m => m.id === activeMode)?.label || 'Ready'}</p>

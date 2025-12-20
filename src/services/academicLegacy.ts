@@ -1286,6 +1286,8 @@ export interface ProgressTrendPoint {
 export interface StrengthWeaknessItem {
   subject: string;
   desc: string;
+  topic?: string;
+  mastery?: number;
 }
 
 export interface StudentStatsSummary {
@@ -1334,4 +1336,7 @@ export interface StudentAnalyticsForTeacher {
   radar: { subject: string; A: number; B: number; fullMark: number }[];
   strengths: { subject: string; desc: string }[];
   weaknesses: { subject: string; desc: string }[];
+  progress?: ProgressTrendPoint[];
+  attendance?: { percentage: number; presentDays: number; totalDays: number };
+  chapterTopic?: StudentChapterTopicAnalytics;
 }
