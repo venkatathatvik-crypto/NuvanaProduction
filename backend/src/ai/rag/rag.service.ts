@@ -3,6 +3,20 @@ import { Pool } from 'pg';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingService } from './embedding.service';
 
+/**
+ * RAG Service for vector storage and retrieval
+ * 
+ * Note: This service uses raw PostgreSQL with pgvector for maximum control over:
+ * - Complex metadata filtering (class_id, subject)
+ * - Custom similarity threshold with fallback logic
+ * - Performance optimization with custom indexes
+ * 
+ * While LangChain provides PGVector support, our specific requirements (complex filtering,
+ * similarity threshold fallback) are better handled with custom SQL queries.
+ * 
+ * The service maintains compatibility with LangChain Document format through the ingestion pipeline.
+ */
+
 @Injectable()
 export class RagService implements OnModuleInit {
     private pool: Pool;
@@ -191,8 +205,63 @@ export class RagService implements OnModuleInit {
     }
 
     /**
+     * Build metadata filter for SQL queries
+     * Returns filter conditions and parameters for class_id and subject filtering
+     */
+    private buildMetadataFilter(subject: string, classId?: string): {
+        whereClause: string;
+        params: any[];
+    } {
+        if (classId) {
+            // Filter by both class_id and subject (most specific)
+            return {
+                whereClause: `WHERE metadata->>'class_id' = $2 AND (metadata->>'subject' = $3 OR metadata->>'subject' IS NULL)`,
+                params: [classId, subject]
+            };
+        } else {
+            // Fallback: filter by subject only (if class_id not available)
+            return {
+                whereClause: `WHERE metadata->>'subject' = $2 OR metadata->>'subject' IS NULL`,
+                params: [subject]
+            };
+        }
+    }
+
+    /**
+     * Filter results by similarity threshold with fallback logic
+     * Returns relevant chunks above threshold, or best available if none meet threshold
+     */
+    private filterBySimilarity(
+        chunksWithSimilarity: Array<{ content: string; similarity: number }>,
+        threshold: number = 0.7
+    ): string[] {
+        // Filter chunks above threshold
+        let relevantChunks = chunksWithSimilarity
+            .filter(chunk => chunk.similarity > threshold)
+            .map(chunk => chunk.content);
+
+        // If no chunks above threshold, use the chunk with highest similarity
+        if (relevantChunks.length === 0) {
+            console.log(`[RAG] ⚠️ No documents above ${(threshold * 100).toFixed(0)}% similarity threshold`);
+            
+            const bestChunk = chunksWithSimilarity.reduce((best, current) => 
+                current.similarity > best.similarity ? current : best
+            );
+            
+            const bestSimilarityPercent = (bestChunk.similarity * 100).toFixed(1);
+            console.log(`[RAG] 📌 Using best available chunk with ${bestSimilarityPercent}% similarity (below ${(threshold * 100).toFixed(0)}% threshold)`);
+            console.log(`[RAG] ⚠️ Note: This chunk may be less relevant to the query`);
+            
+            relevantChunks = [bestChunk.content];
+        }
+
+        return relevantChunks;
+    }
+
+    /**
      * Retrieve relevant content from vector database
      * Filters by student's class_id and subject for personalized results
+     * Uses custom SQL for complex filtering requirements
      */
     async retrieve(
         query: string, 
@@ -223,33 +292,26 @@ export class RagService implements OnModuleInit {
         // 2. Build SQL query with class_id and subject filtering
         console.log(`[RAG] Step 2: Searching vector database...`);
         try {
-            let sqlQuery: string;
-            let queryParams: any[];
-
+            // Build metadata filter
+            const filter = this.buildMetadataFilter(subject, classId);
+            
             if (classId) {
-                // Filter by both class_id and subject (most specific)
                 console.log(`[RAG] Filtering by class_id: ${classId} AND subject: ${subject}`);
-                sqlQuery = `
-                    SELECT content, 1 - (embedding <=> $1::vector) as similarity 
-                    FROM documents 
-                    WHERE metadata->>'class_id' = $2 
-                    AND (metadata->>'subject' = $3 OR metadata->>'subject' IS NULL)
-                    ORDER BY similarity DESC 
-                    LIMIT 5
-                `;
-                queryParams = [vectorStr, classId, subject];
             } else {
-                // Fallback: filter by subject only (if class_id not available)
                 console.log(`[RAG] Filtering by subject only: ${subject} (no class_id provided)`);
-                sqlQuery = `
-                    SELECT content, 1 - (embedding <=> $1::vector) as similarity 
-                    FROM documents 
-                    WHERE metadata->>'subject' = $2 OR metadata->>'subject' IS NULL
-                    ORDER BY similarity DESC 
-                    LIMIT 5
-                `;
-                queryParams = [vectorStr, subject];
             }
+
+            // Build SQL query with cosine similarity
+            const sqlQuery = `
+                SELECT content, 1 - (embedding <=> $1::vector) as similarity 
+                FROM documents 
+                ${filter.whereClause}
+                ORDER BY similarity DESC 
+                LIMIT 5
+            `;
+            
+            // Combine vector string with filter parameters
+            const queryParams = [vectorStr, ...filter.params];
 
             const result = await this.pool.query(sqlQuery, queryParams);
             console.log(`[RAG] Found ${result.rows.length} potential matches`);
@@ -277,7 +339,7 @@ export class RagService implements OnModuleInit {
                 console.log(`[RAG] ─────────────────────────────────────`);
             });
 
-            // Filter by similarity threshold (only return highly relevant results)
+            // Map results to chunks with similarity scores
             const chunksWithSimilarity = result.rows.map(row => ({
                 content: row.content,
                 similarity: parseFloat(row.similarity),
@@ -289,29 +351,10 @@ export class RagService implements OnModuleInit {
                 console.log(`[RAG] Chunk ${index + 1} similarity: ${similarityPercent}% ${chunk.similarity > 0.7 ? '✅ (above threshold)' : '❌ (below 70% threshold)'}`);
             });
 
-            // Filter chunks above 70% threshold
-            let relevantChunks = chunksWithSimilarity
-                .filter(chunk => chunk.similarity > 0.7)
-                .map(chunk => chunk.content);
-
-            let usedFallback = false;
-
-            // If no chunks above 70%, use the chunk with highest similarity
-            if (relevantChunks.length === 0) {
-                console.log(`[RAG] ⚠️ No documents above 70% similarity threshold`);
-                
-                // Find the chunk with highest similarity
-                const bestChunk = chunksWithSimilarity.reduce((best, current) => 
-                    current.similarity > best.similarity ? current : best
-                );
-                
-                const bestSimilarityPercent = (bestChunk.similarity * 100).toFixed(1);
-                console.log(`[RAG] 📌 Using best available chunk with ${bestSimilarityPercent}% similarity (below 70% threshold)`);
-                console.log(`[RAG] ⚠️ Note: This chunk may be less relevant to the query`);
-                
-                relevantChunks = [bestChunk.content];
-                usedFallback = true;
-            }
+            // Filter by similarity threshold (70%) with fallback logic
+            const relevantChunks = this.filterBySimilarity(chunksWithSimilarity, 0.7);
+            const usedFallback = relevantChunks.length === 1 && chunksWithSimilarity.length > 0 && 
+                                 chunksWithSimilarity[0].similarity <= 0.7;
 
             console.log(`[RAG] ========================================`);
             const thresholdStatus = usedFallback 
@@ -341,6 +384,44 @@ export class RagService implements OnModuleInit {
             console.error(`[RAG] ❌ Database query failed:`, error);
             this.logger.error('RAG database query failed:', error);
             return ""; // Graceful degradation
+        }
+    }
+
+    /**
+     * Get list of subjects that have uploaded PDF files for a specific class
+     * Used to populate AI Tutor subject dropdown with only subjects that have materials
+     */
+    async getSubjectsWithMaterials(classId: string): Promise<string[]> {
+        console.log(`[RAG] Getting subjects with materials for class_id: ${classId}`);
+
+        if (!this.isConnected) {
+            console.warn('[RAG] Vector DB not connected. Returning empty array.');
+            return [];
+        }
+
+        try {
+            // Query database for distinct subjects that have documents for this class
+            const query = `
+                SELECT DISTINCT metadata->>'subject' as subject
+                FROM documents
+                WHERE metadata->>'class_id' = $1
+                  AND metadata->>'subject' IS NOT NULL
+                  AND metadata->>'subject' != ''
+                ORDER BY subject ASC
+            `;
+
+            const result = await this.pool.query(query, [classId]);
+            
+            const subjects = result.rows
+                .map(row => row.subject)
+                .filter(subject => subject && subject.trim().length > 0);
+
+            console.log(`[RAG] Found ${subjects.length} subjects with uploaded materials for class ${classId}:`, subjects);
+            return subjects;
+        } catch (error) {
+            console.error(`[RAG] ❌ Error getting subjects with materials:`, error);
+            this.logger.error('Failed to get subjects with materials:', error);
+            return []; // Graceful degradation
         }
     }
 }

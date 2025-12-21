@@ -11,6 +11,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class AiController {
     constructor(private readonly aiService: AiService) { }
 
+    @Post('start')
+    @Roles('student', 'teacher', 'school_admin', 'super_admin')
+    @HttpCode(HttpStatus.OK)
+    async start(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
+        console.log(`[AI Controller] POST /ai/start - Request received (Default Mode)`);
+        console.log(`[AI Controller] Request body:`, JSON.stringify(dto, null, 2));
+        dto.taskType = AiTaskType.START;
+        return this.aiService.processRequest(dto);
+    }
+
     @Post('explain')
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)

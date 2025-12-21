@@ -1,6 +1,7 @@
 import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, Min, Max } from 'class-validator';
 
 export enum AiTaskType {
+    START = 'start',
     EXPLAIN = 'explain',
     SOLVE = 'solve',
     DOUBT = 'doubt',

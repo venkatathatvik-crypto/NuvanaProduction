@@ -1,18 +1,19 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { LLMMessage, LLMProvider } from './llm.provider.interface';
 
 /**
- * Gemini Provider using official Gemini API
- * Based on: https://ai.google.dev/gemini-api/docs/quickstart#javascript
- * Uses REST API directly for maximum compatibility
+ * Gemini Provider using LangChain ChatGoogleGenerativeAI
+ * Migrated from raw REST API to LangChain for better abstraction and maintainability
  */
 @Injectable()
 export class GeminiProvider implements LLMProvider, OnModuleInit {
     private apiKey: string | null = null;
     private modelName: string;
+    private model: ChatGoogleGenerativeAI | null = null;
     private readonly logger = new Logger(GeminiProvider.name);
-    private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
     constructor(private configService: ConfigService) {
         const rawApiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -34,87 +35,64 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         if (!this.apiKey || this.apiKey.trim() === '') {
             this.logger.error('❌ GEMINI_API_KEY is missing or empty. AI features will not work.');
             this.logger.error('   Please set GEMINI_API_KEY in your .env file');
-        } else {
-            this.logger.log('✓ GeminiProvider ready for requests');
+            return;
+        }
+
+        try {
+            // Initialize LangChain ChatGoogleGenerativeAI model
+            this.model = new ChatGoogleGenerativeAI({
+                model: this.modelName,
+                apiKey: this.apiKey,
+                temperature: 0.7, // Default temperature, can be made configurable
+                maxOutputTokens: 8192, // Default max tokens
+            });
+
+            this.logger.log('✓ GeminiProvider ready for requests (using LangChain)');
             this.logger.log(`   Model: ${this.modelName}`);
-            this.logger.log(`   API: ${this.baseUrl}`);
+        } catch (error) {
+            this.logger.error('❌ Failed to initialize ChatGoogleGenerativeAI:', error);
+            this.model = null;
         }
     }
 
     /**
-     * Generate content using Gemini API
-     * Based on official documentation: https://ai.google.dev/gemini-api/docs/quickstart#javascript
+     * Generate content using LangChain ChatGoogleGenerativeAI
+     * Converts LLMMessage[] to LangChain message format and invokes the model
      */
     async generate(messages: LLMMessage[]): Promise<string> {
         if (!this.apiKey) {
             throw new Error('Gemini API key not initialized. Check GEMINI_API_KEY.');
         }
 
-        // Combine system and user messages into contents array
-        // Following the official API structure
-        let systemContext = '';
-        const userParts: string[] = [];
-
-        for (const msg of messages) {
-            if (msg.role === 'system') {
-                systemContext += `${msg.content}\n\n`;
-            } else if (msg.role === 'user') {
-                userParts.push(msg.content);
-            }
+        if (!this.model) {
+            throw new Error('ChatGoogleGenerativeAI model not initialized. Check GEMINI_API_KEY.');
         }
-
-        // Build the request payload according to official API format
-        const contents: any[] = [];
-        
-        // If we have system context, prepend it to the first user message
-        if (systemContext.trim()) {
-            contents.push({
-                parts: [{ text: `${systemContext.trim()}\n\nUSER TASK:\n${userParts.join('\n')}` }],
-            });
-        } else {
-            // No system context, just user messages
-            userParts.forEach(part => {
-                contents.push({
-                    parts: [{ text: part }],
-                });
-            });
-        }
-
-        const payload = {
-            contents: contents,
-        };
 
         try {
-            const url = `${this.baseUrl}/models/${this.modelName}:generateContent`;
-            
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'x-goog-api-key': this.apiKey,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
+            // Convert LLMMessage[] to LangChain message format
+            const langchainMessages = messages.map(msg => {
+                if (msg.role === 'system') {
+                    return new SystemMessage(msg.content);
+                } else if (msg.role === 'user') {
+                    return new HumanMessage(msg.content);
+                } else {
+                    // For assistant messages, use HumanMessage as fallback
+                    // (LangChain ChatGoogleGenerativeAI handles conversation context)
+                    return new HumanMessage(msg.content);
+                }
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                this.logger.error(`Gemini API error: ${response.status} - ${errorText}`);
-                throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-            }
+            // Invoke the model with LangChain messages
+            const response = await this.model.invoke(langchainMessages);
 
-            const data = await response.json();
-
-            // Extract text from response according to official API structure
-            if (!data.candidates || data.candidates.length === 0) {
-                throw new Error('Gemini returned no candidates in response.');
-            }
-
-            const candidate = data.candidates[0];
-            if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+            // Extract text content from LangChain response
+            if (!response || !response.content) {
                 throw new Error('Gemini returned empty content in response.');
             }
 
-            const text = candidate.content.parts[0].text;
+            const text = typeof response.content === 'string' 
+                ? response.content 
+                : String(response.content);
 
             if (!text || text.trim().length === 0) {
                 throw new Error('Gemini returned empty text.');

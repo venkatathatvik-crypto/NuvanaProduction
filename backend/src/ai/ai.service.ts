@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 // Prompts
 import { SYSTEM_ROOT_PROMPT } from './prompts/system.prompt';
+import { StartPrompt } from './prompts/start.prompt';
 import { ExplainPrompt } from './prompts/explain.prompt';
 import { SolvePrompt } from './prompts/solve.prompt';
 import { DoubtPrompt } from './prompts/doubt.prompt';
@@ -164,6 +165,9 @@ export class AiService {
             let userPrompt = '';
 
             switch (taskType) {
+                case AiTaskType.START:
+                    userPrompt = StartPrompt(query, ragContext, band);
+                    break;
                 case AiTaskType.EXPLAIN:
                     userPrompt = ExplainPrompt(query, band, masteryProfile);
                     break;
@@ -199,9 +203,16 @@ export class AiService {
             // 4. LLM Call
             console.log(`[AI Service] Step 4: Calling Gemini LLM...`);
             const llmStartTime = Date.now();
+            
+            // Combine system prompt and RAG context into single system message
+            // (Gemini LangChain provider requires only one system message)
+            const systemMessage = `${SYSTEM_ROOT_PROMPT}
+
+RAG CONTEXT:
+${ragContext}`;
+            
             const rawContent = await this.llmProvider.generate([
-                { role: 'system', content: SYSTEM_ROOT_PROMPT },
-                { role: 'system', content: `RAG CONTEXT: ${ragContext}` },
+                { role: 'system', content: systemMessage },
                 { role: 'user', content: userPrompt }
             ]);
             const llmDuration = Date.now() - llmStartTime;
