@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as pdf from 'pdf-parse';
+import { RecursiveCharacterTextSplitter } from '@langchain/classic/text_splitter';
+import { Document } from '@langchain/core/documents';
 import { EmbeddingService } from './embedding.service';
 import { RagService } from './rag.service';
 
@@ -8,11 +10,23 @@ export class IngestionService {
     private readonly logger = new Logger(IngestionService.name);
     private readonly CHUNK_SIZE_WORDS = 500; // Words per chunk
     private readonly CHUNK_OVERLAP_WORDS = 100; // Overlap between chunks
+    // Approximate characters per word: ~4-5 chars, so 500 words ≈ 2000-2500 chars
+    private readonly CHUNK_SIZE_CHARS = 2000; // Characters per chunk (approximate to 500 words)
+    private readonly CHUNK_OVERLAP_CHARS = 400; // Characters overlap (approximate to 100 words)
+    private textSplitter: RecursiveCharacterTextSplitter;
 
     constructor(
         private embeddingService: EmbeddingService,
         private ragService: RagService,
-    ) { }
+    ) {
+        // Initialize LangChain text splitter with similar chunking behavior
+        // Using character-based splitting with overlap to approximate word-based chunking
+        this.textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: this.CHUNK_SIZE_CHARS,
+            chunkOverlap: this.CHUNK_OVERLAP_CHARS,
+            separators: ['\n\n', '\n', '. ', ' ', ''], // Try to split on paragraph, line, sentence, word boundaries
+        });
+    }
 
     /**
      * Process PDF file: Extract text, chunk, generate embeddings, store in vector DB
@@ -47,12 +61,24 @@ export class IngestionService {
 
             console.log(`[PDF Processing] ✓ Extracted ${fullText.length} characters from PDF (cleaned)`);
 
-            // 2. Chunk Text (word-based with overlap)
-            console.log(`[PDF Processing] Step 2: Chunking text...`);
-            const chunks = this.chunkText(fullText, this.CHUNK_SIZE_WORDS, this.CHUNK_OVERLAP_WORDS);
-            console.log(`[PDF Processing] ✓ Created ${chunks.length} chunks`);
+            // 2. Chunk Text using LangChain text splitter
+            console.log(`[PDF Processing] Step 2: Chunking text with LangChain...`);
+            // Create LangChain Document with metadata
+            const document = new Document({
+                pageContent: fullText,
+                metadata: {
+                    file_id: metadata.file_id,
+                    class_id: metadata.class_id,
+                    subject: metadata.subject,
+                    classBand: metadata.classBand,
+                    school_id: metadata.school_id,
+                }
+            });
+            // Use LangChain's text splitter for better semantic boundaries
+            const langchainChunks = await this.textSplitter.splitDocuments([document]);
+            console.log(`[PDF Processing] ✓ Created ${langchainChunks.length} chunks using LangChain text splitter`);
 
-            if (chunks.length === 0) {
+            if (langchainChunks.length === 0) {
                 console.warn(`[PDF Processing] ⚠️ No chunks created from text`);
                 return { chunksProcessed: 0, totalChunks: 0, skipped: 0 };
             }
@@ -62,38 +88,41 @@ export class IngestionService {
         let processedCount = 0;
             let skippedCount = 0;
 
-            for (let i = 0; i < chunks.length; i++) {
-                const chunk = chunks[i];
-                console.log(`[PDF Processing] Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
+            for (let i = 0; i < langchainChunks.length; i++) {
+                const chunkDoc = langchainChunks[i];
+                const chunkContent = chunkDoc.pageContent;
+                console.log(`[PDF Processing] Processing chunk ${i + 1}/${langchainChunks.length} (${chunkContent.length} chars)...`);
 
                 try {
                     // Generate embedding
-            const vector = await this.embeddingService.generateEmbedding(chunk);
+                    const vector = await this.embeddingService.generateEmbedding(chunkContent);
 
                     // Graceful degradation: Skip if embeddings unavailable
-            if (!vector || vector.length === 0) {
+                    if (!vector || vector.length === 0) {
                         console.warn(`[PDF Processing] ⚠️ Embedding unavailable for chunk ${i + 1}, skipping...`);
                         skippedCount++;
-                continue;
-            }
+                        continue;
+                    }
 
                     console.log(`[PDF Processing] ✓ Generated embedding (${vector.length} dimensions) for chunk ${i + 1}`);
 
                     // Store in vector database with metadata
+                    // Merge chunk document metadata with file metadata
                     const chunkMetadata = {
                         ...metadata,
+                        ...chunkDoc.metadata, // Preserve any metadata from the chunk
                         chunk_index: i,
-                        chunk_total: chunks.length,
-                        chunk_length: chunk.length,
+                        chunk_total: langchainChunks.length,
+                        chunk_length: chunkContent.length,
                     };
 
-                    await this.ragService.storeVector(vector, chunk, chunkMetadata);
-            processedCount++;
+                    await this.ragService.storeVector(vector, chunkContent, chunkMetadata);
+                    processedCount++;
 
-                    console.log(`[PDF Processing] ✓ Stored chunk ${i + 1}/${chunks.length} in vector database`);
+                    console.log(`[PDF Processing] ✓ Stored chunk ${i + 1}/${langchainChunks.length} in vector database`);
 
                     // Small delay to avoid rate limiting
-                    if (i < chunks.length - 1) {
+                    if (i < langchainChunks.length - 1) {
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 } catch (error) {
@@ -105,12 +134,12 @@ export class IngestionService {
 
             const duration = Date.now() - startTime;
             console.log(`[PDF Processing] ✅ Processing complete!`);
-            console.log(`[PDF Processing] Summary: ${processedCount} processed, ${skippedCount} skipped, ${chunks.length} total`);
+            console.log(`[PDF Processing] Summary: ${processedCount} processed, ${skippedCount} skipped, ${langchainChunks.length} total`);
             console.log(`[PDF Processing] Duration: ${duration}ms`);
 
-        return {
-            chunksProcessed: processedCount,
-            totalChunks: chunks.length,
+            return {
+                chunksProcessed: processedCount,
+                totalChunks: langchainChunks.length,
                 skipped: skippedCount,
             };
         } catch (error) {

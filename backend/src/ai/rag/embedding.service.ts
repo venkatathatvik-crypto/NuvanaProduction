@@ -1,12 +1,15 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+import { TaskType } from '@google/generative-ai';
 
 @Injectable()
 export class EmbeddingService implements OnModuleInit {
     private readonly logger = new Logger(EmbeddingService.name);
-    private genAI: GoogleGenerativeAI | null = null;
+    private embeddings: GoogleGenerativeAIEmbeddings | null = null;
+    private queryEmbeddings: GoogleGenerativeAIEmbeddings | null = null;
     private isEnabled = false;
+    private apiKey: string | null = null;
 
     constructor(private configService: ConfigService) {}
 
@@ -20,9 +23,24 @@ export class EmbeddingService implements OnModuleInit {
         }
 
         try {
-            this.genAI = new GoogleGenerativeAI(apiKey.trim());
+            this.apiKey = apiKey.trim();
+            
+            // Initialize embeddings for documents (RETRIEVAL_DOCUMENT task type)
+            this.embeddings = new GoogleGenerativeAIEmbeddings({
+                modelName: 'text-embedding-004',
+                apiKey: this.apiKey,
+                taskType: TaskType.RETRIEVAL_DOCUMENT,
+            });
+
+            // Initialize embeddings for queries (RETRIEVAL_QUERY task type)
+            this.queryEmbeddings = new GoogleGenerativeAIEmbeddings({
+                modelName: 'text-embedding-004',
+                apiKey: this.apiKey,
+                taskType: TaskType.RETRIEVAL_QUERY,
+            });
+
             this.isEnabled = true;
-            this.logger.log('✓ EmbeddingService enabled with Gemini API');
+            this.logger.log('✓ EmbeddingService enabled with LangChain GoogleGenerativeAIEmbeddings');
         } catch (error) {
             this.logger.error('❌ Failed to initialize EmbeddingService:', error);
             this.isEnabled = false;
@@ -30,13 +48,13 @@ export class EmbeddingService implements OnModuleInit {
     }
 
     /**
-     * Generate embedding vector for given text using Gemini's embedding model
-     * Uses REST API directly since SDK may not support embeddings
+     * Generate embedding vector for given text using LangChain GoogleGenerativeAIEmbeddings
+     * Uses RETRIEVAL_DOCUMENT task type for document embeddings
      * @param text - Text to generate embedding for
      * @returns Array of numbers representing the embedding vector, or empty array if unavailable
      */
     async generateEmbedding(text: string): Promise<number[]> {
-        if (!this.isEnabled || !this.genAI) {
+        if (!this.isEnabled || !this.embeddings) {
             this.logger.debug('Embedding generation skipped: service not enabled');
             return [];
         }
@@ -47,11 +65,6 @@ export class EmbeddingService implements OnModuleInit {
         }
 
         try {
-            const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-            if (!apiKey) {
-                return [];
-            }
-
             // Clean text: remove newlines and extra spaces
             const cleanText = text.replace(/\n+/g, ' ').trim();
 
@@ -59,35 +72,11 @@ export class EmbeddingService implements OnModuleInit {
                 return [];
             }
 
-            // Use Gemini REST API for embeddings
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        model: 'models/text-embedding-004',
-                        content: {
-                            parts: [{ text: cleanText }],
-                        },
-                        taskType: 'RETRIEVAL_DOCUMENT',
-                    }),
-                }
-            );
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                this.logger.error(`Embedding API error: ${response.status} - ${errorText}`);
-                return [];
-            }
-
-            const result = await response.json();
-            const embedding = result.embedding?.values;
+            // Use LangChain embeddings (RETRIEVAL_DOCUMENT task type)
+            const embedding = await this.embeddings.embedQuery(cleanText);
 
             if (!embedding || embedding.length === 0) {
-                this.logger.warn('Empty embedding returned from Gemini API');
+                this.logger.warn('Empty embedding returned from LangChain embeddings');
                 return [];
             }
 
@@ -105,7 +94,7 @@ export class EmbeddingService implements OnModuleInit {
      * Uses RETRIEVAL_QUERY task type for better query matching
      */
     async generateQueryEmbedding(query: string): Promise<number[]> {
-        if (!this.isEnabled) {
+        if (!this.isEnabled || !this.queryEmbeddings) {
             return [];
         }
 
@@ -114,42 +103,14 @@ export class EmbeddingService implements OnModuleInit {
         }
 
         try {
-            const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-            if (!apiKey) {
-                return [];
-            }
-
             const cleanQuery = query.replace(/\n+/g, ' ').trim();
 
-            // Use Gemini REST API for embeddings
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        model: 'models/text-embedding-004',
-                        content: {
-                            parts: [{ text: cleanQuery }],
-                        },
-                        taskType: 'RETRIEVAL_QUERY',
-                    }),
-                }
-            );
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                this.logger.error(`Query embedding API error: ${response.status} - ${errorText}`);
-                return [];
-            }
-
-            const result = await response.json();
-            return result.embedding?.values || [];
+            // Use LangChain query embeddings (RETRIEVAL_QUERY task type)
+            const embedding = await this.queryEmbeddings.embedQuery(cleanQuery);
+            return embedding || [];
         } catch (error) {
             this.logger.error('Error generating query embedding:', error);
-        return [];
+            return [];
         }
     }
 }
