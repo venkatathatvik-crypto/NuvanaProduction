@@ -11,7 +11,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import VoiceModeOverlay from './VoiceModeOverlay';
 import { toast } from 'sonner';
 import { getStudentData, StudentData } from '@/services/studentDataService';
-import { getSubjects } from '@/services/classService';
+import { getSubjectsWithMaterials } from '@/services/subjectService';
 
 const ACTION_MODES = [
     { id: 'start', label: 'Ask Anything', icon: Sparkles, color: 'text-neon-purple', desc: 'General queries' },
@@ -50,22 +50,19 @@ const AiTutorChat = () => {
                     setStudentData(data);
                     console.log('[AiTutorChat] Student data loaded:', data);
 
-                    // Load subjects based on grade_id
-                    if (data?.grade_id) {
-                        console.log('[AiTutorChat] Loading subjects for grade_id:', data.grade_id);
+                    // Load subjects that have uploaded PDF files for this student's class
+                    if (data?.class_id) {
+                        console.log('[AiTutorChat] Loading subjects with materials for class_id:', data.class_id);
                         try {
-                            const subs = await getSubjects(data.grade_id);
-                            console.log('[AiTutorChat] Received subjects (raw):', subs);
-                            // Trim subject names to remove any whitespace
-                            const trimmedSubjects = subs.map(sub => sub?.trim()).filter(sub => sub && sub.length > 0);
-                            console.log('[AiTutorChat] Received subjects (trimmed):', trimmedSubjects);
-                            setSubjects(trimmedSubjects);
+                            const subs = await getSubjectsWithMaterials(data.class_id);
+                            console.log('[AiTutorChat] Received subjects with materials:', subs);
+                            setSubjects(subs);
                         } catch (err) {
-                            console.error('[AiTutorChat] Failed to load subjects:', err);
+                            console.error('[AiTutorChat] Failed to load subjects with materials:', err);
                             setSubjects([]);
                         }
                     } else {
-                        console.warn('[AiTutorChat] No grade_id found in studentData');
+                        console.warn('[AiTutorChat] No class_id found in studentData');
                         setSubjects([]);
                     }
                 } catch (error) {
@@ -190,7 +187,8 @@ const AiTutorChat = () => {
 
         try {
             // Determine task type based on active mode
-            const taskType = (activeMode === 'start' ? 'doubt' : activeMode) as any;
+            // Keep 'start' as-is for default mode (don't convert to 'doubt')
+            const taskType = activeMode as any;
 
             console.log('[AiTutorChat] Selected Subject (raw):', selectedSubject);
             console.log('[AiTutorChat] Selected Subject (type):', typeof selectedSubject);

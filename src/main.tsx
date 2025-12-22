@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import "katex/dist/katex.min.css"; // LaTeX formula support
 import { registerServiceWorker, setupInstallPrompt } from "./registerServiceWorker";
 
 createRoot(document.getElementById("root")!).render(<App />);
