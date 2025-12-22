@@ -184,16 +184,31 @@ const AiTeacherChat = () => {
 
         try {
             let taskType = 'explain';
-            let query = `[TEACHER MODE: ${activeMode}] ${userMsg.content}`;
+            let query = userMsg.content;
 
-            if (activeMode === 'lesson_plan') taskType = 'study_plan';
-            if (activeMode === 'create_quiz') taskType = 'mock_test';
-            if (activeMode === 'simplify') taskType = 'explain';
-            if (activeMode === 'start') taskType = 'doubt';
-
-            if (activeMode === 'grade_paper' || userMsg.image) {
-                taskType = 'explain'; // Fallback for now as we don't have dedicated task type
-                query = `[TEACHER MODE: GRADE PAPER] Please grade this student submission. Analyze the content (simulated from image) and provide feedback and marks. Context: ${userMsg.content}`;
+            // Map teacher modes to appropriate task types
+            if (activeMode === 'lesson_plan') {
+                taskType = 'teacher_lesson_plan';
+                // Keep original query without prefix for better processing
+            } else if (activeMode === 'email') {
+                taskType = 'teacher_email_draft';
+                // Keep original query without prefix for better processing
+            } else if (activeMode === 'create_quiz') {
+                taskType = 'mock_test';
+            } else if (activeMode === 'simplify') {
+                taskType = 'explain';
+            } else if (activeMode === 'start') {
+                taskType = 'doubt';
+            } else if (activeMode === 'grade_paper' || userMsg.image) {
+                taskType = 'teacher_grade_paper';
+                // Format query with paper content and grading parameters
+                const paperContent = userMsg.content || 'Please analyze this student submission.';
+                query = `${paperContent}`;
+                
+                // If imaging is present, add a note (actual OCR would happen server-side in production)
+                if (userMsg.image) {
+                    query = `[Image uploaded - simulating paper content extraction]\n\n${paperContent}`;
+                }
 
                 // Simulate image processing delay
                 await new Promise(resolve => setTimeout(resolve, 1500));

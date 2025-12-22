@@ -14,17 +14,37 @@ GOALS: {goals}
 TIMEFRAME: {timeframe}
 STYLE: {classBandStyle}
 
-STRUCTURE:
-- Day-by-day or Week-by-week breakdown.
+FORMATTING REQUIREMENTS:
+- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
+- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
+- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
+- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
+- Always put two newlines after the summary tag to ensure markdown inside renders correctly
+- Use proper markdown inside the details blocks
+- Use Day-by-day or Week-by-week breakdown.
 - Specific topics to cover.
 - Recommended practice types (reading, solving, testing).
-- Checkpoints for self-assessment.`,
+- Checkpoints for self-assessment.
+
+RESPONSE STRUCTURE:
+<details>
+<summary>📚 Study Plan Overview</summary>
+
+[Brief introduction to what this plan covers]
+</details>
+
+<details>
+<summary>📅 Day-by-Day Breakdown</summary>
+
+[Detailed schedule]
+</details>`,
     ],
 ]);
 
 /**
  * Legacy function for backward compatibility
  * Enhanced to create comprehensive study plans with focus on weak areas
+ * Now generates pure Markdown - frontend transforms to collapsible sections
  * @deprecated Use StudyPlanPromptTemplate.invoke() instead
  */
 export const StudyPlanPrompt = (topic: string, goals: string, timeframe: string, classBand: string) => {
@@ -36,24 +56,29 @@ TIMEFRAME: ${timeframe}
 STYLE: ${classBandStyle}
 
 CRITICAL INSTRUCTIONS:
-1. **Comprehensive Coverage** - Include ALL topics from the chapter/subject
-2. **Prioritize Weak Areas** - Based on mastery profile, give MORE time to weak topics
-3. **Use Uploaded Materials** - Reference the RAG context to structure the plan around actual study materials
-4. **Age-Appropriate Pacing** - Adjust difficulty and pace based on class band
-5. **Include Practice** - Mix reading, solving, and testing activities
+1. **Use Markdown Sections** - Structure your response using ## headers with emojis for each major section
+2. **Section Format** - Use exactly this format: ## 📚 Section Title
+3. **No HTML Tags** - Use pure Markdown only (no <details>, <summary>, or other HTML tags)
+4. **Comprehensive Coverage** - Include ALL topics from the chapter/subject
+5. **Prioritize Weak Areas** - Based on mastery profile, give MORE time to weak topics
+6. **Use Uploaded Materials** - Reference the RAG context to structure the plan around actual study materials
+7. **Age-Appropriate Pacing** - Adjust difficulty and pace based on class band
+8. **Include Practice** - Mix reading, solving, and testing activities
 
-RESPONSE STRUCTURE:
+RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 
-### 📚 Study Plan Overview
+## 📚 Study Plan Overview
+
 [Brief introduction to what this plan covers and the learning objectives]
 
-### 🎯 Topics to Cover
+## 🎯 Topics to Cover
+
 [List ALL topics in order, marking weak areas with ⚠️]
 1. Topic 1 (Strong ✅)
 2. Topic 2 (Needs Practice ⚠️)
 3. Topic 3 (Weak - Priority ⚠️⚠️)
 
-### 📅 Day-by-Day Breakdown
+## 📅 Day-by-Day Breakdown
 
 **Day 1: [Topic Name]**
 - **Morning (30 min):** Read [specific pages/sections from uploaded material]
@@ -69,12 +94,14 @@ RESPONSE STRUCTURE:
 
 [Continue for all days/weeks...]
 
-### 📊 Study Activities Mix
+## 📊 Study Activities Mix
+
 - **Reading & Understanding:** 40% (concepts from uploaded books)
 - **Problem Solving:** 40% (practice questions)
 - **Testing & Revision:** 20% (self-assessment)
 
-### ✅ Checkpoints for Self-Assessment
+## ✅ Checkpoints for Self-Assessment
+
 **After Day 3:**
 - [ ] Can explain [concept 1] in your own words
 - [ ] Can solve [type of problem] without help
@@ -85,21 +112,25 @@ RESPONSE STRUCTURE:
 - [ ] Can teach [difficult concept] to someone else
 - [ ] Ready for chapter test
 
-### 💡 Study Tips
+## 💡 Study Tips
+
 - Focus extra time on topics marked with ⚠️
 - Review strong topics (✅) briefly to maintain mastery
 - Take short breaks between study sessions
 - Use active recall instead of passive reading
 
-### 🎓 Success Criteria
+## 🎓 Success Criteria
+
 By the end of this plan, you should be able to:
 1. [Specific learning outcome 1]
 2. [Specific learning outcome 2]
 3. [Specific learning outcome 3]
 
 PERSONALIZATION NOTES:
+- Use ## headers with emojis for all main sections to keep the plan neat and organized
 - If mastery profile shows weak areas, allocate 60% time to those topics
 - If student is strong overall, include advanced/challenge problems
 - Reference specific page numbers and sections from uploaded study materials
-- Adjust daily time based on student's grade level and capacity`;
+- Adjust daily time based on student's grade level and capacity
+- NO HTML TAGS - pure Markdown only`;
 };

@@ -1,5 +1,5 @@
 export interface AiRequestDto {
-    taskType: 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
+    taskType: 'start' | 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
     query: string;
     subject?: string;
     topic?: string;

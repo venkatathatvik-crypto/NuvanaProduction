@@ -11,6 +11,10 @@ export enum AiTaskType {
     PREDICT = 'predict',
     MOCK_TEST = 'mock_test',
     LIFE_SKILL = 'life_skill',
+    // Teacher-specific task types
+    TEACHER_LESSON_PLAN = 'teacher_lesson_plan',
+    TEACHER_EMAIL_DRAFT = 'teacher_email_draft',
+    TEACHER_GRADE_PAPER = 'teacher_grade_paper',
 }
 
 export class AiRequestDto {

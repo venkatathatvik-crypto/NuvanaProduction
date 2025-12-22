@@ -1,7 +1,7 @@
 import React from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Bot, User, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface MessageBubbleProps {
     sender: 'user' | 'ai';
@@ -32,7 +32,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ sender, content, t
                             : 'bg-primary text-primary-foreground rounded-tr-none'
                         }`}>
                         {isAi && typeof content === 'object' ? (
-                            // Structured AI Response
+                            // Structured AI Response with Enhanced Markdown
                             <div className="space-y-3">
                                 {content.title && <h3 className="text-lg font-bold text-neon-purple leading-tight">{content.title}</h3>}
 
@@ -44,9 +44,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ sender, content, t
                                     </ul>
                                 )}
 
-                                <div className="prose prose-sm dark:prose-invert max-w-none">
-                                    <ReactMarkdown>{content.explanation}</ReactMarkdown>
-                                </div>
+                                {/* Enhanced Markdown Renderer with LaTeX Support */}
+                                <MarkdownRenderer 
+                                    content={content.explanation || ''} 
+                                    className="text-sm"
+                                />
 
                                 {content.personalizedFeedback && (
                                     <div className="mt-3 pt-3 border-t border-dashed border-border text-sm italic text-muted-foreground flex gap-2">

@@ -20,6 +20,11 @@ import { StudyPlanPrompt } from './prompts/studyplan.prompt';
 import { PredictPrompt } from './prompts/predict.prompt';
 import { MockTestPrompt } from './prompts/mocktest.prompt';
 import { LifeSkillPrompt } from './prompts/lifeskill.prompt';
+// Teacher-specific prompts
+import { TeacherLessonPlanPrompt } from './prompts/teacher-lessonplan.prompt';
+import { TeacherEmailPrompt } from './prompts/teacher-email.prompt';
+import { TeacherQuizPrompt } from './prompts/teacher-quiz.prompt';
+import { TeacherGradePaperPrompt } from './prompts/teacher-gradepaper.prompt';
 
 @Injectable()
 export class AiService {
@@ -190,10 +195,65 @@ export class AiService {
                     userPrompt = PredictPrompt(dto.topic || query, 'Key definition focus based on RAG', band);
                     break;
                 case AiTaskType.MOCK_TEST:
-                    userPrompt = MockTestPrompt([dto.topic || query], difficulty, '30 mins', band);
+                    // Check if this is for a teacher (via additionalContext)
+                    const isTeacher = additionalContext?.role === 'teacher';
+                    if (isTeacher) {
+                        // Extract question count from query
+                        const questionCount = this.extractQuestionCount(query);
+                        const questionTypes = this.extractQuestionTypes(query);
+                        const quizDifficulty = this.extractDifficulty(query) || difficulty;
+                        
+                        userPrompt = TeacherQuizPrompt(
+                            dto.topic || query,
+                            subject || 'General',
+                            band,
+                            questionCount,
+                            questionTypes,
+                            quizDifficulty
+                        );
+                    } else {
+                        // Student mock test
+                        userPrompt = MockTestPrompt([dto.topic || query], difficulty, '30 mins', band);
+                    }
                     break;
                 case AiTaskType.LIFE_SKILL:
                     userPrompt = LifeSkillPrompt(query, 'General Growth');
+                    break;
+                case AiTaskType.TEACHER_LESSON_PLAN:
+                    // Extract duration and objectives from query if present
+                    const duration = this.extractDuration(query);
+                    userPrompt = TeacherLessonPlanPrompt(
+                        dto.topic || query,
+                        subject || 'General',
+                        band,
+                        duration,
+                        undefined // Objectives derived from query
+                    );
+                    break;
+                case AiTaskType.TEACHER_EMAIL_DRAFT:
+                    // Extract email purpose and tone from query
+                    const tone = this.extractTone(query);
+                    userPrompt = TeacherEmailPrompt(
+                        'Email request',
+                        query,
+                        undefined,
+                        tone as any
+                    );
+                    break;
+                case AiTaskType.TEACHER_GRADE_PAPER:
+                    // Extract grading parameters from query
+                    const totalMarks = this.extractTotalMarks(query);
+                    const paperType = this.extractPaperType(query);
+                    const gradingCriteria = this.extractGradingCriteria(query);
+                    
+                    userPrompt = TeacherGradePaperPrompt(
+                        query, // Full query contains the paper content
+                        subject || 'General',
+                        band,
+                        totalMarks,
+                        paperType as any,
+                        gradingCriteria
+                    );
                     break;
                 default:
                     userPrompt = query;
@@ -358,26 +418,226 @@ ${ragContext}`;
         }
 
         // Extract numeric grade from grade name
-        // Handles formats like: "Grade 10", "10", "Class 10", "Grade 10-A", etc.
+        // Handles: "Grade 10", "10", "Class 10", "10th", etc.
         const gradeMatch = gradeName.match(/\d+/);
         if (!gradeMatch) {
-            console.warn(`[AI Service] Could not extract grade number from: "${gradeName}", defaulting to 'middle'`);
-            return 'middle';
+            console.log(`[AI Service] ⚠️ Could not extract grade number from: "${gradeName}", defaulting to 'middle'`);
+            return 'middle'; // Default if unable to parse
         }
 
-        const gradeNumber = parseInt(gradeMatch[0], 10);
+        const gradeNumber = parseInt(gradeMatch[0]);
 
-        // Map grade number to class band
-        if (gradeNumber >= 1 && gradeNumber <= 5) {
-            return 'primary';
-        } else if (gradeNumber >= 6 && gradeNumber <= 8) {
-            return 'middle';
-        } else if (gradeNumber >= 9 && gradeNumber <= 12) {
-            return 'high';
-        } else {
-            // For grades outside 1-12 (e.g., kindergarten, university), default to middle
-            console.warn(`[AI Service] Grade ${gradeNumber} outside standard range (1-12), defaulting to 'middle'`);
-            return 'middle';
+        // Mapping based on common education systems
+        // Primary: Grades 1-5
+        // Middle: Grades 6-8
+        // High: Grades 9-12
+        const classMap: Record<number, string> = {
+            1: 'primary', 2: 'primary', 3: 'primary', 4: 'primary', 5: 'primary',
+            6: 'middle', 7: 'middle', 8: 'middle',
+            9: 'high', 10: 'high', 11: 'high', 12: 'high',
+        };
+
+        // Use a fallback if extraction fails
+        return classMap[gradeNumber] || 'middle';
+    }
+    
+    /**
+     * Extract lesson duration from query text
+     * Looks for patterns like "45 minutes", "1 hour", "60 min", etc.
+     */
+    private extractDuration(query: string): number | undefined {
+        const patterns = [
+            /(\d+)\s*(?:minutes?|mins?)/i,
+            /(\d+)\s*(?:hours?|hrs?)/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match) {
+                const value = parseInt(match[1]);
+                // Convert hours to minutes if needed
+                if (pattern.toString().includes('hour')) {
+                    return value * 60;
+                }
+                return value;
+            }
         }
+        
+        return undefined; // Will use default in prompt
+    }
+    
+    /**
+     * Extract tone from query text
+     * Looks for keywords indicating formality level
+     */
+    private extractTone(query: string): 'formal' | 'professional-friendly' | 'urgent' {
+        const lowerQuery = query.toLowerCase();
+        
+        if (lowerQuery.includes('urgent') || lowerQuery.includes('asap') || lowerQuery.includes('immediately')) {
+            return 'urgent';
+        }
+        
+        if (lowerQuery.includes('formal') || lowerQuery.includes('official') || lowerQuery.includes('administration')) {
+            return 'formal';
+        }
+        
+        return 'professional-friendly'; // Default
+    }
+    
+    /**
+     * Extract question count from query text
+     * Looks for patterns like "10 questions", "15 MCQ", "20", etc.
+     */
+    private extractQuestionCount(query: string): number | undefined {
+        const patterns = [
+            /(\d+)\s*(?:questions?|q|mcq|quiz)/i,
+            /(?:^|\s)(\d+)(?:\s|$)/  // Just a number
+        ];
+        
+        for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match) {
+                const count = parseInt(match[1]);
+                // Reasonable range check (5-100 questions)
+                if (count >= 5 && count <= 100) {
+                    return count;
+                }
+            }
+        }
+        
+        return undefined; // Will prompt user to specify
+    }
+    
+    /**
+     * Extract question types from query text
+     * Looks for MCQ, short answer, essay, etc.
+     */
+    private extractQuestionTypes(query: string): string | undefined {
+        const lowerQuery = query.toLowerCase();
+        
+        // Check for specific type requests
+        if (lowerQuery.includes('mcq') ||  lowerQuery.includes('multiple choice')) {
+            if (lowerQuery.includes('only') || lowerQuery.includes('just')) {
+                return 'MCQ only';
+            }
+            return 'Mostly MCQ';
+        }
+        
+        if (lowerQuery.includes('short answer') || lowerQuery.includes('short question')) {
+            if (lowerQuery.includes('only')) {
+                return 'Short Answer only';
+            }
+            return 'Mostly Short Answer';
+        }
+        
+        if (lowerQuery.includes('essay') || lowerQuery.includes('long answer')) {
+            if (lowerQuery.includes('only')) {
+                return 'Essay only';
+            }
+            return 'Mostly Essay';
+        }
+        
+        if (lowerQuery.includes('mix') || lowerQuery.includes('variety') || lowerQuery.includes('different')) {
+            return 'Mixed types';
+        }
+        
+        return undefined; // Will default to mixed
+    }
+    
+    /**
+     * Extract difficulty level from query text
+     */
+    private extractDifficulty(query: string): string | undefined {
+        const lowerQuery = query.toLowerCase();
+        
+        if (lowerQuery.includes('easy') || lowerQuery.includes('basic') || lowerQuery.includes('simple')) {
+            return 'Easy';
+        }
+        
+        if (lowerQuery.includes('hard') || lowerQuery.includes('difficult') || lowerQuery.includes('challenging') || lowerQuery.includes('advanced')) {
+            return 'Hard';
+        }
+        
+        if (lowerQuery.includes('medium') || lowerQuery.includes('moderate') || lowerQuery.includes('intermediate')) {
+            return 'Medium';
+        }
+        
+        return undefined; // Will default to medium
+    }
+    
+    /**
+     * Extract total marks from query text
+     * Looks for patterns like "20 marks", "total marks: 15", "out of 30", etc.
+     */
+    private extractTotalMarks(query: string): number | undefined {
+        const patterns = [
+            /(?:total\s*)?marks?\s*:?\s*(\d+)/i,
+            /out\s*of\s*(\d+)/i,
+            /(\d+)\s*marks?/i,
+            /(\d+)\s*points?/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match) {
+                const marks = parseInt(match[1]);
+                // Reasonable range check (1-100 marks)
+                if (marks >= 1 && marks <= 100) {
+                    return marks;
+                }
+            }
+        }
+        
+        return undefined; // Will use default in prompt
+    }
+    
+    /**
+     * Extract paper type from query text
+     * Identifies: Essay, Short Answer, Problem Solving, Creative Writing
+     */
+    private extractPaperType(query: string): string | undefined {
+        const lowerQuery = query.toLowerCase();
+        
+        if (lowerQuery.includes('essay')) {
+            return 'Essay';
+        }
+        
+        if (lowerQuery.includes('short answer') || lowerQuery.includes('short response')) {
+            return 'Short_Answer';
+        }
+        
+        if (lowerQuery.includes('problem') || lowerQuery.includes('math') || 
+            lowerQuery.includes('calculation') || lowerQuery.includes('solution')) {
+            return 'Problem_Solving';
+        }
+        
+        if (lowerQuery.includes('creative writing') || lowerQuery.includes('story') || 
+            lowerQuery.includes('poem') || lowerQuery.includes('narrative')) {
+            return 'Creative_Writing';
+        }
+        
+        return 'General'; // Default
+    }
+    
+    /**
+     * Extract grading criteria from query text
+     * Looks for specific rubric or criteria mentions
+     */
+    private extractGradingCriteria(query: string): string | undefined {
+        const patterns = [
+            /criteria:\s*([^.]+)/i,
+            /rubric:\s*([^.]+)/i,
+            /grade\s+(?:based\s+on|for):\s*([^.]+)/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+        }
+        
+        return undefined; // Will use default rubric
     }
 }
+
