@@ -168,10 +168,13 @@ export class AiService {
             // 3. Prompt Selection
             console.log(`[AI Service] Step 3: Selecting prompt template for task: ${taskType}...`);
             let userPrompt = '';
+            
+            // Check if user is a teacher
+            const isTeacher = additionalContext?.role === 'teacher';
 
             switch (taskType) {
                 case AiTaskType.START:
-                    userPrompt = StartPrompt(query, ragContext, band);
+                    userPrompt = StartPrompt(query, ragContext, band, isTeacher);
                     break;
                 case AiTaskType.EXPLAIN:
                     userPrompt = ExplainPrompt(query, band, masteryProfile);
@@ -195,8 +198,7 @@ export class AiService {
                     userPrompt = PredictPrompt(dto.topic || query, 'Key definition focus based on RAG', band);
                     break;
                 case AiTaskType.MOCK_TEST:
-                    // Check if this is for a teacher (via additionalContext)
-                    const isTeacher = additionalContext?.role === 'teacher';
+                    // Teacher quiz generation with RAG support
                     if (isTeacher) {
                         // Extract question count from query
                         const questionCount = this.extractQuestionCount(query);
@@ -209,7 +211,8 @@ export class AiService {
                             band,
                             questionCount,
                             questionTypes,
-                            quizDifficulty
+                            quizDifficulty,
+                            ragContext // Pass RAG context for PDF-based questions
                         );
                     } else {
                         // Student mock test

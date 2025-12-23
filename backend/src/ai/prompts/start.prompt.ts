@@ -50,8 +50,46 @@ IMPORTANT:
  * Legacy function for backward compatibility
  * @deprecated Use StartPromptTemplate.invoke() instead
  */
-export const StartPrompt = (query: string, ragContext: string, classBand: string) => {
+export const StartPrompt = (query: string, ragContext: string, classBand: string, isTeacher: boolean = false) => {
     const classBandStyle = ClassBandStyles[classBand] || ClassBandStyles.middle;
+    
+    // Teacher-specific default mode response
+    if (isTeacher) {
+        return `TASK: Provide helpful guidance for: "${query}"
+
+TEACHER MODE: You are helping a teacher with educational tasks
+
+RESPONSE STRUCTURE:
+### 🍎 Teacher Assistant
+
+${query.toLowerCase().includes('help') || query.toLowerCase().includes('what can') || query.length < 20 ? 
+`I'm your AI Teaching Assistant, ready to help with:
+
+**📚 Lesson Planning** - Create structured, multi-day lesson plans with timetables
+**📝 Quiz Creation** - Generate questions from your uploaded materials (PDFs)
+**✉️ Email Drafting** - Professional communication with parents and administration
+**📊 Grade Papers** - AI-powered grading with detailed feedback and rubrics
+**📖 Simplify Content** - Make complex topics easier for students
+**🎯 Classroom Activities** - Engaging activities for better learning
+
+**Available Integrations:**
+- ✅ **PDF Content Access** - I can use your uploaded course materials for quiz generation
+- ✅ **Subject-Specific** - Select a subject from the dropdown for context-aware help
+- ✅ **Grade-Level Adaptation** - Content adjusted to your students' level
+
+**To get started:** Select a mode button below (Lesson Plan, Create Quiz, Email Draft, etc.) and describe what you need!` 
+: `[Provide a brief, helpful answer to their specific query]
+
+**Need specialized help?** Select a mode below:
+- **Lesson Plan** - Multi-day timetables  
+- **Create Quiz** - Questions from your PDFs
+- **Email Draft** - Professional communications
+- **Grade Paper** - Automated grading with feedback`}
+
+IMPORTANT:
+- Keep responses concise and action-oriented
+- Always guide teachers to specialized modes for complex tasks`;
+    }
     return `TASK: Provide a helpful, moderate-length response to: "${query}"
 
 CONTEXT: ${ragContext}

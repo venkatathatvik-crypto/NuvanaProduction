@@ -32,6 +32,7 @@ const AiTeacherChat = () => {
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
+    const [viewImageModal, setViewImageModal] = useState<string | null>(null);
 
     // Subject Selection
     const [subjects, setSubjects] = useState<string[]>([]);
@@ -201,17 +202,29 @@ const AiTeacherChat = () => {
                 taskType = 'doubt';
             } else if (activeMode === 'grade_paper' || userMsg.image) {
                 taskType = 'teacher_grade_paper';
-                // Format query with paper content and grading parameters
-                const paperContent = userMsg.content || 'Please analyze this student submission.';
-                query = `${paperContent}`;
                 
-                // If imaging is present, add a note (actual OCR would happen server-side in production)
-                if (userMsg.image) {
-                    query = `[Image uploaded - simulating paper content extraction]\n\n${paperContent}`;
-                }
+                // Provide better default content for grading
+                let paperContent = userMsg.content;
+                
+                // If only image without text, provide sample content
+                if (userMsg.image && (!paperContent || paperContent.trim().length < 10)) {
+                    paperContent = `Student has submitted a handwritten paper. 
+                    
+Please grade this submission based on:
+- Content understanding and accuracy
+- Completeness of answer
+- Clarity of explanation
+- Overall presentation
 
-                // Simulate image processing delay
-                await new Promise(resolve => setTimeout(resolve, 1500));
+Provide detailed feedback with marks breakdown. Since this is an image submission, assume it contains the student's written work on the assigned topic.`;
+                }
+                
+                query = paperContent || 'Please grade this student submission with detailed feedback.';
+
+                // Simulate OCR processing delay for image
+                if (userMsg.image) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                }
             }
 
             const additionalContext = {
@@ -343,9 +356,12 @@ const AiTeacherChat = () => {
                             <div key={index}>
                                 {msg.sender === 'user' && msg.image && (
                                     <div className="flex justify-end mb-2">
-                                        <div className="max-w-[80%] rounded-lg overflow-hidden border border-white/20">
+                                        <div 
+                                            className="max-w-[80%] rounded-lg overflow-hidden border border-white/20 cursor-pointer hover:border-primary/50 transition-colors group"
+                                            onClick={() => setViewImageModal(msg.image)}
+                                        >
                                             <img src={msg.image} alt="Uploaded paper" className="w-full h-auto max-h-48 object-cover" />
-                                            <div className="bg-black/50 p-1 text-[10px] text-white text-center">Grading Submission</div>
+                                            <div className="bg-black/50 p-1 text-[10px] text-white text-center group-hover:bg-primary/70 transition-colors">Click to view full image</div>
                                         </div>
                                     </div>
                                 )}

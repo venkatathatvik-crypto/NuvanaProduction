@@ -105,4 +105,36 @@ export class AiController {
         dto.taskType = AiTaskType.LIFE_SKILL;
         return this.aiService.processRequest(dto);
     }
+
+    // ==================== TEACHER AI FEATURES ====================
+
+    @Post('teacherlessonplan')
+    @Roles('teacher', 'school_admin', 'super_admin')
+    @HttpCode(HttpStatus.OK)
+    async teacherLessonPlan(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
+        console.log(`[AI Controller] POST /ai/teacherlessonplan - Request received`);
+        console.log(`[AI Controller] Request body:`, JSON.stringify(dto, null, 2));
+        dto.taskType = AiTaskType.TEACHER_LESSON_PLAN;
+        return this.aiService.processRequest(dto);
+    }
+
+    @Post('teacheremaildraft')
+    @Roles('teacher', 'school_admin', 'super_admin')
+    @HttpCode(HttpStatus.OK)
+    async teacherEmailDraft(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
+        console.log(`[AI Controller] POST /ai/teacheremaildraft - Request received`);
+        console.log(`[AI Controller] Request body:`, JSON.stringify(dto, null, 2));
+        dto.taskType = AiTaskType.TEACHER_EMAIL_DRAFT;
+        return this.aiService.processRequest(dto);
+    }
+
+    @Post('teachergradepaper')
+    @Roles('teacher', 'school_admin', 'super_admin')
+    @HttpCode(HttpStatus.OK)
+    async teacherGradePaper(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
+        console.log(`[AI Controller] POST /ai/teachergradepaper - Request received`);
+        console.log(`[AI Controller] Request body:`, JSON.stringify(dto, null, 2));
+        dto.taskType = AiTaskType.TEACHER_GRADE_PAPER;
+        return this.aiService.processRequest(dto);
+    }
 }

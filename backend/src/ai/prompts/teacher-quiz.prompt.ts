@@ -10,7 +10,8 @@ export const TeacherQuizPrompt = (
   classBand: string,
   questionCount?: number,
   questionTypes?: string,
-  difficulty?: string
+  difficulty?: string,
+  ragContext?: string
 ) => {
   const classBandStyle = ClassBandStyles[classBand] || ClassBandStyles.middle;
   
@@ -22,12 +23,14 @@ SUBJECT: ${subject}
 GRADE LEVEL: ${classBand}
 STYLE: ${classBandStyle}
 
+${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]' ? `\nCONTENT SOURCE:\nI have access to uploaded educational materials for this subject. Questions will be generated based on the provided content.\n` : `\nNOTE: No specific educational materials found. Questions will be general knowledge-based for this topic.\n`}
+
 ## 📝 Quiz Creation Setup
 
 Before I generate your quiz, I need a few details:
 
 **Required Information:**
-1. **How many questions?** (e.g., 10, 15, 20, 30)
+1. **How many questions?** (e.g., 10, 15,20, 30)
 2. **Question types?** (Choose one or mix)
    - MCQ (Multiple Choice Questions)
    - Short Answer
@@ -46,6 +49,11 @@ Before I generate your quiz, I need a few details:
 **Please provide these details, and I'll generate a comprehensive quiz for you!**`;
   }
 
+  // Calculate question distribution
+  const mcqCount = (questionTypes?.toLowerCase().includes('mcq') || !questionTypes || questionTypes?.toLowerCase().includes('mix')) ? Math.floor(questionCount * 0.6) : 0;
+  const saCount = (questionTypes?.toLowerCase().includes('short') || !questionTypes || questionTypes?.toLowerCase().includes('mix')) ? Math.floor(questionCount * 0.3) : 0;
+  const essayCount = questionCount - mcqCount - saCount;
+
   // If all details provided, generate the quiz
   return `TASK: Generate a comprehensive quiz/test for teachers on "${topic}"
 
@@ -56,6 +64,12 @@ QUESTION TYPES: ${questionTypes || 'Mixed'}
 DIFFICULTY: ${difficulty || 'Medium'}
 STYLE: ${classBandStyle}
 
+${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]' ? `EDUCATIONAL CONTENT FOR QUESTION GENERATION:
+${ragContext}
+
+IMPORTANT: Generate questions DIRECTLY from the above educational content. Extract key concepts, facts, definitions, examples, and problem-solving approaches from the provided material. Questions should test understanding of THIS specific content, not general topic knowledge.
+` : 'NOTE: Generate general knowledge questions on this topic as no specific educational materials were provided.\n'}
+
 CRITICAL INSTRUCTIONS:
 1. **Use Markdown Sections** - Structure using ## headers with emojis
 2. **Section Format** - Use exactly this format: ## 📝 Section Title
@@ -64,7 +78,12 @@ CRITICAL INSTRUCTIONS:
 5. **Include Answer Key** - Separated section at the end
 6. **Ready to Use** - Format for easy copy to test creation system
 7. **Marks Allocation** - Suggest marks for each question
-8. **Time Estimates** - Suggested time per question
+
+QUESTION DISTRIBUTION:
+- MCQ (Multiple Choice): ${mcqCount} questions
+- Short Answer: ${saCount} questions
+- Essay/Long Answer: ${essayCount} questions
+- **Total: ${questionCount} questions**
 
 RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 
@@ -76,142 +95,109 @@ RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 **Total Questions:** ${questionCount}
 **Question Types:** ${questionTypes || 'Mixed'}
 **Difficulty:** ${difficulty || 'Medium'}
-**Total Marks:** [Calculate based on questions]
-**Suggested Duration:** [Calculate based on question count and types]
+**Total Marks:** ${mcqCount * 2 + saCount * 3 + essayCount * 5}
+**Suggested Duration:** ${mcqCount + saCount * 4 + essayCount * 12} minutes
 
-## 📝 Section A: Multiple Choice Questions
+## 📝 Multiple Choice Questions (${mcqCount} questions)
 
-${generateMCQSection(questionCount, questionTypes)}
+${mcqCount > 0 ? `Generate EXACTLY ${mcqCount} MCQ questions numbered 1 to ${mcqCount}.
 
-## ✍️ Section B: Short Answer Questions
+EACH question MUST have:
+- Clear question text
+- 4 options labeled A), B), C), D)
+- Mark value [2 marks]
 
-${generateShortAnswerSection(questionCount, questionTypes)}
+FORMAT for EACH question:
+**1. [Your actual question text here?]** [2 marks]
+A) First option
+B) Second option
+C) Third option
+D) Fourth option
 
-## 📖 Section C: Long Answer/Essay Questions
+GENERATE ALL ${mcqCount} MCQ QUESTIONS NOW.` : '(No MCQ questions requested)'}
 
-${generateEssaySection(questionCount, questionTypes)}
+## ✍️ Short Answer Questions (${saCount} questions)
+
+${saCount > 0 ? `Generate EXACTLY ${saCount} short answer questions numbered ${mcqCount + 1} to ${mcqCount + saCount}.
+
+EACH question MUST have:
+- Clear question text
+- Word limit (50-100 words)
+- Mark value [3 marks]
+
+FORMAT for EACH question:
+**${mcqCount + 1}. [Your actual question text here?]** [3 marks]
+*(Answer in 50-100 words)*
+
+GENERATE ALL ${saCount} SHORT ANSWER QUESTIONS NOW.` : '(No short answer questions requested)'}
+
+## 📖 Essay/Long Answer Questions (${essayCount} questions)
+
+${essayCount > 0 ? `Generate EXACTLY ${essayCount} essay questions numbered ${mcqCount + saCount + 1} to ${questionCount}.
+
+EACH question MUST have:
+- Clear question text
+- Word limit (200-300 words)
+- Mark value [5 marks]
+
+FORMAT for EACH question:
+**${mcqCount + saCount + 1}. [Your actual question text here?]** [5 marks]
+*(Write a detailed answer in 200-300 words)*
+
+GENERATE ALL ${essayCount} ESSAY QUESTIONS NOW.` : '(No essay questions requested)'}
 
 ## ✅ Answer Key
 
-### Multiple Choice Answers
-1. **Question 1:** Option [X] - [Brief explanation why]
-2. **Question 2:** Option [X] - [Brief explanation why]
+### MCQ Answers (${mcqCount} answers)
+${mcqCount > 0 ? `Provide answers for questions 1-${mcqCount}:
+1. **Answer:** [Correct option] - [Brief explanation]
+2. **Answer:** [Correct option] - [Brief explanation]
+(Continue for all ${mcqCount} MCQs)` : '(No MCQ answers)'}
 
-### Short Answer Key Points
-1. **Question [N]:** 
-   - Key point 1
-   - Key point 2
-   - Key point 3
-   - **Marking:** Award 1 mark for each point (Total: X marks)
+### Short Answer Model Answers (${saCount} answers)
+${saCount > 0 ? `Provide model answers for questions ${mcqCount + 1}-${mcqCount + saCount}:
+**Question ${mcqCount + 1}:**
+- Key point 1
+- Key point 2
+- Key point 3
+**Marking:** Award 1 mark per key point (Total: 3 marks)
 
-### Essay/Long Answer Rubric
-1. **Question [N] (X marks):**
-   - Content accuracy: [Points]
-   - Organization/Structure: [Points]
-   - Examples provided: [Points]
-   - Depth of understanding: [Points]
+(Continue for all ${saCount} short answers)` : '(No short answer keys)'}
+
+### Essay Answer Rubrics (${essayCount} rubrics)
+${essayCount > 0 ? `Provide rubrics for questions ${mcqCount + saCount + 1}-${questionCount}:
+**Question ${mcqCount + saCount + 1} (5 marks):**
+- Content accuracy: 2 marks
+- Organization: 1 mark
+- Examples provided: 1 mark
+- Depth: 1 mark
+
+(Continue for all ${essayCount} essays)` : '(No essay rubrics)'}
 
 ## 💡 Teacher Notes
 
-**Marking Guidelines:**
-- MCQ: 1-2 marks each (no partial credit)
-- Short Answer: 2-3 marks each (partial credit possible)
-- Essay Questions: 5-10 marks each (use rubric)
+**Total Marks:** ${mcqCount * 2 + saCount * 3 + essayCount * 5} marks
+**Suggested Duration:** ${mcqCount + saCount * 4 + essayCount * 12} minutes
 
 **Time Allocation:**
 - MCQ: 1 minute per question
-- Short Answer: 3-5 minutes per question
-- Essay: 10-15 minutes per question
+- Short Answer: 4 minutes per question
+- Essay: 12 minutes per question
 
-**Difficulty Distribution:**
-- Easy: 30% (foundation level)
-- Medium: 50% (application level)
-- Hard: 20% (analysis/synthesis level)
-
-**Common Mistakes to Watch For:**
-[List common student errors for this topic]
-
-## 📊 Question Bank Format (CSV Ready)
-
-\`\`\`csv
-Question Number,Question Text,Type,Marks,Correct Answer,Option A,Option B,Option C,Option D
-1,"[Question text]",MCQ,2,"A","Option text","Option text","Option text","Option text"
-2,"[Question text]",Short_Answer,3,"[Key points]","","","",""
-\`\`\`
-
-**Note:** Copy this CSV format to import into your test creation system
+**Marking Guidelines:**
+- MCQ: ${mcqCount > 0 ? '2 marks each (no partial credit)' : 'N/A'}
+- Short Answer: ${saCount > 0 ? '3 marks each (partial credit possible)' : 'N/A'}
+- Essay: ${essayCount > 0 ? '5 marks each (use rubric above)' : 'N/A'}
 
 FORMATTING REQUIREMENTS:
-- Generate EXACTLY ${questionCount} questions (no more, no less)
-- Use ## headers with emojis for ALL sections
+- You MUST generate EXACTLY ${questionCount} actual questions with all options/details
+- Do NOT just describe what questions should be like - CREATE THEM
 - Number all questions clearly (1, 2, 3...)
-- For MCQ: Provide 4 options (A, B, C, D)
-- For Short Answer: Suggest word limit (50-100 words)
-- For Essay: Suggest word limit (200-300 words)
-- Mark allocation must be clear for each question
-- Include detailed answer key
-- Provide CSV format for easy import
-- NO HTML TAGS - pure Markdown only
-
-QUESTION TYPE DISTRIBUTION:
-${getQuestionTypeDistribution(questionCount, questionTypes)}
-
-AGE-APPROPRIATE CONTENT:
-- ${classBand === 'primary' ? 'Use simple language, concrete examples, visual descriptions' : ''}
-- ${classBand === 'middle' ? 'Balance concrete and abstract, real-world applications' : ''}
-- ${classBand === 'high' ? 'Academic language, critical thinking, analysis and synthesis' : ''}
-`;
-
-  // Helper function placeholders (LLM will interpret these)
-  function generateMCQSection(count: number, types: string | undefined) {
-    const mcqCount = calculateMCQCount(count, types);
-    if (mcqCount === 0) return '[No MCQ questions requested]';
-    return `[Generate ${mcqCount} MCQ questions with 4 options each]`;
-  }
-
-  function generateShortAnswerSection(count: number, types: string | undefined) {
-    const saCount = calculateShortAnswerCount(count, types);
-    if (saCount === 0) return '[No short answer questions requested]';
-    return `[Generate ${saCount} short answer questions]`;
-  }
-
-  function generateEssaySection(count: number, types: string | undefined) {
-    const essayCount = calculateEssayCount(count, types);
-    if (essayCount === 0) return '[No essay questions requested]';
-    return `[Generate ${essayCount} essay/long answer questions]`;
-  }
-
-  function calculateMCQCount(total: number, types: string | undefined): number {
-    if (!types || types.toLowerCase().includes('mcq') || types.toLowerCase().includes('mix')) {
-      return Math.floor(total * 0.6); // 60% MCQ in mixed
-    }
-    return 0;
-  }
-
-  function calculateShortAnswerCount(total: number, types: string | undefined): number {
-    if (!types || types.toLowerCase().includes('short') || types.toLowerCase().includes('mix')) {
-      return Math.floor(total * 0.3); // 30% short answer in mixed
-    }
-    return 0;
-  }
-
-  function calculateEssayCount(total: number, types: string | undefined): number {
-    if (!types || types.toLowerCase().includes('essay') || types.toLowerCase().includes('long') || types.toLowerCase().includes('mix')) {
-      return Math.floor(total * 0.1); // 10% essay in mixed
-    }
-    return 0;
-  }
-
-  function getQuestionTypeDistribution(total: number, types: string | undefined): string {
-    const mcq = calculateMCQCount(total, types);
-    const sa = calculateShortAnswerCount(total, types);
-    const essay = calculateEssayCount(total, types);
-    
-    return `- MCQ: ${mcq} questions
-- Short Answer: ${sa} questions  
-- Essay/Long Answer: ${essay} questions
-- **Total: ${total} questions**`;
-  }
+- For MCQ: Provide all 4 options for EACH question
+- Include complete answer key with all correct answers
+- Make questions directly relevant to "${topic}"
+- Age-appropriate for ${classBand} students
+- ${classBand === 'primary' ? 'Use simple language, concrete examples' : classBand === 'middle' ? 'Balance concrete and abstract concepts' : 'Use academic language, deeper analysis'}`;
 };
 
 /**

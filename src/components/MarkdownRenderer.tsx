@@ -153,21 +153,38 @@ export const MarkdownRenderer = ({ content, className = '' }: MarkdownRendererPr
             </blockquote>
           ),
           
-          // Custom styling for tables
+          // Custom styling for tables - enhanced for timetables
           table: ({ children }) => (
-            <div className="overflow-x-auto mb-4">
-              <table className="min-w-full border-collapse border border-border">
+            <div className="overflow-x-auto mb-6 rounded-lg border border-border shadow-md">
+              <table className="min-w-full divide-y divide-border bg-card">
                 {children}
               </table>
             </div>
           ),
+          thead: ({ children }) => (
+            <thead className="bg-muted/50">
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-border/50 bg-card">
+              {children}
+            </tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-muted/30 transition-colors">
+              {children}
+            </tr>
+          ),
           th: ({ children }) => (
-            <th className="border border-border bg-muted px-4 py-2 text-left font-semibold">
+            <th className="px-4 py-3 text-left text-sm font-bold text-primary bg-muted/70 border-r border-border/30 last:border-r-0">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-4 py-2">{children}</td>
+            <td className="px-4 py-3 text-sm border-r border-border/20 last:border-r-0 whitespace-pre-wrap">
+              {children}
+            </td>
           ),
           
           // Custom styling for links
