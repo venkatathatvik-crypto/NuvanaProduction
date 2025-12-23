@@ -66,65 +66,51 @@ By the end of this lesson, students will be able to:
 
 **Safety Considerations:** [If applicable for science/lab work]
 
-## ⏱️ Lesson Flow Timeline
+## 📅 Multi-Day Timetable (${lessonDuration} Days)
 
-### Introduction/Hook (${Math.floor(lessonDuration * 0.15)} minutes)
+**Total Duration:** ${lessonDuration} hours (${lessonDuration} days × 1 hour each)
+**Format:** Each day represents 1 hour (60 minutes) of instruction
 
-**Activity:** [Engaging opening activity]
-**Purpose:** [Why this hook matters]
-**Instructions:**
-1. Step 1
-2. Step 2
-
-**Teacher Tips:** [What to watch for, common mistakes]
-
+${Array.from({ length: lessonDuration || 3 }, (_, i) => {
+  const dayNum = i + 1;
+  return `
 ---
 
-### Main Teaching Activity 1 (${Math.floor(lessonDuration * 0.25)} minutes)
+### Day ${dayNum} - Hour ${dayNum} (60 minutes)
 
-**Activity:** [Core concept instruction]
-**Method:** [Lecture, demonstration, guided discovery, etc.]
-**Instructions:**
-1. [Detailed step-by-step]
-2. [What to explain]
-3. [Key points to emphasize]
+**Daily Focus:** [Main topic/concept for Day ${dayNum}]
 
-**Visual Aids:** [Diagrams, charts, examples to use]
-**Questioning Strategy:** [Questions to ask students to check understanding]
+**⏰ 0:00-0:10 (10 min) - Opening & Review**
+- ${dayNum > 1 ? 'Quick recap of previous day' : 'Introduce topic and objectives'}
+- Engage students with warm-up activity
+- Set today's learning goals
 
----
+**⏰ 0:10-0:35 (25 min) - Main Instruction**
+- **Core Concept:** [What you'll teach]
+- **Method:** [Lecture/Demo/Activity/Video]
+- **Key Points:**
+  1. [Point 1]
+  2. [Point 2]
+  3. [Point 3]
+- **Visual Aids:** [What to display/use]
 
-### Guided Practice (${Math.floor(lessonDuration * 0.25)} minutes)
+**⏰ 0:35-0:50 (15 min) - Guided Practice**
+- **Activity:** [What students will do]
+- **Grouping:** [Individual/Pairs/Groups]
+- **Teacher Role:** Circulate, support, address misconceptions
 
-**Activity:** [Students practice with teacher support]
-**Grouping:** [Individual, pairs, small groups]
-**Instructions:**
-1. [What students will do]
-2. [How to scaffold support]
+**⏰ 0:50-1:00 (10 min) - Wrap-Up & Assessment**
+- **Quick Check:** [Exit ticket/question]
+- **Key Takeaways:** Review main points
+- ${dayNum < lessonDuration ? '**Preview:** Brief intro to next day' : '**Unit Wrap-Up:** Overall review'}
 
-**Differentiation:**
-- **For struggling students:** [Modification]
-- **For advanced students:** [Extension]
+**Materials Needed:**
+- [List specific materials for this day]
 
----
-
-### Independent Practice (${Math.floor(lessonDuration * 0.20)} minutes)
-
-**Activity:** [Students work independently]
-**Task:** [Specific assignment]
-**Success Criteria:** [How students know they're on track]
-
-**Monitoring:** [How to circulate and check for understanding]
-
----
-
-### Closure/Assessment (${Math.floor(lessonDuration * 0.15)} minutes)
-
-**Activity:** [Wrap-up and check for understanding]
-**Method:** [Exit ticket, quick quiz, class discussion]
-**Key Questions:**
-1. [Question 1]
-2. [Question 2]
+**Homework (Optional):**
+- [Brief assignment to reinforce learning]
+`;
+}).join('\n')}
 
 ## 📊 Assessment Strategies
 

@@ -29,7 +29,7 @@ export const aiService = {
             const { apiClient } = await import('@/lib/apiClient');
             
             // Convert task type to endpoint (e.g., 'study_plan' -> 'studyplan')
-            const endpoint = `/ai/${dto.taskType.replace('_', '')}`;
+            const endpoint = `/ai/${dto.taskType.replace(/_/g, '')}`;
             console.log('[Frontend AI Service] Endpoint:', endpoint);
 
             const startTime = Date.now();
