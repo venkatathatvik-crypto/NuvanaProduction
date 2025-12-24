@@ -47,6 +47,15 @@ export class AttendanceController {
     return this.attendanceService.markAttendance(dto, schoolId);
   }
 
+  @Post('bulk')
+  async markBulkAttendance(
+    @Body() dto: any,
+    @Tenant() schoolId: string,
+  ) {
+    return this.attendanceService.markBulkAttendance(dto, schoolId);
+  }
+
+
   @Get('student/:studentId/percentage')
   async getStudentAttendancePercentage(
     @Param('studentId') studentId: string,

@@ -142,6 +142,57 @@ export class AttendanceService {
     };
   }
 
+  async markBulkAttendance(
+    dto: any,
+    schoolId: string,
+  ): Promise<{ 
+    message: string; 
+    totalRecordsCreated: number; 
+    datesUpdated: number;
+    studentsAffected: number;
+  }> {
+    const studentIds = dto.students.map((s: any) => s.id);
+    const attendanceDates = dto.attendanceDates.map(
+      (dateStr: string) => new Date(dateStr)
+    );
+
+    // Delete existing attendance records for all date-student combinations
+    await this.prisma.attendance.deleteMany({
+      where: {
+        student_id: { in: studentIds },
+        attendance_date: { in: attendanceDates },
+        school_id: schoolId,
+      },
+    });
+
+    // Create new attendance records for each date
+    const allRecords: any[] = [];
+    attendanceDates.forEach((date) => {
+      dto.students.forEach((student: any) => {
+        allRecords.push({
+          student_id: student.id,
+          attendance_date: date,
+          status: student.present ? 'present' : 'absent',
+          taken_by: dto.teacherId,
+          school_id: schoolId,
+          recorded_at: new Date(),
+        });
+      });
+    });
+
+    await this.prisma.attendance.createMany({
+      data: allRecords,
+    });
+
+    return {
+      message: 'Bulk attendance marked successfully',
+      totalRecordsCreated: allRecords.length,
+      datesUpdated: attendanceDates.length,
+      studentsAffected: studentIds.length,
+    };
+  }
+
+
   async getStudentAttendancePercentage(
     studentId: string,
     schoolId: string,

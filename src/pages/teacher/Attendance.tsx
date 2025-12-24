@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Check, X, Calendar as CalendarIcon, Upload, FileText, Download } from "lucide-react";
+import { ArrowLeft, Users, Check, X, Calendar as CalendarIcon, Upload, FileText, Download, UserCheck, CalendarDays } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -25,13 +25,14 @@ import {
   getStudentEmailsInClass,
   sendAttendanceEmail,
 } from "@/services/academic";
-import { academicService } from "@/services/academicApiService";
 import type { FlattenedClass } from "@/schemas/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useAuth } from "@/auth/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { attendanceApi } from "@/services/attendanceApiService";
+import { Badge } from "@/components/ui/badge";
 
 const TeacherAttendance = () => {
   const navigate = useNavigate();
@@ -50,7 +51,17 @@ const TeacherAttendance = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvDialogOpen, setCsvDialogOpen] = useState(false);
 
-  // Load classes dynamically for the logged-in teacher, filtered by current day
+  // NEW: Bulk selection state
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+
+  // NEW: Multi-date state
+  const [isMultiDateMode, setIsMultiDateMode] = useState(false);
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+
+
+  // Load classes dynamically for the logged-in teacher
   useEffect(() => {
     const fetchClasses = async () => {
       if (profileLoading) return;
@@ -70,48 +81,14 @@ const TeacherAttendance = () => {
           setClasses([]);
           setSelectedClass(null);
           setLoading(false);
+          toast.info("No classes assigned to you.");
           return;
         }
 
-        // Get current day of week (1=Monday, 2=Tuesday, ..., 7=Sunday)
-        const today = new Date();
-        const jsDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-        const currentDayOfWeek = jsDay === 0 ? 7 : jsDay; // Convert to 1-7 format
-
-        // Filter classes that have periods scheduled for today where this teacher teaches
-        const classesWithTodaySchedule: FlattenedClass[] = [];
-        
-        for (const classItem of allClasses) {
-          try {
-            // Fetch timetable for this class
-            const timetable = await academicService.getWeeklyTimetable(classItem.class_id);
-            
-            // Check if this class has any periods for today where this teacher teaches
-            const todaySchedule = timetable[currentDayOfWeek];
-            if (todaySchedule && todaySchedule.timetable_periods && todaySchedule.timetable_periods.length > 0) {
-              // Check if any period is assigned to this teacher
-              const hasTeacherPeriod = todaySchedule.timetable_periods.some(
-                (period: any) => period.teacher_id === profile.id
-              );
-              
-              if (hasTeacherPeriod) {
-                classesWithTodaySchedule.push(classItem);
-              }
-            }
-          } catch (error) {
-            console.error(`Error fetching timetable for class ${classItem.class_id}:`, error);
-            // Skip this class if we can't fetch its timetable
-          }
-        }
-
-        // Only show classes that have periods scheduled for today
-        setClasses(classesWithTodaySchedule);
-        if (classesWithTodaySchedule.length > 0) {
-          setSelectedClass(classesWithTodaySchedule[0]);
-        } else {
-          setSelectedClass(null);
-          toast.info("No classes scheduled for today.");
-        }
+        // Show all assigned classes (not filtered by today's timetable)
+        // This allows teachers to mark attendance for any class on any date
+        setClasses(allClasses);
+        setSelectedClass(allClasses[0]);
       } catch (error) {
         console.error("Error fetching classes for attendance:", error);
         toast.error("Failed to load classes for attendance.");
@@ -392,6 +369,187 @@ const TeacherAttendance = () => {
     }
   };
 
+  // NEW: Bulk selection handlers
+  const toggleStudentSelection = (studentId: string) => {
+    const newSelection = new Set(selectedStudents);
+    if (newSelection.has(studentId)) {
+      newSelection.delete(studentId);
+    } else {
+      newSelection.add(studentId);
+    }
+    setSelectedStudents(newSelection);
+  };
+
+  const selectAllStudents = () => {
+    setSelectedStudents(new Set(students.map(s => s.id)));
+    toast.success("All students selected");
+  };
+
+  const clearStudentSelection = () => {
+    setSelectedStudents(new Set());
+    toast.info("Selection cleared");
+  };
+
+  const markSelectedAsPresent = () => {
+    if (selectedStudents.size === 0) {
+      toast.warning("No students selected");
+      return;
+    }
+    setStudents(students.map(student =>
+      selectedStudents.has(student.id) ? { ...student, present: true } : student
+    ));
+    toast.success(`Marked ${selectedStudents.size} students as present`);
+  };
+
+  const markSelectedAsAbsent = () => {
+    if (selectedStudents.size === 0) {
+      toast.warning("No students selected");
+      return;
+    }
+    setStudents(students.map(student =>
+      selectedStudents.has(student.id) ? { ...student, present: false } : student
+    ));
+    toast.success(`Marked ${selectedStudents.size} students as absent`);
+  };
+
+  // NEW: Multi-date handlers
+  const handleDateSelect = (date: Date | undefined) => {
+    if (!date) return;
+
+    if (isMultiDateMode) {
+      const dateExists = selectedDates.some(d => 
+        d.toISOString().split('T')[0] === date.toISOString().split('T')[0]
+      );
+
+      if (dateExists) {
+        // Remove date
+        setSelectedDates(selectedDates.filter(d => 
+          d.toISOString().split('T')[0] !== date.toISOString().split('T')[0]
+        ));
+      } else {
+        // Add date
+        setSelectedDates([...selectedDates, date]);
+      }
+    } else {
+      // Single date mode - update selected date as before
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      setSelectedDate(`${year}-${month}-${day}`);
+    }
+  };
+
+  const removeDateFromSelection = (dateToRemove: Date) => {
+    setSelectedDates(selectedDates.filter(d => 
+      d.toISOString().split('T')[0] !== dateToRemove.toISOString().split('T')[0]
+    ));
+  };
+
+  const submitBulkAttendance = async () => {
+    if (!selectedClass || !profile) {
+      toast.error("Missing class or profile information");
+      return;
+    }
+
+    // Determine which students to include
+    const studentsToSubmit = isSelectionMode && selectedStudents.size > 0
+      ? students.filter(s => selectedStudents.has(s.id))
+      : students;
+
+    if (studentsToSubmit.length === 0) {
+      toast.error("No students to submit");
+      return;
+    }
+
+    // Determine which dates to use
+    const datesToSubmit = isMultiDateMode && selectedDates.length > 0
+      ? selectedDates.map(d => d.toISOString().split('T')[0])
+      : [selectedDate];
+
+    if (datesToSubmit.length === 0) {
+      toast.error("No dates selected");
+      return;
+    }
+
+    setBulkDialogOpen(false);
+    setSubmitting(true);
+
+    try {
+      if (datesToSubmit.length === 1) {
+        // Use regular endpoint for single date
+        await saveAttendance(
+          selectedClass.class_id,
+          datesToSubmit[0],
+          studentsToSubmit,
+          profile.id,
+          profile.school_id
+        );
+        const presentCount = studentsToSubmit.filter(s => s.present).length;
+        toast.success(
+          `Attendance submitted! ${presentCount}/${studentsToSubmit.length} students present`
+        );
+      } else {
+        // Use bulk endpoint for multiple dates
+        const result = await attendanceApi.markBulkAttendance(
+          selectedClass.class_id,
+          datesToSubmit,
+          studentsToSubmit,
+          profile.id
+        );
+        toast.success(
+          `Bulk attendance submitted! ${result.totalRecordsCreated} records created across ${result.datesUpdated} dates`
+        );
+      }
+
+      // Send notifications
+      try {
+        const studentIds = await getStudentIdsInClass(selectedClass.class_id);
+        const dateText = datesToSubmit.length === 1 
+          ? format(new Date(datesToSubmit[0]), 'MMM dd, yyyy')
+          : `${datesToSubmit.length} dates`;
+        await createNotificationsForClass(studentIds, {
+          school_id: profile.school_id,
+          title: "Attendance Posted",
+          message: `Attendance for ${dateText} has been updated.`,
+          notification_type: "attendance",
+          target_url: "/student/attendance",
+        });
+      } catch (notifError) {
+        console.error("Failed to send notifications:", notifError);
+      }
+
+      // Send emails
+      try {
+        const studentEmails = await getStudentEmailsInClass(selectedClass.class_id);
+        const dateText = datesToSubmit.length === 1 
+          ? format(new Date(datesToSubmit[0]), 'MMM dd, yyyy')
+          : `${datesToSubmit.length} dates`;
+        await sendAttendanceEmail(
+          studentEmails,
+          dateText,
+          selectedClass.class_name
+        );
+      } catch (emailError) {
+        console.error("Failed to send emails:", emailError);
+      }
+
+      // Clear selections after successful submit
+      if (isSelectionMode) {
+        setSelectedStudents(new Set());
+      }
+      if (isMultiDateMode) {
+        setSelectedDates([]);
+      }
+    } catch (error) {
+      console.error("Error submitting bulk attendance:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit attendance. Please try again.";
+      toast.error(errorMessage);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
   const presentCount = students.filter((s) => s.present).length;
   const attendancePercentage = ((presentCount / students.length) * 100).toFixed(
     1
@@ -458,12 +616,26 @@ const TeacherAttendance = () => {
                   ))}
                 </select>
               </div>
-              <div>
-                <label
-                  className="text-sm text-muted-foreground mb-2 block"
-                >
-                  Date
-                </label>
+              <div className="col-span-1 sm:col-span-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm text-muted-foreground">
+                    {isMultiDateMode ? "Select Multiple Dates" : "Date"}
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsMultiDateMode(!isMultiDateMode);
+                      if (!isMultiDateMode) {
+                        setSelectedDates([]);
+                      }
+                    }}
+                    className="text-xs h-7"
+                  >
+                    <CalendarDays className="w-3 h-3 mr-1" />
+                    {isMultiDateMode ? "Single Date" : "Multiple Dates"}
+                  </Button>
+                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -471,26 +643,57 @@ const TeacherAttendance = () => {
                       className="w-full justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
-                      {format(new Date(selectedDate + 'T00:00:00'), "PPP")}
+                      {isMultiDateMode
+                        ? selectedDates.length > 0
+                          ? `${selectedDates.length} dates selected`
+                          : "Click to select dates"
+                        : format(new Date(selectedDate + 'T00:00:00'), "PPP")}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 bg-background border-border" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={new Date(selectedDate + 'T00:00:00')}
-                      onSelect={(date) => {
-                        if (date) {
-                          const year = date.getFullYear();
-                          const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                          const day = date.getDate().toString().padStart(2, '0');
-                          setSelectedDate(`${year}-${month}-${day}`);
-                        }
-                      }}
-                      disabled={(date) => date > new Date() || date.getDay() === 0}
-                      initialFocus
-                    />
+                    {!isMultiDateMode && (
+                      <Calendar
+                        mode="single"
+                        selected={new Date(selectedDate + 'T00:00:00')}
+                        onSelect={handleDateSelect}
+                        disabled={(date) => date > new Date() || date.getDay() === 0}
+                        initialFocus
+                      />
+                    )}
+                    {isMultiDateMode && (
+                      <div className="p-3">
+                        <Calendar
+                          mode="multiple"
+                          selected={selectedDates}
+                          onSelect={(dates) => {
+                            if (dates) {
+                              setSelectedDates(Array.isArray(dates) ? dates : [dates]);
+                            }
+                          }}
+                          disabled={(date) => date > new Date() || date.getDay() === 0}
+                          initialFocus
+                        />
+                      </div>
+                    )}
                   </PopoverContent>
                 </Popover>
+                {isMultiDateMode && selectedDates.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedDates.map((date) => (
+                      <Badge
+                        key={date.toISOString()}
+                        variant="secondary"
+                        className="flex items-center gap-1"
+                      >
+                        {format(date, "MMM dd")}
+                        <X
+                          className="w-3 h-3 cursor-pointer hover:text-destructive"
+                          onClick={() => removeDateFromSelection(date)}
+                        />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground mb-2">
@@ -511,7 +714,7 @@ const TeacherAttendance = () => {
         </motion.div>
 
         <div className="flex gap-4 justify-between flex-wrap">
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <Dialog open={csvDialogOpen} onOpenChange={setCsvDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="glass">
@@ -588,16 +791,55 @@ const TeacherAttendance = () => {
                 </div>
               </DialogContent>
             </Dialog>
+            
+            {/* NEW: Selection mode toggle */}
+            <Button
+              variant={isSelectionMode ? "default" : "outline"}
+              onClick={() => {
+                setIsSelectionMode(!isSelectionMode);
+                if (isSelectionMode) {
+                  clearStudentSelection();
+                }
+              }}
+              className="glass"
+            >
+              <UserCheck className="w-4 h-4 mr-2" />
+              {isSelectionMode ? "Exit Selection" : "Select Students"}
+            </Button>
           </div>
-          <div className="flex gap-4">
-            <Button variant="outline" onClick={markAllPresent} className="glass">
-              <Check className="w-4 h-4 mr-2" />
-              Mark All Present
-            </Button>
-            <Button variant="outline" onClick={markAllAbsent} className="glass">
-              <X className="w-4 h-4 mr-2" />
-              Mark All Absent
-            </Button>
+          
+          <div className="flex gap-4 flex-wrap">
+            {/* Show selection actions when in selection mode */}
+            {isSelectionMode && (
+              <>
+                <Button variant="outline" onClick={selectAllStudents} className="glass">
+                  <Check className="w-4 h-4 mr-2" />
+                  Select All ({students.length})
+                </Button>
+                <Button variant="outline" onClick={markSelectedAsPresent} className="glass text-green-500">
+                  <Check className="w-4 h-4 mr-2" />
+                  Mark Selected Present
+                </Button>
+                <Button variant="outline" onClick={markSelectedAsAbsent} className="glass text-destructive">
+                  <X className="w-4 h-4 mr-2" />
+                  Mark Selected Absent
+                </Button>
+              </>
+            )}
+            
+            {/* Show regular actions when not in selection mode */}
+            {!isSelectionMode && (
+              <>
+                <Button variant="outline" onClick={markAllPresent} className="glass">
+                  <Check className="w-4 h-4 mr-2" />
+                  Mark All Present
+                </Button>
+                <Button variant="outline" onClick={markAllAbsent} className="glass">
+                  <X className="w-4 h-4 mr-2" />
+                  Mark All Absent
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -633,6 +875,14 @@ const TeacherAttendance = () => {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
+                        {/* NEW: Selection checkbox */}
+                        {isSelectionMode && (
+                          <Checkbox
+                            checked={selectedStudents.has(student.id)}
+                            onCheckedChange={() => toggleStudentSelection(student.id)}
+                            className="h-5 w-5"
+                          />
+                        )}
                         <div
                           className={`w-12 h-12 rounded-full flex items-center justify-center font-bold ${student.present
                               ? "bg-green-500/20 text-green-500"
@@ -679,15 +929,90 @@ const TeacherAttendance = () => {
           </Card>
         </motion.div>
 
-        <div className="flex justify-end">
-          <Button
-            size="lg"
-            className="neon-glow px-8"
-            onClick={submitAttendance}
-            disabled={submitting || students.length === 0}
-          >
-            {submitting ? "Submitting..." : "Submit Attendance"}
-          </Button>
+        <div className="flex justify-end gap-4">
+          {/* Show info about selected students/dates */}
+          {(isSelectionMode && selectedStudents.size > 0) || (isMultiDateMode && selectedDates.length > 0) ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {isSelectionMode && selectedStudents.size > 0 && (
+                <Badge variant="outline">{selectedStudents.size} students selected</Badge>
+              )}
+              {isMultiDateMode && selectedDates.length > 0 && (
+                <Badge variant="outline">{selectedDates.length} dates selected</Badge>
+              )}
+            </div>
+          ) : null}
+
+          {/* Conditional submit button */}
+          {(isSelectionMode && selectedStudents.size > 0) || (isMultiDateMode && selectedDates.length > 0) ? (
+            <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="lg"
+                  className="neon-glow px-8"
+                  disabled={submitting || students.length === 0}
+                >
+                  Submit Bulk Attendance
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Confirm Bulk Attendance</DialogTitle>
+                  <DialogDescription>
+                    Please review the details before submitting.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Students:</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isSelectionMode && selectedStudents.size > 0
+                        ? `${selectedStudents.size} selected students`
+                        : `All ${students.length} students`}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Dates:</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isMultiDateMode && selectedDates.length > 0
+                        ? selectedDates.map(d => format(d, "MMM dd, yyyy")).join(", ")
+                        : format(new Date(selectedDate + 'T00:00:00'), "MMM dd, yyyy")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Total Records:</p>
+                    <p className="text-sm text-muted-foreground">
+                      {(() => {
+                        const studentCount = isSelectionMode && selectedStudents.size > 0
+                          ? selectedStudents.size
+                          : students.length;
+                        const dateCount = isMultiDateMode && selectedDates.length > 0
+                          ? selectedDates.length
+                          : 1;
+                        return `${studentCount * dateCount} attendance records will be created`;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-4">
+                  <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={submitBulkAttendance} disabled={submitting}>
+                    {submitting ? "Submitting..." : "Confirm & Submit"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <Button
+              size="lg"
+              className="neon-glow px-8"
+              onClick={submitAttendance}
+              disabled={submitting || students.length === 0}
+            >
+              {submitting ? "Submitting..." : "Submit Attendance"}
+            </Button>
+          )}
         </div>
       </div>
     </div>

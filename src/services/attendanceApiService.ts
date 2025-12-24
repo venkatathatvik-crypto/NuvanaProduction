@@ -106,6 +106,29 @@ export const attendanceApi = {
   },
 
   /**
+   * Mark attendance for a class across multiple dates (bulk operation)
+   */
+  async markBulkAttendance(
+    classId: string,
+    attendanceDates: string[],
+    students: StudentAttendance[],
+    teacherId: string
+  ): Promise<{
+    message: string;
+    totalRecordsCreated: number;
+    datesUpdated: number;
+    studentsAffected: number;
+  }> {
+    return apiClient.post('/attendance/bulk', {
+      classId,
+      attendanceDates,
+      students,
+      teacherId,
+    });
+  },
+
+
+  /**
    * Get attendance percentage for a student
    */
   async getStudentAttendancePercentage(
