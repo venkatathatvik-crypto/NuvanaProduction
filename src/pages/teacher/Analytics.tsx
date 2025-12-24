@@ -267,6 +267,30 @@ const AnalyticsDashboard = () => {
         fetchClasses();
     }, [profile, profileLoading]);
 
+    // Helper function to calculate linear regression trend line
+    const calculateTrendLine = (data: AttendanceVsMarks[]) => {
+        if (data.length < 2) return [];
+        
+        const n = data.length;
+        const sumX = data.reduce((sum, d) => sum + d.attendance, 0);
+        const sumY = data.reduce((sum, d) => sum + d.marks, 0);
+        const sumXY = data.reduce((sum, d) => sum + (d.attendance * d.marks), 0);
+        const sumX2 = data.reduce((sum, d) => sum + (d.attendance * d.attendance), 0);
+        
+        // Calculate slope and intercept using least squares method
+        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const intercept = (sumY - slope * sumX) / n;
+        
+        // Generate line points from min to max attendance
+        const minX = Math.min(...data.map(d => d.attendance));
+        const maxX = Math.max(...data.map(d => d.attendance));
+        
+        return [
+            { attendance: minX, trendMarks: slope * minX + intercept, marks: 0 },
+            { attendance: maxX, trendMarks: slope * maxX + intercept, marks: 0 }
+        ];
+    };
+
     if (loading) return <LoadingSpinner />;
     if (!selectedClass)
         return <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">No classes found</div>;
@@ -487,6 +511,16 @@ const AnalyticsDashboard = () => {
                                                     ]}
                                                 />
                                                 <Scatter name="Students" data={attendanceVsMarksData} fill="#8884d8" />
+                                                <Line
+                                                    type="monotone"
+                                                    data={calculateTrendLine(attendanceVsMarksData)}
+                                                    dataKey="trendMarks"
+                                                    stroke="#ff7373"
+                                                    strokeWidth={2}
+                                                    strokeDasharray="5 5"
+                                                    dot={false}
+                                                    name="Trend Line"
+                                                />
                                             </ScatterChart>
                                         </ResponsiveContainer>
                                     ) : (
@@ -528,6 +562,16 @@ const AnalyticsDashboard = () => {
                                                     ]}
                                                 />
                                                 <Scatter name="Students" data={attendanceVsMarksData} fill="#8884d8" r={6} shape="circle" />
+                                                <Line
+                                                    type="monotone"
+                                                    data={calculateTrendLine(attendanceVsMarksData)}
+                                                    dataKey="trendMarks"
+                                                    stroke="#ff7373"
+                                                    strokeWidth={3}
+                                                    strokeDasharray="5 5"
+                                                    dot={false}
+                                                    name="Trend Line"
+                                                />
                                             </ScatterChart>
                                         </ResponsiveContainer>
                                     ) : (
@@ -599,7 +643,17 @@ const AnalyticsDashboard = () => {
                                 )}
                             </div>
 
-                            {selectedStudent && studentAnalyticsData[selectedStudent] ? (
+
+                            {!selectedStudent ? (
+                                <div className="flex flex-col items-center justify-center p-20 text-muted-foreground border-2 border-dashed rounded-xl border-white/10 mt-8">
+                                    <Users className="w-16 h-16 mb-4 opacity-20" />
+                                    <p className="text-lg">Select a student above to view detailed performance analytics.</p>
+                                </div>
+                            ) : !studentAnalyticsData[selectedStudent] ? (
+                                <div className="flex justify-center p-20">
+                                    <LoadingSpinner />
+                                </div>
+                            ) : (
                                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
                                     {/* ROW 1: Subject Performance & Progress Trend */}
@@ -812,11 +866,6 @@ const AnalyticsDashboard = () => {
                                         </div>
                                     )}
 
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center p-20 text-muted-foreground border-2 border-dashed rounded-xl border-white/10 mt-8">
-                                    <Users className="w-16 h-16 mb-4 opacity-20" />
-                                    <p className="text-lg">Select a student above to view detailed performance analytics.</p>
                                 </div>
                             )}
 
