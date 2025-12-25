@@ -2,6 +2,7 @@
 import { GradeSubjectOption, FileCategoryOption } from "./types";
 import { NestedClass, FlattenedClass } from "@/schemas/academic";
 import { academicService } from "./academicApiService";
+import { logger } from '@/lib/logger';
 
 interface RawSubjectData {
   subject_master_id: string;
@@ -111,7 +112,7 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
     const { apiClient } = await import('@/lib/apiClient');
     const gradeSubjects = await apiClient.get<any[]>(`/academic/grade-subjects/grade/${gradeLevelId}`);
     
-    console.log('getSubjects: Raw response for grade', gradeLevelId, gradeSubjects);
+    logger.log('getSubjects: Raw response for grade', gradeLevelId, gradeSubjects);
     
     if (!gradeSubjects || !Array.isArray(gradeSubjects)) {
       console.warn('getSubjects: Invalid response format', gradeSubjects);
@@ -134,7 +135,7 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
       })
       .filter((name: any): name is string => typeof name === 'string' && name.length > 0);
 
-    console.log('getSubjects: Extracted', subjectNames.length, 'subject names:', subjectNames);
+    logger.log('getSubjects: Extracted', subjectNames.length, 'subject names:', subjectNames);
     return subjectNames;
   } catch (error: any) {
     console.error('Error fetching subjects:', error);
@@ -170,7 +171,7 @@ export const getTeacherClasses = async (
   const { academicService } = await import('./academicApiService');
   const teacherClasses = await academicService.getClassesByTeacher(teacherId);
   
-  console.log('getTeacherClasses: Raw response', teacherClasses);
+  logger.log('getTeacherClasses: Raw response', teacherClasses);
   
   // Transform to FlattenedClass format
   const flattenedClasses: FlattenedClass[] = teacherClasses.map((tc: any) => {
@@ -190,7 +191,7 @@ export const getTeacherClasses = async (
     };
   });
 
-  console.log('getTeacherClasses: Mapped classes', flattenedClasses);
+  logger.log('getTeacherClasses: Mapped classes', flattenedClasses);
   return flattenedClasses;
 };
 
@@ -217,7 +218,7 @@ export const getTeacherSubjectsForClass = async (
       return [];
     }
 
-    console.log(`getTeacherSubjectsForClass: Found ${gradeSubjectsForGrade.length} grade subjects for grade ${gradeId}`);
+    logger.log(`getTeacherSubjectsForClass: Found ${gradeSubjectsForGrade.length} grade subjects for grade ${gradeId}`);
 
     // Step 2: Get teacher's assigned subjects
     const teacherSubjects = await academicService.getSubjectsByTeacher(teacherId);
@@ -232,7 +233,7 @@ export const getTeacherSubjectsForClass = async (
       teacherSubjects.map((ts: any) => ts.grade_subject_id)
     );
 
-    console.log(`getTeacherSubjectsForClass: Teacher has ${teacherGradeSubjectIds.size} assigned grade subjects`);
+    logger.log(`getTeacherSubjectsForClass: Teacher has ${teacherGradeSubjectIds.size} assigned grade subjects`);
 
     // Step 4: Filter grade_subjects to only include those assigned to the teacher
     // This matches admin panel logic: filter by grade_level_id, then check teacher assignment
@@ -255,7 +256,7 @@ export const getTeacherSubjectsForClass = async (
       })
       .filter((option): option is GradeSubjectOption => option !== null);
 
-    console.log(`getTeacherSubjectsForClass: Final result - ${filteredSubjects.length} subjects for teacher ${teacherId}, class ${classId}, grade ${gradeId}`);
+    logger.log(`getTeacherSubjectsForClass: Final result - ${filteredSubjects.length} subjects for teacher ${teacherId}, class ${classId}, grade ${gradeId}`);
     return filteredSubjects;
   } catch (error: any) {
     console.error('Error fetching teacher subjects for class:', error);
@@ -271,7 +272,7 @@ export const getGradeSubjectsDetailed = async (
     const { apiClient } = await import('@/lib/apiClient');
     const gradeSubjects = await apiClient.get<any[]>(`/academic/grade-subjects/grade/${gradeLevelId}`);
     
-    console.log('getGradeSubjectsDetailed: Raw response for grade', gradeLevelId, gradeSubjects);
+    logger.log('getGradeSubjectsDetailed: Raw response for grade', gradeLevelId, gradeSubjects);
     
     if (!gradeSubjects || !Array.isArray(gradeSubjects)) {
       console.warn('getGradeSubjectsDetailed: Invalid response format', gradeSubjects);
@@ -306,7 +307,7 @@ export const getGradeSubjectsDetailed = async (
       })
       .filter((option): option is GradeSubjectOption => option !== null);
 
-    console.log('getGradeSubjectsDetailed: Successfully mapped', mapped.length, 'subjects');
+    logger.log('getGradeSubjectsDetailed: Successfully mapped', mapped.length, 'subjects');
     return mapped;
   } catch (error: any) {
     console.error('Error fetching grade subjects:', error);

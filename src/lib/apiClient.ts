@@ -131,14 +131,27 @@ class ApiClient {
 
     // Handle non-OK responses
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({
+      const errorResponse = await response.json().catch(() => ({
+        statusCode: response.status,
         message: 'An error occurred',
+        isError: true,
+        data: null,
       }));
-      throw new ApiError(errorData.message || `Request failed with status ${response.status}`, errorData, response.status);
+      
+      // New backend format: { statusCode, message, isError, data }
+      throw new ApiError(
+        errorResponse.message || `Request failed with status ${response.status}`,
+        errorResponse.data,
+        errorResponse.statusCode || response.status
+      );
     }
 
-    // Return the response data
-    return response.json();
+    // Handle successful responses
+    // New backend format: { statusCode, message, isError: false, data }
+    const successResponse = await response.json();
+    
+    // Return only the data from the wrapper
+    return successResponse.data !== undefined ? successResponse.data : successResponse;
   }
 
   /**
@@ -256,14 +269,23 @@ class ApiClient {
 
     // Handle non-OK responses
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({
+      const errorResponse = await response.json().catch(() => ({
+        statusCode: response.status,
         message: 'An error occurred',
+        isError: true,
+        data: null,
       }));
-      throw new ApiError(errorData.message || `Request failed with status ${response.status}`, errorData, response.status);
+      
+      throw new ApiError(
+        errorResponse.message || `Request failed with status ${response.status}`,
+        errorResponse.data,
+        errorResponse.statusCode || response.status
+      );
     }
 
-    // Return the response data
-    return response.json();
+    // Handle successful responses
+    const successResponse = await response.json();
+    return successResponse.data !== undefined ? successResponse.data : successResponse;
   }
 }
 

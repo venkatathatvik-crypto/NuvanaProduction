@@ -1,5 +1,7 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { GeminiProvider } from './llm/gemini.provider';
 import { AiRequestDto, AiTaskType } from './dto/ai-request.dto';
 import { AiResponseDto } from './dto/ai-response.dto';
@@ -37,6 +39,7 @@ export class AiService {
         private recommendationService: RecommendationService,
         private llmProvider: GeminiProvider,
         private prisma: PrismaService,
+        @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
     async processRequest(dto: AiRequestDto): Promise<AiResponseDto> {
@@ -51,6 +54,23 @@ export class AiService {
 
         try {
             const { taskType, query, subject, classBand, studentId, additionalContext } = dto;
+
+            // Create cache key from request parameters
+            const cacheKey = `ai:${taskType}:${query.substring(0, 100)}:${subject || 'general'}:${classBand || 'middle'}`;
+            
+            // Check cache first
+            try {
+                const cached = await this.cacheManager.get<AiResponseDto>(cacheKey);
+                if (cached) {
+                    console.log('[AI Service] ✓ Cache hit - returning cached response');
+                    console.log(`[AI Service] ✅ Request completed from cache in ${Date.now() - requestStartTime}ms`);
+                    console.log(`[AI Service] ========================================`);
+                    return cached;
+                }
+                console.log('[AI Service] Cache miss - generating new response');
+            } catch (cacheError) {
+                console.warn('[AI Service] Cache check failed, proceeding without cache:', cacheError.message);
+            }
 
             // 0. Get Student's Class ID and Grade Level (for RAG filtering and class band)
             let studentClassId: string | undefined;
@@ -285,6 +305,15 @@ ${ragContext}`;
             console.log(`[AI Service] Step 5: Parsing LLM response...`);
             const parsedResponse = this.parseResponse(rawContent);
             console.log(`[AI Service] ✓ Response parsed successfully`);
+
+            // Store in cache for future requests (1 hour TTL)
+            try {
+                await this.cacheManager.set(cacheKey, parsedResponse, 3600); // 1 hour in seconds
+                console.log('[AI Service] ✓ Response cached for future requests');
+            } catch (cacheError) {
+                console.warn('[AI Service] Failed to cache response:', cacheError.message);
+                // Continue even if caching fails
+            }
 
             const totalDuration = Date.now() - requestStartTime;
             console.log(`[AI Service] ✅ Request completed in ${totalDuration}ms`);
