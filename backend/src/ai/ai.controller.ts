@@ -1,4 +1,5 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AiService } from './ai.service';
 import { AiRequestDto, AiTaskType } from './dto/ai-request.dto';
 import { AiResponseDto } from './dto/ai-response.dto';
@@ -8,6 +9,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('ai')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 AI requests per minute
 export class AiController {
     constructor(private readonly aiService: AiService) { }
 

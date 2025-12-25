@@ -1,5 +1,6 @@
 // Test services - migrated to use backend API
 import { testApi } from './testApiService';
+import { logger } from '@/lib/logger';
 
 export type QuestionType = 'MCQ' | 'Essay' | 'Short Answer' | 'Very Short Answer';
 
@@ -334,8 +335,8 @@ export const submitStudentTest = async (
   }
 
   // Convert answers Record to array format expected by API
-  console.log('[submitStudentTest] Raw answers object:', answers);
-  console.log('[submitStudentTest] Test questions:', test.questions.map(q => ({ 
+  logger.log('[submitStudentTest] Raw answers object:', answers);
+  logger.log('[submitStudentTest] Test questions:', test.questions.map(q => ({ 
     id: q.id, 
     type: q.question_type || q.questionType,
     rawQuestion: q 
@@ -347,7 +348,7 @@ export const submitStudentTest = async (
     const questionType = q.question_type || q.questionType;
     const isMCQ = questionType === 'MCQ';
     
-    console.log('[submitStudentTest] Processing question:', {
+    logger.log('[submitStudentTest] Processing question:', {
       question_id: q.id,
       question_type_raw: q.question_type,
       questionType_camel: q.questionType,
@@ -369,11 +370,11 @@ export const submitStudentTest = async (
       if (answerValue !== undefined && answerValue !== null && typeof answerValue === 'number') {
         // Student selected an option (including 0)
         answerObj.student_selected_option_index = answerValue;
-        console.log('[submitStudentTest] MCQ answer found:', answerValue);
+        logger.log('[submitStudentTest] MCQ answer found:', answerValue);
       } else {
         // Student didn't answer - explicitly set to null
         answerObj.student_selected_option_index = null;
-        console.log('[submitStudentTest] MCQ answer not found, setting to null');
+        logger.log('[submitStudentTest] MCQ answer not found, setting to null');
       }
       // Don't include subjective_answer_text for MCQ
     } else {
@@ -389,7 +390,7 @@ export const submitStudentTest = async (
     return answerObj;
   });
   
-  console.log('[submitStudentTest] Final answer array to send:', JSON.stringify(answerArray, null, 2));
+  logger.log('[submitStudentTest] Final answer array to send:', JSON.stringify(answerArray, null, 2));
 
   // Submit test
   const result = await testApi.submitTest(testId, studentId, answerArray);

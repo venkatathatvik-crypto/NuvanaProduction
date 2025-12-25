@@ -1,4 +1,5 @@
 import { academicService } from "@/services/academicApiService";
+import { logger } from '@/lib/logger';
 
 // Types
 export interface TimetableDay {
@@ -51,7 +52,7 @@ export const getTimetableForClass = async (
     // Use backend API instead of Supabase
     const weeklyTimetableData = await academicService.getWeeklyTimetable(classId);
 
-    console.log("📅 Raw timetable data from API:", weeklyTimetableData);
+    logger.log("📅 Raw timetable data from API:", weeklyTimetableData);
 
     // Initialize empty week (days 1-7 for Mon-Sun)
     const weeklyTimetable: WeeklyTimetable = {};
@@ -65,7 +66,7 @@ export const getTimetableForClass = async (
       const dayOfWeek = parseInt(dayOfWeekStr);
       const dayData = weeklyTimetableData[dayOfWeek];
       
-      console.log(`📆 Processing day ${dayOfWeek}:`, dayData);
+      logger.log(`📆 Processing day ${dayOfWeek}:`, dayData);
       
       if (dayData) {
         const periods = Array.isArray(dayData.timetable_periods) ? dayData.timetable_periods : [];
@@ -92,13 +93,13 @@ export const getTimetableForClass = async (
             teacher_name: period.teacher_name,
           })),
         };
-        console.log(`✅ Added day ${dayOfWeek} with ${periods.length} periods`);
+        logger.log(`✅ Added day ${dayOfWeek} with ${periods.length} periods`);
       } else {
-        console.log(`⚠️ Day ${dayOfWeek} data is missing or invalid:`, dayData);
+        logger.log(`⚠️ Day ${dayOfWeek} data is missing or invalid:`, dayData);
       }
     });
 
-    console.log("📋 Final transformed timetable:", weeklyTimetable);
+    logger.log("📋 Final transformed timetable:", weeklyTimetable);
     return weeklyTimetable;
   } catch (error) {
     console.error("Error in getTimetableForClass:", error);
