@@ -1011,10 +1011,19 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                     <span>Total Marks:</span>
                                     <span className="font-bold">{totalMarks}</span>
                                 </div>
-                                <Button type="submit" className="w-full mt-4">
+                                <Button type="submit" className="w-full mt-4" disabled={form.formState.isSubmitting}>
                                     <Save className="w-4 h-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">Save Test</span>
-                                    <span className="sm:hidden">Save</span>
+                                    {form.formState.isSubmitting ? (
+                                        <>
+                                            <span className="hidden sm:inline">Saving Test...</span>
+                                            <span className="sm:hidden">Saving...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="hidden sm:inline">Save Test</span>
+                                            <span className="sm:hidden">Save</span>
+                                        </>
+                                    )}
                                 </Button>
                             </CardContent>
                         </Card>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { School, BookOpen, Users, Plus, Save, Trash2, Edit, Loader2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -10,15 +10,12 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminAcademic() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [grades, setGrades] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [gradeSubjects, setGradeSubjects] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   
   // Grades state
   const [newGrade, setNewGrade] = useState("");
@@ -44,32 +41,32 @@ export default function AdminAcademic() {
   const [isImportingSubjects, setIsImportingSubjects] = useState(false);
   const [subjectImportProgress, setSubjectImportProgress] = useState<any>(null);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchData();
-    }
-  }, [profile?.school_id]);
+  // React Query: Fetch data with automatic caching
+  const { data: grades = [], isLoading: gradesLoading } = useQuery({
+    queryKey: ['academic-grades'],
+    queryFn: () => academicService.getGrades(),
+    enabled: !!profile?.school_id,
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [gradesRes, classesRes, subjectsRes, gradeSubjectsRes] = await Promise.all([
-        academicService.getGrades(),
-        academicService.getClasses(),
-        academicService.getSubjects(),
-        academicService.getGradeSubjects(),
-      ]);
-      setGrades(gradesRes);
-      setClasses(classesRes);
-      setSubjects(subjectsRes);
-      setGradeSubjects(gradeSubjectsRes);
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['academic-classes'],
+    queryFn: () => academicService.getClasses(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: subjects = [], isLoading: subjectsLoading } = useQuery({
+    queryKey: ['academic-subjects'],
+    queryFn: () => academicService.getSubjects(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: gradeSubjects = [], isLoading: gradeSubjectsLoading } = useQuery({
+    queryKey: ['academic-gradeSubjects'],
+    queryFn: () => academicService.getGradeSubjects(),
+    enabled: !!profile?.school_id,
+  });
+
+  const loading = gradesLoading || classesLoading || subjectsLoading || gradeSubjectsLoading;
 
   // Grades functions
   const addGrade = async () => {
@@ -82,7 +79,7 @@ export default function AdminAcademic() {
       await academicService.createGrade(newGrade.trim());
       toast.success("Grade created");
       setNewGrade("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create grade");
     } finally {
@@ -95,7 +92,7 @@ export default function AdminAcademic() {
     try {
       await academicService.deleteGrade(id);
       toast.success("Grade deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete grade");
     }
@@ -118,7 +115,7 @@ export default function AdminAcademic() {
       await academicService.updateGrade(editingGrade.id, editGradeForm.name);
       toast.success("Updated successfully");
       cancelEditGrade();
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {
@@ -138,7 +135,7 @@ export default function AdminAcademic() {
       toast.success("Class created");
       setNewClass("");
       setSelectedGrade("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create class");
     } finally {
@@ -151,7 +148,7 @@ export default function AdminAcademic() {
     try {
       await academicService.deleteClass(id);
       toast.success("Class deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete class");
     }
@@ -236,7 +233,7 @@ export default function AdminAcademic() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} class(es)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} class(es). Check details below.`);
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-classes'] });
     } catch (error: any) {
       console.error("Class CSV Import Error:", error);
       toast.error("Failed to process CSV file");
@@ -257,7 +254,7 @@ export default function AdminAcademic() {
       await academicService.createSubject(newSubject.trim());
       toast.success("Subject created");
       setNewSubject("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-subjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create subject");
     } finally {
@@ -275,7 +272,7 @@ export default function AdminAcademic() {
       const result = await academicService.assignSubjectsToGrade(parseInt(selectedGradeForSubject), selectedSubjects);
       toast.success(result.message);
       setSelectedSubjects([]);
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-gradeSubjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to assign subjects to grade");
     } finally {
@@ -288,7 +285,7 @@ export default function AdminAcademic() {
     try {
       await academicService.deleteSubject(id);
       toast.success("Subject deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-subjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete subject");
     }
@@ -299,7 +296,7 @@ export default function AdminAcademic() {
     try {
       await academicService.deleteGradeSubject(id);
       toast.success("Subject removed from grade successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-gradeSubjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to remove subject from grade");
     }
@@ -359,7 +356,7 @@ export default function AdminAcademic() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} subject(s)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} subject(s). Check details below.`);
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['academic-subjects'] });
     } catch (error: any) {
       console.error("Subject CSV Import Error:", error);
       toast.error("Failed to process CSV file");

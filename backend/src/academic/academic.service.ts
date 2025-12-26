@@ -2,7 +2,10 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  Inject,
 } from "@nestjs/common";
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateGradeDto,
@@ -23,23 +26,45 @@ import {
 
 @Injectable()
 export class AcademicService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {}
 
   // ==================== GRADE LEVELS ====================
   async createGrade(dto: CreateGradeDto, schoolId: string) {
-    return this.prisma.grade_levels.create({
+    const result = await this.prisma.grade_levels.create({
       data: {
         name: dto.name,
         school_id: schoolId,
       },
     });
+    
+    // Invalidate grades cache
+    await this.cacheManager.del(`school:${schoolId}:grades`);
+    
+    return result;
   }
 
   async getGrades(schoolId: string) {
-    return this.prisma.grade_levels.findMany({
+    const cacheKey = `school:${schoolId}:grades`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
+    // Fetch from database
+    const grades = await this.prisma.grade_levels.findMany({
       where: { school_id: schoolId },
       orderBy: { created_at: "desc" },
     });
+    
+    // Store in cache (TTL: 600 seconds = 10 minutes)
+    await this.cacheManager.set(cacheKey, grades, 600 * 1000); // 10 minutes in milliseconds
+    
+    return grades;
   }
 
   async updateGrade(id: number, dto: UpdateGradeDto, schoolId: string) {
@@ -52,10 +77,15 @@ export class AcademicService {
       throw new NotFoundException("Grade not found");
     }
 
-    return this.prisma.grade_levels.update({
+    const result = await this.prisma.grade_levels.update({
       where: { id },
       data: { name: dto.name },
     });
+    
+    // Invalidate grades cache
+    await this.cacheManager.del(`school:${schoolId}:grades`);
+    
+    return result;
   }
 
   async deleteGrade(id: number, schoolId: string) {
@@ -69,6 +99,10 @@ export class AcademicService {
     }
 
     await this.prisma.grade_levels.delete({ where: { id } });
+    
+    // Invalidate grades cache
+    await this.cacheManager.del(`school:${schoolId}:grades`);
+    
     return { message: "Grade deleted successfully" };
   }
 
@@ -83,7 +117,7 @@ export class AcademicService {
       throw new NotFoundException("Grade not found");
     }
 
-    return this.prisma.classes.create({
+    const result = await this.prisma.classes.create({
       data: {
         name: dto.name,
         grade_level_id: dto.grade_level_id,
@@ -95,10 +129,24 @@ export class AcademicService {
         },
       },
     });
+    
+    // Invalidate classes cache
+    await this.cacheManager.del(`school:${schoolId}:classes`);
+    
+    return result;
   }
 
   async getClasses(schoolId: string) {
-    return this.prisma.classes.findMany({
+    const cacheKey = `school:${schoolId}:classes`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
+    // Fetch from database
+    const classes = await this.prisma.classes.findMany({
       where: { school_id: schoolId },
       include: {
         grade_levels: {
@@ -107,6 +155,11 @@ export class AcademicService {
       },
       orderBy: { created_at: "desc" },
     });
+    
+    // Store in cache (TTL: 600 seconds = 10 minutes)
+    await this.cacheManager.set(cacheKey, classes, 600 * 1000); // 10 minutes in milliseconds
+    
+    return classes;
   }
 
   async updateClass(id: string, dto: UpdateClassDto, schoolId: string) {
@@ -141,6 +194,10 @@ export class AcademicService {
           select: { id: true, name: true },
         },
       },
+    }).then(async (result) => {
+      // Invalidate classes cache
+      await this.cacheManager.del(`school:${schoolId}:classes`);
+      return result;
     });
   }
 
@@ -155,6 +212,10 @@ export class AcademicService {
     }
 
     await this.prisma.classes.delete({ where: { id } });
+    
+    // Invalidate classes cache
+    await this.cacheManager.del(`school:${schoolId}:classes`);
+    
     return { message: "Class deleted successfully" };
   }
 
@@ -173,19 +234,38 @@ export class AcademicService {
       throw new ConflictException("Subject with this name already exists in this school");
     }
 
-    return this.prisma.subjects_master.create({
+    const result = await this.prisma.subjects_master.create({
       data: {
         name: dto.name,
         school_id: schoolId,
       },
     });
+    
+    // Invalidate subjects cache
+    await this.cacheManager.del(`school:${schoolId}:subjects`);
+    
+    return result;
   }
 
   async getSubjects(schoolId: string) {
-    return this.prisma.subjects_master.findMany({
+    const cacheKey = `school:${schoolId}:subjects`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
+    // Fetch from database
+    const subjects = await this.prisma.subjects_master.findMany({
       where: { school_id: schoolId },
       orderBy: { name: "asc" },
     });
+    
+    // Store in cache (TTL: 600 seconds = 10 minutes)
+    await this.cacheManager.set(cacheKey, subjects, 600 * 1000); // 10 minutes in milliseconds
+    
+    return subjects;
   }
 
   async deleteSubject(id: string, schoolId: string) {
@@ -199,6 +279,10 @@ export class AcademicService {
     }
 
     await this.prisma.subjects_master.delete({ where: { id } });
+    
+    // Invalidate subjects cache
+    await this.cacheManager.del(`school:${schoolId}:subjects`);
+    
     return { message: "Subject deleted successfully" };
   }
 
@@ -242,6 +326,9 @@ export class AcademicService {
 
     await this.prisma.grade_subjects.createMany({ data });
 
+    // Invalidate grade_subjects cache
+    await this.cacheManager.del(`school:${schoolId}:gradesubjects`);
+
     return {
       message: `${newSubjectIds.length} subject(s) assigned to grade`,
       count: newSubjectIds.length,
@@ -249,7 +336,16 @@ export class AcademicService {
   }
 
   async getGradeSubjects(schoolId: string) {
-    return this.prisma.grade_subjects.findMany({
+    const cacheKey = `school:${schoolId}:gradesubjects`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
+    // Fetch from database
+    const gradeSubjects = await this.prisma.grade_subjects.findMany({
       where: { school_id: schoolId },
       include: {
         subjects_master: {
@@ -260,6 +356,11 @@ export class AcademicService {
         },
       },
     });
+    
+    // Store in cache (TTL: 600 seconds = 10 minutes)
+    await this.cacheManager.set(cacheKey, gradeSubjects, 600 * 1000); // 10 minutes in milliseconds
+    
+    return gradeSubjects;
   }
 
   async getSubjectsByGrade(gradeId: number, schoolId: string) {
@@ -287,6 +388,10 @@ export class AcademicService {
     }
 
     await this.prisma.grade_subjects.delete({ where: { id } });
+    
+    // Invalidate grade_subjects cache
+    await this.cacheManager.del(`school:${schoolId}:gradesubjects`);
+    
     return { message: "Subject removed from grade successfully" };
   }
 
@@ -538,20 +643,39 @@ export class AcademicService {
 
   // ==================== EXAM TYPES ====================
   async createExamType(dto: CreateExamTypeDto, schoolId: string) {
-    return this.prisma.exam_types.create({
+    const result = await this.prisma.exam_types.create({
       data: {
         name: dto.name,
         type: dto.type as any, // Prisma enum
         school_id: schoolId,
       },
     });
+    
+    // Invalidate exam types cache
+    await this.cacheManager.del(`school:${schoolId}:examtypes`);
+    
+    return result;
   }
 
   async getExamTypes(schoolId: string) {
-    return this.prisma.exam_types.findMany({
+    const cacheKey = `school:${schoolId}:examtypes`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
+    // Fetch from database
+    const examTypes = await this.prisma.exam_types.findMany({
       where: { school_id: schoolId },
       orderBy: { name: "asc" },
     });
+    
+    // Store in cache (TTL: 600 seconds = 10 minutes)
+    await this.cacheManager.set(cacheKey, examTypes, 600 * 1000); // 10 minutes in milliseconds
+    
+    return examTypes;
   }
 
   async updateExamType(id: number, dto: UpdateExamTypeDto, schoolId: string) {
@@ -570,6 +694,10 @@ export class AcademicService {
         ...(dto.name && { name: dto.name }),
         ...(dto.type && { type: dto.type as any }),
       },
+    }).then(async (result) => {
+      // Invalidate exam types cache
+      await this.cacheManager.del(`school:${schoolId}:examtypes`);
+      return result;
     });
   }
 
@@ -584,11 +712,23 @@ export class AcademicService {
     }
 
     await this.prisma.exam_types.delete({ where: { id } });
+    
+    // Invalidate exam types cache
+    await this.cacheManager.del(`school:${schoolId}:examtypes`);
+    
     return { message: "Exam type deleted successfully" };
   }
 
   // ==================== TIMETABLE ====================
   async getWeeklyTimetable(classId: string, schoolId: string) {
+    const cacheKey = `school:${schoolId}:timetable:${classId}`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     // Verify class belongs to school
     const classExists = await this.prisma.classes.findFirst({
       where: { id: classId, school_id: schoolId },
@@ -642,6 +782,9 @@ export class AcademicService {
         })),
       };
     });
+    
+    // Store in cache (TTL: 1800 seconds = 30 minutes - timetables rarely change)
+    await this.cacheManager.set(cacheKey, weeklyTimetable, 1800 * 1000); // 30 minutes in milliseconds
 
     return weeklyTimetable;
   }

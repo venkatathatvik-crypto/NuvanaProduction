@@ -8,8 +8,15 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
-    // Enable CORS
-    app.enableCors();
+    // Enable CORS with production-ready configuration
+    app.enableCors({
+        origin: process.env.NODE_ENV === 'production' 
+            ? process.env.FRONTEND_URL || 'https://your-frontend.vercel.app'
+            : ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:3000'],
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    });
 
     // Global exception filter - must be first
     app.useGlobalFilters(new GlobalExceptionFilter());

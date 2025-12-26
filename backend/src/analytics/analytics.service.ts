@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   StudentStatsSummaryDto,
@@ -18,7 +20,10 @@ import {
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) { }
 
   // ==================== STUDENT ANALYTICS ====================
 
@@ -29,6 +34,14 @@ export class AnalyticsService {
     studentId: string,
     schoolId: string,
   ): Promise<StudentStatsSummaryDto> {
+    const cacheKey = `analytics:student:${studentId}:stats`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get<StudentStatsSummaryDto>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     // Verify student exists
     const student = await this.prisma.profiles.findFirst({
       where: {
@@ -103,12 +116,17 @@ export class AnalyticsService {
     const attendancePercentage =
       totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
 
-    return {
+    const result = {
       overallPercentage,
       totalTests,
       bestSubject,
       attendancePercentage,
     };
+    
+    // Store in cache (TTL: 900 seconds = 15 minutes)
+    await this.cacheManager.set(cacheKey, result, 900);
+    
+    return result;
   }
 
   /**
@@ -118,6 +136,14 @@ export class AnalyticsService {
     studentId: string,
     schoolId: string,
   ): Promise<SubjectPerformanceDto[]> {
+    const cacheKey = `analytics:student:${studentId}:subjects`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get<SubjectPerformanceDto[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     // Get all graded submissions for this student
     const submissions = await this.prisma.test_submissions.findMany({
       where: {
@@ -165,7 +191,7 @@ export class AnalyticsService {
     });
 
     // Convert to array and calculate percentages
-    return Array.from(subjectMap.entries())
+    const result = Array.from(subjectMap.entries())
       .map(([subject, data]) => ({
         subject,
         score: data.score,
@@ -176,6 +202,11 @@ export class AnalyticsService {
             : 0,
       }))
       .sort((a, b) => b.percentage - a.percentage);
+    
+    // Store in cache (TTL: 900 seconds = 15 minutes)
+    await this.cacheManager.set(cacheKey, result, 900);
+    
+    return result;
   }
 
   /**
@@ -525,6 +556,14 @@ export class AnalyticsService {
     classId: string,
     schoolId: string,
   ): Promise<ClassPerformanceTrendDto[]> {
+    const cacheKey = `analytics:class:${classId}:performance`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get<ClassPerformanceTrendDto[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     // Get all students in the class
     const students = await this.prisma.profiles.findMany({
       where: {
@@ -626,7 +665,7 @@ export class AnalyticsService {
     });
 
     // Combine data and return last 6 months
-    return Array.from(monthlyScores.entries())
+    const result = Array.from(monthlyScores.entries())
       .map(([month, data]) => ({
         month,
         avgScore:
@@ -642,6 +681,11 @@ export class AnalyticsService {
           : 0,
       }))
       .slice(-6); // Last 6 months
+    
+    // Store in cache (TTL: 900 seconds = 15 minutes)
+    await this.cacheManager.set(cacheKey, result, 900);
+    
+    return result;
   }
 
   /**

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { School, Plus, Trash2, Upload, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -8,12 +8,11 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminClasses() {
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [grades, setGrades] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [newClass, setNewClass] = useState("");
   const [selectedGrade, setSelectedGrade] = useState<string>("");
   const [filterGradeForClasses, setFilterGradeForClasses] = useState<string>("");
@@ -21,28 +20,19 @@ export default function AdminClasses() {
   const [isImportingClasses, setIsImportingClasses] = useState(false);
   const [classImportProgress, setClassImportProgress] = useState<any>(null);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchData();
-    }
-  }, [profile?.school_id]);
+  const { data: grades = [], isLoading: gradesLoading } = useQuery({
+    queryKey: ['classes-grades'],
+    queryFn: () => academicService.getGrades(),
+    enabled: !!profile?.school_id,
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [gradesRes, classesRes] = await Promise.all([
-        academicService.getGrades(),
-        academicService.getClasses(),
-      ]);
-      setGrades(gradesRes);
-      setClasses(classesRes);
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['classes'],
+    queryFn: () => academicService.getClasses(),
+    enabled: !!profile?.school_id,
+  });
+
+  const loading = gradesLoading || classesLoading;
 
   const addClass = async () => {
     if (!newClass || !selectedGrade) {
@@ -55,7 +45,7 @@ export default function AdminClasses() {
       toast.success("Class created");
       setNewClass("");
       setSelectedGrade("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create class");
     } finally {
@@ -142,7 +132,7 @@ export default function AdminClasses() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} class(es)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} class(es). Check details below.`);
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
     } catch (error: any) {
       console.error("Class CSV Import Error:", error);
       toast.error("Failed to process CSV file");
@@ -157,7 +147,7 @@ export default function AdminClasses() {
     try {
       await academicService.deleteClass(id);
       toast.success("Class deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete class");
     }

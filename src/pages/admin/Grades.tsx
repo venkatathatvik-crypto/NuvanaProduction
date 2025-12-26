@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { School, Plus, Save, Trash2, Edit, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -8,35 +8,22 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminGrades() {
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [grades, setGrades] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [newGrade, setNewGrade] = useState("");
   const [addingGrade, setAddingGrade] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchGrades();
-    }
-  }, [profile?.school_id]);
-
-  const fetchGrades = async () => {
-    setLoading(true);
-    try {
-      const gradesRes = await academicService.getGrades();
-      setGrades(gradesRes);
-    } catch (error: any) {
-      console.error("Error fetching grades:", error);
-      toast.error("Failed to load grades");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: grades = [], isLoading: loading } = useQuery({
+    queryKey: ['grades'],
+    queryFn: () => academicService.getGrades(),
+    enabled: !!profile?.school_id,
+  });
 
   const addGrade = async () => {
     if (!newGrade.trim()) {
@@ -48,7 +35,7 @@ export default function AdminGrades() {
       await academicService.createGrade(newGrade.trim());
       toast.success("Grade created");
       setNewGrade("");
-      fetchGrades();
+      queryClient.invalidateQueries({ queryKey: ['grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create grade");
     } finally {
@@ -63,7 +50,7 @@ export default function AdminGrades() {
     try {
       await academicService.deleteGrade(id);
       toast.success("Grade deleted successfully");
-      fetchGrades();
+      queryClient.invalidateQueries({ queryKey: ['grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete grade");
     }
@@ -87,7 +74,7 @@ export default function AdminGrades() {
       await academicService.updateGrade(editingItem.id, editForm.name);
       toast.success("Updated successfully");
       cancelEdit();
-      fetchGrades();
+      queryClient.invalidateQueries({ queryKey: ['grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {
