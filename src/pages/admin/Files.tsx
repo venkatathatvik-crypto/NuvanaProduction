@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Folder, Plus, Save, Trash2, Edit, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -8,35 +8,22 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminFiles() {
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [fileCategories, setFileCategories] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [newFileCategory, setNewFileCategory] = useState("");
   const [addingFileCategory, setAddingFileCategory] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchFileCategories();
-    }
-  }, [profile?.school_id]);
-
-  const fetchFileCategories = async () => {
-    setLoading(true);
-    try {
-      const fileCategoriesRes = await academicService.getFileCategories();
-      setFileCategories(fileCategoriesRes);
-    } catch (error: any) {
-      console.error("Error fetching file categories:", error);
-      toast.error("Failed to load file categories");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: fileCategories = [], isLoading: loading } = useQuery({
+    queryKey: ['file-categories'],
+    queryFn: () => academicService.getFileCategories(),
+    enabled: !!profile?.school_id,
+  });
 
   const addFileCategory = async () => {
     if (!newFileCategory.trim()) {
@@ -48,7 +35,7 @@ export default function AdminFiles() {
       await academicService.createFileCategory(newFileCategory.trim());
       toast.success("File category created");
       setNewFileCategory("");
-      fetchFileCategories();
+      queryClient.invalidateQueries({ queryKey: ['file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create file category");
     } finally {
@@ -61,7 +48,7 @@ export default function AdminFiles() {
     try {
       await academicService.deleteFileCategory(id);
       toast.success("File category deleted successfully");
-      fetchFileCategories();
+      queryClient.invalidateQueries({ queryKey: ['file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete file category");
     }
@@ -84,7 +71,7 @@ export default function AdminFiles() {
       await academicService.updateFileCategory(editingItem.id, editForm.name);
       toast.success("Updated successfully");
       cancelEdit();
-      fetchFileCategories();
+      queryClient.invalidateQueries({ queryKey: ['file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {

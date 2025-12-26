@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, Clock, Plus, Save, Trash2, Edit, Loader2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -13,14 +13,12 @@ import { userService } from "@/services/userService";
 import { DAY_NAMES } from "@/services/timetableService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminTimetable() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [gradeSubjects, setGradeSubjects] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [selectedTimetableClass, setSelectedTimetableClass] = useState<string>("");
   const [selectedTimetableDay, setSelectedTimetableDay] = useState<number>(1);
   const [timetableData, setTimetableData] = useState<WeeklyTimetable>({});
@@ -55,30 +53,25 @@ export default function AdminTimetable() {
     errors: Array<{ row: number; class_name: string; error: string }>;
   } | null>(null);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchData();
-    }
-  }, [profile?.school_id]);
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['timetable-classes'],
+    queryFn: () => academicService.getClasses(),
+    enabled: !!profile?.school_id,
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [classesRes, teachersRes, gradeSubjectsRes] = await Promise.all([
-        academicService.getClasses(),
-        userService.getTeachers(),
-        academicService.getGradeSubjects(),
-      ]);
-      setClasses(classesRes);
-      setTeachers(teachersRes);
-      setGradeSubjects(gradeSubjectsRes);
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: teachers = [], isLoading: teachersLoading } = useQuery({
+    queryKey: ['timetable-teachers'],
+    queryFn: () => userService.getTeachers(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: gradeSubjects = [], isLoading: gradeSubjectsLoading } = useQuery({
+    queryKey: ['timetable-gradeSubjects'],
+    queryFn: () => academicService.getGradeSubjects(),
+    enabled: !!profile?.school_id,
+  });
+
+  const loading = classesLoading || teachersLoading || gradeSubjectsLoading;
 
   const fetchTimetable = async (classId: string) => {
     if (!classId || !profile?.school_id) return;
@@ -494,7 +487,7 @@ export default function AdminTimetable() {
           fetchTimetable(selectedTimetableClass);
         }
         // Refresh data to update classes list
-        fetchData();
+        queryClient.invalidateQueries({ queryKey: ['timetable-classes'] });
       }
       if (failedCount > 0) {
         toast.error(

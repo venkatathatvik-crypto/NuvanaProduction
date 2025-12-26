@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { FileText, Folder, Plus, Save, Trash2, Edit, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -11,13 +11,12 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminSettings() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [examTypes, setExamTypes] = useState<any[]>([]);
-  const [fileCategories, setFileCategories] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   
   // Exam Types state
   const [newExamType, setNewExamType] = useState("");
@@ -34,28 +33,19 @@ export default function AdminSettings() {
   const [editFileCategoryForm, setEditFileCategoryForm] = useState<any>({});
   const [savingFileCategory, setSavingFileCategory] = useState(false);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchData();
-    }
-  }, [profile?.school_id]);
+  const { data: examTypes = [], isLoading: examTypesLoading } = useQuery({
+    queryKey: ['settings-exam-types'],
+    queryFn: () => academicService.getExamTypes(),
+    enabled: !!profile?.school_id,
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [examTypesRes, fileCategoriesRes] = await Promise.all([
-        academicService.getExamTypes(),
-        academicService.getFileCategories(),
-      ]);
-      setExamTypes(examTypesRes);
-      setFileCategories(fileCategoriesRes);
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: fileCategories = [], isLoading: fileCategoriesLoading } = useQuery({
+    queryKey: ['settings-file-categories'],
+    queryFn: () => academicService.getFileCategories(),
+    enabled: !!profile?.school_id,
+  });
+
+  const loading = examTypesLoading || fileCategoriesLoading;
 
   // Exam Types functions
   const addExamType = async () => {
@@ -69,7 +59,7 @@ export default function AdminSettings() {
       toast.success("Exam type created");
       setNewExamType("");
       setNewExamTypeCategory("Internal_Assessment");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['settings-exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create exam type");
     } finally {
@@ -82,7 +72,7 @@ export default function AdminSettings() {
     try {
       await academicService.deleteExamType(id);
       toast.success("Exam type deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['settings-exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete exam type");
     }
@@ -105,7 +95,7 @@ export default function AdminSettings() {
       await academicService.updateExamType(editingExamType.id, { name: editExamTypeForm.name });
       toast.success("Updated successfully");
       cancelEditExamType();
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['settings-exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {
@@ -124,7 +114,7 @@ export default function AdminSettings() {
       await academicService.createFileCategory(newFileCategory.trim());
       toast.success("File category created");
       setNewFileCategory("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['settings-file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create file category");
     } finally {
@@ -137,7 +127,7 @@ export default function AdminSettings() {
     try {
       await academicService.deleteFileCategory(id);
       toast.success("File category deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['settings-file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete file category");
     }
@@ -160,7 +150,7 @@ export default function AdminSettings() {
       await academicService.updateFileCategory(editingFileCategory.id, editFileCategoryForm.name);
       toast.success("Updated successfully");
       cancelEditFileCategory();
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['settings-file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {

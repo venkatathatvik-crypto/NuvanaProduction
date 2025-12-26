@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Users, UserPlus, Upload, Trash2, Loader2, ArrowLeft, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -11,15 +11,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { userService } from "@/services/userService";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminMembers() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberPassword, setNewMemberPassword] = useState("");
@@ -35,36 +32,36 @@ export default function AdminMembers() {
   const [teacherClassFilter, setTeacherClassFilter] = useState<string>("all");
   const [studentClassFilter, setStudentClassFilter] = useState<string>("all");
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchData();
-    }
-  }, [profile?.school_id]);
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['members-classes'],
+    queryFn: () => academicService.getClasses(),
+    enabled: !!profile?.school_id,
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [classesRes, teacherClassesRes, teachersRes, studentsRes] = await Promise.all([
-        academicService.getClasses(),
-        academicService.getTeacherClasses(),
-        userService.getTeachers(),
-        userService.getStudents(),
-      ]);
-      setClasses(classesRes);
-      setTeacherClasses(teacherClassesRes);
-      const teachersWithClasses = teachersRes.map((teacher) => {
-        const teacherClass = teacherClassesRes.find((tc) => tc.teacher_id === teacher.id);
-        return { ...teacher, classes: teacherClass?.classes || null };
-      });
-      setTeachers(teachersWithClasses);
-      setStudents(studentsRes);
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: teacherClasses = [], isLoading: teacherClassesLoading } = useQuery({
+    queryKey: ['members-teacher-classes'],
+    queryFn: () => academicService.getTeacherClasses(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: teachersRaw = [], isLoading: teachersLoading } = useQuery({
+    queryKey: ['members-teachers'],
+    queryFn: () => userService.getTeachers(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: students = [], isLoading: studentsLoading } = useQuery({
+    queryKey: ['members-students'],
+    queryFn: () => userService.getStudents(),
+    enabled: !!profile?.school_id,
+  });
+
+  const teachers = teachersRaw.map((teacher) => {
+    const teacherClass = teacherClasses.find((tc) => tc.teacher_id === teacher.id);
+    return { ...teacher, classes: teacherClass?.classes || null };
+  });
+
+  const loading = classesLoading || teacherClassesLoading || teachersLoading || studentsLoading;
 
   const handleCreateMember = async (memberType?: "teacher" | "student") => {
     if (!newMemberName || !newMemberEmail || !newMemberPassword) {
@@ -105,7 +102,7 @@ export default function AdminMembers() {
       setNewMemberPassword("");
       setNewMemberRollNo("");
       setNewMemberParentContact("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['members-teachers', 'members-students'] });
     } catch (error: any) {
       console.error("Error creating user:", error);
       toast.error(error.message || "Failed to create user");
@@ -201,7 +198,7 @@ export default function AdminMembers() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} ${csvImportType}(s)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} ${csvImportType}(s). Check details below.`);
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['members-teachers', 'members-students'] });
     } catch (error: any) {
       console.error("CSV Import Error:", error);
       toast.error("Failed to process CSV file");
@@ -215,14 +212,14 @@ export default function AdminMembers() {
     try {
       await userService.deleteUser(id);
       toast.success("Member deleted successfully");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['members-teachers', 'members-students'] });
     } catch (error: any) {
       console.error("Error deleting member:", error);
       toast.error(error.message || "Failed to delete member");
     }
   };
 
-  const filteredTeachers = teachers.filter((teacher) => {
+  const filteredTeachers = teachers.filter((teacher: any) => {
     const matchesSearch =
       teacher.name?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
       teacher.email?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
@@ -234,7 +231,7 @@ export default function AdminMembers() {
     return matchesSearch && matchesClass;
   });
 
-  const filteredStudents = students.filter((student) => {
+  const filteredStudents = students.filter((student: any) => {
     const matchesSearch =
       student.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
       student.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||

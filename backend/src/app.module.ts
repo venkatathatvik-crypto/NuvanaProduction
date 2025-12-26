@@ -2,12 +2,15 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
+import { createKeyv } from '@keyv/redis';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AiModule } from './ai/ai.module';
 import { AcademicModule } from './academic/academic.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { SchoolsModule } from './schools/schools.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -21,13 +24,13 @@ import { HealthModule } from './health/health.module';
         ThrottlerModule.forRoot([
             {
                 name: 'default',
-                ttl: 60000, // 60 seconds
-                limit: 100, // 100 requests per minute for normal endpoints
+                ttl: 60000, 
+                limit: 100, 
             },
             {
                 name: 'ai',
-                ttl: 60000, // 60 seconds
-                limit: 5, // 5 AI requests per minute (stricter)
+                ttl: 60000, 
+                limit: 5, 
             },
         ]),
 
@@ -39,21 +42,17 @@ import { HealthModule } from './health/health.module';
 
                 if (redisUrl) {
                     try {
-                        const { redisStore } = await import('cache-manager-redis-yet');
-
                         console.log('✅ Redis cache connecting...');
                         
-                        const store = await redisStore({
-                            url: redisUrl,
-                        });
+                        const store = createKeyv(redisUrl);
 
                         console.log('✅ Redis cache connected successfully!');
-                        console.log(`📦 Cache Type: REDIS (${redisUrl.split('@')[1] || 'configured'})`);
+                        console.log(`📦 Cache Type: REDIS (@keyv/redis) - ${redisUrl.split('@')[1] || 'configured'}`);
                         console.log('⚡ AI response caching enabled - Expecting ~70% cost reduction');
 
                         return {
-                            store,
-                            ttl: 3600, // 1 hour in seconds
+                            stores: [store],
+                            ttl: 3600 * 1000, // Default TTL: 1 hour in milliseconds
                         };
                     } catch (error) {
                         console.warn('⚠️  Redis connection failed, falling back to in-memory cache');
@@ -61,7 +60,7 @@ import { HealthModule } from './health/health.module';
                         console.log('📦 Cache Type: IN-MEMORY (limited, not recommended for production)');
 
                         return {
-                            ttl: 3600,
+                            ttl: 3600 * 1000, // 1 hour in milliseconds
                         };
                     }
                 }
@@ -71,7 +70,7 @@ import { HealthModule } from './health/health.module';
                 console.log('💡 Tip: Set REDIS_URL environment variable for production caching');
 
                 return {
-                    ttl: 3600,
+                    ttl: 3600 * 1000, // 1 hour in milliseconds
                 };
             },
         }),
@@ -83,6 +82,8 @@ import { HealthModule } from './health/health.module';
         AiModule,
         AcademicModule,
         AnalyticsModule,
+        SchoolsModule,
+        NotificationsModule,
         HealthModule,
     ],
 })

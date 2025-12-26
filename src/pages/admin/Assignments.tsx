@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { ClipboardList, UserPlus, Users, BookOpen, Loader2, Search, X, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -11,17 +11,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { userService } from "@/services/userService";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminAssignments() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [gradeSubjects, setGradeSubjects] = useState<any[]>([]);
-  const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [selectedClassesForStudents, setSelectedClassesForStudents] = useState<string[]>([]);
   const [studentAssignSearch, setStudentAssignSearch] = useState("");
@@ -35,7 +30,43 @@ export default function AdminAssignments() {
   const [assigningTeacher, setAssigningTeacher] = useState(false);
   const [assigningSubjects, setAssigningSubjects] = useState(false);
 
-  // Memoized filtered and available data - must be before any early returns
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['assignments-classes'],
+    queryFn: () => academicService.getClasses(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: teachers = [], isLoading: teachersLoading } = useQuery({
+    queryKey: ['assignments-teachers'],
+    queryFn: () => userService.getTeachers(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: students = [], isLoading: studentsLoading } = useQuery({
+    queryKey: ['assignments-students'],
+    queryFn: () => userService.getStudents(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: subjects = [], isLoading: subjectsLoading } = useQuery({
+    queryKey: ['assignments-subjects'],
+    queryFn: () => academicService.getSubjects(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: gradeSubjects = [], isLoading: gradeSubjectsLoading } = useQuery({
+    queryKey: ['assignments-gradeSubjects'],
+    queryFn: () => academicService.getGradeSubjects(),
+    enabled: !!profile?.school_id,
+  });
+
+  const { data: teacherClasses = [], isLoading: teacherClassesLoading } = useQuery({
+    queryKey: ['assignments-teacherClasses'],
+    queryFn: () => academicService.getTeacherClasses(),
+    enabled: !!profile?.school_id,
+  });
+
+  const loading = classesLoading || teachersLoading || studentsLoading || subjectsLoading || gradeSubjectsLoading || teacherClassesLoading;
   const filteredStudentsForAssign = useMemo(() => {
     if (!studentAssignSearch.trim()) return students;
     const searchLower = studentAssignSearch.toLowerCase();
@@ -96,37 +127,6 @@ export default function AdminAssignments() {
     return classes.filter((c) => selectedClassesForTeachers.includes(c.id));
   }, [classes, selectedClassesForTeachers]);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchData();
-    }
-  }, [profile?.school_id]);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [classesRes, teachersRes, studentsRes, subjectsRes, gradeSubjectsRes, teacherClassesRes] = await Promise.all([
-        academicService.getClasses(),
-        userService.getTeachers(),
-        userService.getStudents(),
-        academicService.getSubjects(),
-        academicService.getGradeSubjects(),
-        academicService.getTeacherClasses(),
-      ]);
-      setClasses(classesRes);
-      setTeachers(teachersRes);
-      setStudents(studentsRes);
-      setSubjects(subjectsRes);
-      setGradeSubjects(gradeSubjectsRes);
-      setTeacherClasses(teacherClassesRes);
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const assignStudentsToClasses = async () => {
     if (selectedStudents.length === 0 || selectedClassesForStudents.length === 0) {
       toast.error("Select at least one student and one class");
@@ -154,7 +154,7 @@ export default function AdminAssignments() {
       setSelectedStudents([]);
       setSelectedClassesForStudents([]);
       setStudentAssignSearch("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to assign students");
     } finally {
@@ -190,7 +190,7 @@ export default function AdminAssignments() {
       setSelectedTeachers([]);
       setSelectedClassesForTeachers([]);
       setTeacherAssignSearch("");
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['assignments-teacherClasses'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to assign teachers");
     } finally {
@@ -217,7 +217,7 @@ export default function AdminAssignments() {
       const result = await academicService.assignSubjectsToTeacher(selectedTeacherForSubject, gradeSubjectIdsToAssign);
       toast.success(result.message);
       setSelectedSubjectsForTeacher([]);
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ['assignments-teacherClasses'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to assign subjects");
     } finally {

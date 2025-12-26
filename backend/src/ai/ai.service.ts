@@ -308,7 +308,7 @@ ${ragContext}`;
 
             // Store in cache for future requests (1 hour TTL)
             try {
-                await this.cacheManager.set(cacheKey, parsedResponse, 3600); // 1 hour in seconds
+                await this.cacheManager.set(cacheKey, parsedResponse, 3600 * 1000); // 1 hour in milliseconds
                 console.log('[AI Service] ✓ Response cached for future requests');
             } catch (cacheError) {
                 console.warn('[AI Service] Failed to cache response:', cacheError.message);

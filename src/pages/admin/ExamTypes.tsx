@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { FileText, Plus, Save, Trash2, Edit, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -9,11 +9,11 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminExamTypes() {
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [examTypes, setExamTypes] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [newExamType, setNewExamType] = useState("");
   const [newExamTypeCategory, setNewExamTypeCategory] = useState<"Internal_Assessment" | "School_Exam">("Internal_Assessment");
   const [addingExamType, setAddingExamType] = useState(false);
@@ -21,24 +21,11 @@ export default function AdminExamTypes() {
   const [editForm, setEditForm] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchExamTypes();
-    }
-  }, [profile?.school_id]);
-
-  const fetchExamTypes = async () => {
-    setLoading(true);
-    try {
-      const examTypesRes = await academicService.getExamTypes();
-      setExamTypes(examTypesRes);
-    } catch (error: any) {
-      console.error("Error fetching exam types:", error);
-      toast.error("Failed to load exam types");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: examTypes = [], isLoading: loading } = useQuery({
+    queryKey: ['exam-types'],
+    queryFn: () => academicService.getExamTypes(),
+    enabled: !!profile?.school_id,
+  });
 
   const addExamType = async () => {
     if (!newExamType.trim()) {
@@ -51,7 +38,7 @@ export default function AdminExamTypes() {
       toast.success("Exam type created");
       setNewExamType("");
       setNewExamTypeCategory("Internal_Assessment");
-      fetchExamTypes();
+      queryClient.invalidateQueries({ queryKey: ['exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create exam type");
     } finally {
@@ -64,7 +51,7 @@ export default function AdminExamTypes() {
     try {
       await academicService.deleteExamType(id);
       toast.success("Exam type deleted successfully");
-      fetchExamTypes();
+      queryClient.invalidateQueries({ queryKey: ['exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete exam type");
     }
@@ -87,7 +74,7 @@ export default function AdminExamTypes() {
       await academicService.updateExamType(editingItem.id, { name: editForm.name });
       toast.success("Updated successfully");
       cancelEdit();
-      fetchExamTypes();
+      queryClient.invalidateQueries({ queryKey: ['exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {

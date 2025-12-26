@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Edit, Trash2, FileText, ArrowLeft, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,42 +26,28 @@ import {
 } from "@/services/academic";
 import { getTeacherClasses, FlattenedClass } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const TeacherTests = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
-  const [tests, setTests] = useState<TeacherTest[]>([]);
-  const [classes, setClasses] = useState<FlattenedClass[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<"Internal Assessment" | "School Exam">("School Exam");
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (profileLoading) return;
+  const { data: tests = [], isLoading: testsLoading } = useQuery({
+    queryKey: ['teacher-tests', profile?.id],
+    queryFn: () => getTeacherTests(profile!.id),
+    enabled: !!profile?.id && !profileLoading,
+  });
 
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['teacher-classes', profile?.id],
+    queryFn: () => getTeacherClasses(profile!.id, profile!.school_id),
+    enabled: !!profile?.id && !profileLoading,
+  });
 
-      try {
-        const [testsData, classesData] = await Promise.all([
-          getTeacherTests(profile.id),
-          getTeacherClasses(profile.id, profile.school_id),
-        ]);
-        setTests(testsData);
-        setClasses(classesData || []);
-      } catch (error: any) {
-        console.error("Error fetching data:", error);
-        toast.error("Failed to load tests");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [profile, profileLoading]);
+  const loading = testsLoading || classesLoading;
 
   // Filter tests based on selected tab and class
   const filteredTests = useMemo(() => {
@@ -90,7 +76,7 @@ const TeacherTests = () => {
     if (confirm("Are you sure you want to delete this test?")) {
       try {
         await deleteTeacherTest(id, profile.id);
-        setTests(tests.filter((t) => t.id !== id));
+        queryClient.invalidateQueries({ queryKey: ['teacher-tests'] });
         toast.success("Test deleted successfully");
       } catch (error: any) {
         console.error("Error deleting test:", error);
@@ -104,11 +90,7 @@ const TeacherTests = () => {
 
     try {
       await publishTeacherTest(test.id, profile.id, !test.isPublished);
-      setTests(
-        tests.map((t) =>
-          t.id === test.id ? { ...t, isPublished: !t.isPublished } : t
-        )
-      );
+      queryClient.invalidateQueries({ queryKey: ['teacher-tests'] });
       toast.success(
         test.isPublished
           ? "Test unpublished successfully"
