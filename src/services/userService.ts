@@ -88,6 +88,11 @@ export const userService = {
     return this.updateStudentDetails(studentId, { class_id: classId });
   },
 
+  // Unassign student from class (sets class_id to null)
+  async unassignStudentFromClass(studentId: string): Promise<any> {
+    return this.updateStudentDetails(studentId, { class_id: null });
+  },
+
   // Delete user
   async deleteUser(id: string): Promise<{ message: string }> {
     return apiClient.delete(`/users/${id}`);

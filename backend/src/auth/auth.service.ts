@@ -4,9 +4,12 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  Inject,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from "../prisma/prisma.service";
 import * as bcrypt from "bcrypt";
 import { RegisterSuperAdminDto } from "./dto/register-super-admin.dto";
@@ -19,7 +22,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private configService: ConfigService
+    private configService: ConfigService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async registerSuperAdmin(dto: RegisterSuperAdminDto) {
@@ -117,6 +121,9 @@ export class AuthService {
         user_roles: true,
       },
     });
+
+    // Invalidate user caches
+    await this.invalidateUserCaches(schoolId);
 
     return {
       id: user.id,
@@ -345,5 +352,19 @@ export class AuthService {
         message: "Invalid session",
       };
     }
+  }
+
+  // Helper method to invalidate all user-related caches
+  private async invalidateUserCaches(schoolId?: string) {
+    // Clear all user cache variations for this school
+    const patterns = [
+      `users:school:${schoolId || 'all'}:role:all:admin:false`,
+      `users:school:${schoolId || 'all'}:role:all:admin:true`,
+      `users:school:${schoolId || 'all'}:role:3:admin:false`, // Teachers
+      `users:school:${schoolId || 'all'}:role:4:admin:false`, // Students
+      `users:school:all:role:all:admin:true`, // Super admin view
+    ];
+    
+    await Promise.all(patterns.map(key => this.cacheManager.del(key)));
   }
 }

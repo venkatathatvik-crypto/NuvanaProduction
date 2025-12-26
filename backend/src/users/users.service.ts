@@ -165,6 +165,9 @@ export class UsersService {
       },
     });
 
+    // Invalidate user caches to ensure fresh data
+    await this.invalidateUserCaches(schoolId);
+
     return studentDetails;
   }
 
@@ -198,6 +201,9 @@ export class UsersService {
         },
       },
     });
+
+    // Invalidate user caches to ensure fresh data
+    await this.invalidateUserCaches(schoolId);
 
     return teacherDetails;
   }

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
@@ -16,6 +17,11 @@ export default function AdminAcademic() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState("");
+  const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
   
   // Grades state
   const [newGrade, setNewGrade] = useState("");
@@ -88,7 +94,6 @@ export default function AdminAcademic() {
   };
 
   const deleteGrade = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this grade? This action cannot be undone.")) return;
     try {
       await academicService.deleteGrade(id);
       toast.success("Grade deleted successfully");
@@ -96,6 +101,12 @@ export default function AdminAcademic() {
     } catch (error: any) {
       toast.error(error.message || "Failed to delete grade");
     }
+  };
+
+  const handleDeleteGradeClick = (grade: any) => {
+    setConfirmMessage(`Are you sure you want to delete "${grade.name}"? This action cannot be undone.`);
+    setConfirmAction(() => () => deleteGrade(grade.id));
+    setShowConfirmDialog(true);
   };
 
   const startEditGrade = (item: any) => {
@@ -144,7 +155,6 @@ export default function AdminAcademic() {
   };
 
   const deleteClass = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this class? This action cannot be undone.")) return;
     try {
       await academicService.deleteClass(id);
       toast.success("Class deleted successfully");
@@ -152,6 +162,12 @@ export default function AdminAcademic() {
     } catch (error: any) {
       toast.error(error.message || "Failed to delete class");
     }
+  };
+
+  const handleDeleteClassClick = (cls: any) => {
+    setConfirmMessage(`Are you sure you want to delete class "${cls.name}"? This action cannot be undone.`);
+    setConfirmAction(() => () => deleteClass(cls.id));
+    setShowConfirmDialog(true);
   };
 
   const handleClassCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -270,7 +286,7 @@ export default function AdminAcademic() {
     setAssigningSubjectsToGrade(true);
     try {
       const result = await academicService.assignSubjectsToGrade(parseInt(selectedGradeForSubject), selectedSubjects);
-      toast.success(result.message);
+      toast.success(result.message || `Successfully assigned ${selectedSubjects.length} subject(s) to grade`);
       setSelectedSubjects([]);
       queryClient.invalidateQueries({ queryKey: ['academic-gradeSubjects'] });
     } catch (error: any) {
@@ -281,7 +297,6 @@ export default function AdminAcademic() {
   };
 
   const deleteSubject = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this subject? This action cannot be undone.")) return;
     try {
       await academicService.deleteSubject(id);
       toast.success("Subject deleted successfully");
@@ -291,8 +306,13 @@ export default function AdminAcademic() {
     }
   };
 
+  const handleDeleteSubjectClick = (subject: any) => {
+    setConfirmMessage(`Are you sure you want to delete "${subject.name}"? This action cannot be undone.`);
+    setConfirmAction(() => () => deleteSubject(subject.id));
+    setShowConfirmDialog(true);
+  };
+
   const deleteGradeSubject = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this subject from the grade? This action cannot be undone.")) return;
     try {
       await academicService.deleteGradeSubject(id);
       toast.success("Subject removed from grade successfully");
@@ -300,6 +320,14 @@ export default function AdminAcademic() {
     } catch (error: any) {
       toast.error(error.message || "Failed to remove subject from grade");
     }
+  };
+
+  const handleRemoveGradeSubjectClick = (gradeSubject: any) => {
+    const subjectName = gradeSubject.subjects_master?.name || 'this subject';
+    const gradeName = gradeSubject.grade_levels?.name || 'the grade';
+    setConfirmMessage(`Are you sure you want to remove "${subjectName}" from ${gradeName}? This action cannot be undone.`);
+    setConfirmAction(() => () => deleteGradeSubject(gradeSubject.id));
+    setShowConfirmDialog(true);
   };
 
   const handleSubjectCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -493,7 +521,7 @@ export default function AdminAcademic() {
                                 <Button size="sm" variant="outline" onClick={() => startEditGrade(grade)}>
                                   <Edit className="w-4 h-4" />
                                 </Button>
-                                <Button size="sm" variant="destructive" onClick={() => deleteGrade(grade.id)}>
+                                <Button size="sm" variant="destructive" onClick={() => handleDeleteGradeClick(grade)}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -611,7 +639,7 @@ export default function AdminAcademic() {
                               <td className="p-2">{cls.grade_levels?.name}</td>
                               <td className="p-2 text-muted-foreground">{new Date(cls.created_at).toLocaleDateString()}</td>
                               <td className="p-2 text-right">
-                                <Button size="sm" variant="destructive" onClick={() => deleteClass(cls.id)}>
+                                <Button size="sm" variant="destructive" onClick={() => handleDeleteClassClick(cls)}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               </td>
@@ -735,7 +763,7 @@ export default function AdminAcademic() {
                       subjects.map((subject) => (
                         <div key={subject.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary/20 border border-border/50">
                           <span className="font-medium">{subject.name}</span>
-                          <Button size="sm" variant="destructive" onClick={() => deleteSubject(subject.id)}>
+                          <Button size="sm" variant="destructive" onClick={() => handleDeleteSubjectClick(subject)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -879,7 +907,7 @@ export default function AdminAcademic() {
                             .map((gs) => (
                               <div key={gs.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary/20 border border-border/50">
                                 <span className="font-medium">{gs.subjects_master?.name}</span>
-                                <Button size="sm" variant="destructive" onClick={() => deleteGradeSubject(gs.id)}>
+                                <Button size="sm" variant="destructive" onClick={() => handleRemoveGradeSubjectClick(gs)}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -903,6 +931,22 @@ export default function AdminAcademic() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Confirmation Dialog */}
+        <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Action</AlertDialogTitle>
+              <AlertDialogDescription>{confirmMessage}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmAction} className="bg-destructive hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
