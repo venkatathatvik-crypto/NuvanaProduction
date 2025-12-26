@@ -1,0 +1,6 @@
+name,email,role_id,temporaryPassword,subject_specialization
+Rajesh Kumar,rajesh.kumar@school.com,3,Teacher@123,Mathematics
+Priya Sharma,priya.sharma@school.com,3,Teacher@123,Physics
+Amit Patel,amit.patel@school.com,3,Teacher@123,Chemistry
+Sneha Reddy,sneha.reddy@school.com,3,Teacher@123,English
+Vikram Singh,vikram.singh@school.com,3,Teacher@123,Biology

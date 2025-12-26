@@ -57,8 +57,11 @@ export default function AdminMembers() {
   });
 
   const teachers = teachersRaw.map((teacher) => {
-    const teacherClass = teacherClasses.find((tc) => tc.teacher_id === teacher.id);
-    return { ...teacher, classes: teacherClass?.classes || null };
+    const assignedClasses = teacherClasses
+      .filter((tc) => tc.teacher_id === teacher.id)
+      .map((tc) => tc.classes)
+      .filter(Boolean);
+    return { ...teacher, assignedClasses };
   });
 
   const loading = classesLoading || teacherClassesLoading || teachersLoading || studentsLoading;
@@ -102,7 +105,11 @@ export default function AdminMembers() {
       setNewMemberPassword("");
       setNewMemberRollNo("");
       setNewMemberParentContact("");
-      queryClient.invalidateQueries({ queryKey: ['members-teachers', 'members-students'] });
+      // Invalidate all relevant queries
+      queryClient.invalidateQueries({ queryKey: ['members-teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['members-students'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
       console.error("Error creating user:", error);
       toast.error(error.message || "Failed to create user");
@@ -198,7 +205,11 @@ export default function AdminMembers() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} ${csvImportType}(s)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} ${csvImportType}(s). Check details below.`);
-      queryClient.invalidateQueries({ queryKey: ['members-teachers', 'members-students'] });
+      // Invalidate all relevant queries
+      queryClient.invalidateQueries({ queryKey: ['members-teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['members-students'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
       console.error("CSV Import Error:", error);
       toast.error("Failed to process CSV file");
@@ -212,7 +223,11 @@ export default function AdminMembers() {
     try {
       await userService.deleteUser(id);
       toast.success("Member deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ['members-teachers', 'members-students'] });
+      // Invalidate all relevant queries
+      queryClient.invalidateQueries({ queryKey: ['members-teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['members-students'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
       console.error("Error deleting member:", error);
       toast.error(error.message || "Failed to delete member");
@@ -223,11 +238,11 @@ export default function AdminMembers() {
     const matchesSearch =
       teacher.name?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
       teacher.email?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
-      teacher.classes?.name?.toLowerCase().includes(teacherSearch.toLowerCase());
+      teacher.assignedClasses?.some((cls: any) => cls?.name?.toLowerCase().includes(teacherSearch.toLowerCase()));
     const matchesClass =
       teacherClassFilter === "all" ||
-      teacher.classes?.id === teacherClassFilter ||
-      (teacherClassFilter === "unassigned" && !teacher.classes?.id);
+      teacher.assignedClasses?.some((cls: any) => cls?.id === teacherClassFilter) ||
+      (teacherClassFilter === "unassigned" && (!teacher.assignedClasses || teacher.assignedClasses.length === 0));
     return matchesSearch && matchesClass;
   });
 
@@ -235,11 +250,11 @@ export default function AdminMembers() {
     const matchesSearch =
       student.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
       student.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-      student.classes?.name?.toLowerCase().includes(studentSearch.toLowerCase());
+      student.student_details?.classes?.name?.toLowerCase().includes(studentSearch.toLowerCase());
     const matchesClass =
       studentClassFilter === "all" ||
-      student.classes?.id === studentClassFilter ||
-      (studentClassFilter === "unassigned" && !student.classes?.id);
+      student.student_details?.classes?.id === studentClassFilter ||
+      (studentClassFilter === "unassigned" && !student.student_details?.classes?.id);
     return matchesSearch && matchesClass;
   });
 
@@ -433,11 +448,13 @@ export default function AdminMembers() {
                                 <div className="flex-1 min-w-0 overflow-hidden">
                                   <p className="font-medium text-sm truncate">{t.name}</p>
                                   <p className="text-xs text-muted-foreground truncate">{t.email}</p>
-                                  <div className="mt-1">
-                                    {t.classes?.name ? (
-                                      <Badge variant="outline" className="text-xs">
-                                        {t.classes.name}
-                                      </Badge>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {t.assignedClasses && t.assignedClasses.length > 0 ? (
+                                      t.assignedClasses.map((cls: any) => (
+                                        <Badge key={cls.id} variant="outline" className="text-xs">
+                                          {cls.name}
+                                        </Badge>
+                                      ))
                                     ) : (
                                       <Badge variant="outline" className="text-xs text-muted-foreground">
                                         Unassigned

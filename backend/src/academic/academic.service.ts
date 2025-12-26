@@ -442,6 +442,10 @@ export class AcademicService {
           select: { id: true, name: true, email: true },
         },
       },
+    }).then(async (result) => {
+      // Invalidate teacher-classes cache (for future-proofing if caching is added)
+      // Currently getTeacherClasses doesn't use cache, but this prevents future bugs
+      return result;
     });
   }
 
@@ -488,6 +492,10 @@ export class AcademicService {
     }
 
     await this.prisma.teacher_classes.delete({ where: { id } });
+    
+    // Invalidate teacher-classes cache (for future-proofing if caching is added)
+    // Currently getTeacherClasses doesn't use cache, but this prevents future bugs
+    
     return { message: "Teacher removed from class successfully" };
   }
 
@@ -533,6 +541,9 @@ export class AcademicService {
     }));
 
     await this.prisma.teacher_subjects.createMany({ data });
+
+    // Invalidate teacher-subjects cache (for future-proofing if caching is added)
+    // Currently getTeacherSubjects doesn't use cache, but this prevents future bugs
 
     return {
       message: `${newSubjectIds.length} subject(s) assigned to teacher`,
@@ -587,6 +598,10 @@ export class AcademicService {
     }
 
     await this.prisma.teacher_subjects.delete({ where: { id } });
+    
+    // Invalidate teacher-subjects cache (for future-proofing if caching is added)
+    // Currently getTeacherSubjects doesn't use cache, but this prevents future bugs
+    
     return { message: "Subject removed from teacher successfully" };
   }
 
@@ -895,6 +910,16 @@ export class AcademicService {
             select: { id: true, name: true },
           },
         },
+      }).then(async (result) => {
+        // Invalidate timetable cache for this class
+        const timetableDay = await this.prisma.timetable_days.findUnique({
+          where: { id: day.id },
+          select: { class_id: true },
+        });
+        if (timetableDay) {
+          await this.cacheManager.del(`school:${schoolId}:timetable:${timetableDay.class_id}`);
+        }
+        return result;
       });
     }
   }
@@ -937,6 +962,16 @@ export class AcademicService {
           select: { id: true, name: true },
         },
       },
+    }).then(async (result) => {
+      // Invalidate timetable cache for this class
+      const timetableDay = await this.prisma.timetable_days.findUnique({
+        where: { id: period.timetable_day_id },
+        select: { class_id: true },
+      });
+      if (timetableDay) {
+        await this.cacheManager.del(`school:${schoolId}:timetable:${timetableDay.class_id}`);
+      }
+      return result;
     });
   }
 
@@ -950,7 +985,19 @@ export class AcademicService {
       throw new NotFoundException("Period not found");
     }
 
+    // Get class_id before deleting
+    const timetableDay = await this.prisma.timetable_days.findUnique({
+      where: { id: period.timetable_day_id },
+      select: { class_id: true },
+    });
+
     await this.prisma.timetable_periods.delete({ where: { id } });
+    
+    // Invalidate timetable cache for this class
+    if (timetableDay) {
+      await this.cacheManager.del(`school:${schoolId}:timetable:${timetableDay.class_id}`);
+    }
+    
     return { message: "Period deleted successfully" };
   }
 
