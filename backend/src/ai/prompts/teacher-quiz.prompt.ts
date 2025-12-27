@@ -60,23 +60,18 @@ IMPORTANT: Generate questions DIRECTLY from the above educational content. Extra
 ` : 'NOTE: Generate general knowledge questions on this topic as no specific educational materials were provided.\n'}
 
 CRITICAL INSTRUCTIONS:
-1. **Use Markdown Sections** - Structure using ### headers with emojis
-2. **Detailed Content** - You MUST generate EXACTLY ${questionCount} actual questions. Do NOT just describe them.
-3. **No HTML Tags** - Pure Markdown only.
-4. **Include Answer Key** - Separated section at the end.
-5. **Ready to Use** - Format for easy copy to test creation system.
+1. **Use Markdown Sections** - Structure using ## headers with emojis
+2. **GENERATE ACTUAL QUESTIONS** - You MUST create EXACTLY ${questionCount} complete, ready-to-use questions
+3. **DO NOT DESCRIBE** - Do NOT write "Create a question about..." - WRITE THE ACTUAL QUESTION
+4. **No HTML Tags** - Pure Markdown only
+5. **Include Answer Key** - Separated section at the end with all correct answers
+6. **Ready to Use** - Teacher should be able to copy-paste directly into their test
 
-RESPONSE STRUCTURE (Strictly follow this with ### headers):
+⚠️ **CRITICAL:** If you write "Question 1 should ask about..." instead of "Question 1: What is...?", you have FAILED this task.
 
-### Title
-${topic}: ${questionCount}-Question ${difficulty} Quiz
+RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 
-### Explanation
-Below is the complete quiz designed for ${classBand} students. It includes ${questionCount} questions with a full answer key and marking rubric.
-
-### Detailed Content
-
-### 📋 Quiz Overview
+## 📋 Quiz Overview
 **Topic:** ${topic}
 **Subject:** ${subject}
 **Grade Level:** ${classBand}
@@ -86,55 +81,48 @@ Below is the complete quiz designed for ${classBand} students. It includes ${que
 **Total Marks:** ${mcqCount * 2 + saCount * 3 + essayCount * 5}
 **Suggested Duration:** ${mcqCount + saCount * 4 + essayCount * 12} minutes
 
-### 📝 Multiple Choice Questions (${mcqCount} questions)
+## 📝 Multiple Choice Questions (${mcqCount} questions)
 
-${mcqCount > 0 ? `Generate EXACTLY ${mcqCount} MCQ questions numbered 1 to ${mcqCount}.
+${mcqCount > 0 ? `⚠️ **YOU MUST GENERATE EXACTLY ${mcqCount} COMPLETE MCQ QUESTIONS**
+
+**DO NOT WRITE:** "Question 1 should test understanding of..."
+**INSTEAD WRITE:** "**1. What is the capital of France?** [2 marks]"
 
 EACH question MUST have:
-- Clear question text
+- Clear question text ending with ?
 - 4 options labeled A), B), C), D)
 - Mark value [2 marks]
 
-FORMAT for EACH question:
-**1. [Your actual question text here?]** [2 marks]
-A) First option
-B) Second option
-C) Third option
-D) Fourth option
+**EXAMPLE FORMAT:**
+**1. What is photosynthesis?** [2 marks]
+A) The process of cell division
+B) The process by which plants make food using sunlight
+C) The process of water absorption
+D) The process of respiration
 
-GENERATE ALL ${mcqCount} MCQ QUESTIONS NOW.` : '(No MCQ questions requested)'}
+**NOW GENERATE ALL ${mcqCount} MCQ QUESTIONS (numbered 1 to ${mcqCount}) FOLLOWING THIS EXACT FORMAT.**` : '(No MCQ questions requested)'}
 
-### ✍️ Short Answer Questions (${saCount} questions)
+## ✍️ Short Answer Questions (${saCount} questions)
 
-${saCount > 0 ? `Generate EXACTLY ${saCount} short answer questions numbered ${mcqCount + 1} to ${mcqCount + saCount}.
+${saCount > 0 ? `⚠️ **YOU MUST GENERATE EXACTLY ${saCount} COMPLETE SHORT ANSWER QUESTIONS**
 
-EACH question MUST have:
-- Clear question text
-- Word limit (50-100 words)
-- Mark value [3 marks]
-
-FORMAT for EACH question:
-**${mcqCount + 1}. [Your actual question text here?]** [3 marks]
+**EXAMPLE FORMAT:**
+**${mcqCount + 1}. Explain the water cycle and its importance to life on Earth.** [3 marks]
 *(Answer in 50-100 words)*
 
-GENERATE ALL ${saCount} SHORT ANSWER QUESTIONS NOW.` : '(No short answer questions requested)'}
+**NOW GENERATE ALL ${saCount} SHORT ANSWER QUESTIONS (numbered ${mcqCount + 1} to ${mcqCount + saCount}) FOLLOWING THIS EXACT FORMAT.**` : '(No short answer questions requested)'}
 
-### 📖 Essay/Long Answer Questions (${essayCount} questions)
+## 📖 Essay/Long Answer Questions (${essayCount} questions)
 
-${essayCount > 0 ? `Generate EXACTLY ${essayCount} essay questions numbered ${mcqCount + saCount + 1} to ${questionCount}.
+${essayCount > 0 ? `⚠️ **YOU MUST GENERATE EXACTLY ${essayCount} COMPLETE ESSAY QUESTIONS**
 
-EACH question MUST have:
-- Clear question text
-- Word limit (200-300 words)
-- Mark value [5 marks]
-
-FORMAT for EACH question:
-**${mcqCount + saCount + 1}. [Your actual question text here?]** [5 marks]
+**EXAMPLE FORMAT:**
+**${mcqCount + saCount + 1}. Discuss the causes and consequences of World War II. How did it reshape global politics?** [5 marks]
 *(Write a detailed answer in 200-300 words)*
 
-GENERATE ALL ${essayCount} ESSAY QUESTIONS NOW.` : '(No essay questions requested)'}
+**NOW GENERATE ALL ${essayCount} ESSAY QUESTIONS (numbered ${mcqCount + saCount + 1} to ${questionCount}) FOLLOWING THIS EXACT FORMAT.**` : '(No essay questions requested)'}
 
-### ✅ Answer Key
+## ✅ Answer Key
 
 ### MCQ Answers (${mcqCount} answers)
 ${mcqCount > 0 ? `Provide answers for questions 1-${mcqCount}:

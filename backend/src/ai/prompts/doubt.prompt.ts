@@ -15,52 +15,37 @@ CONTEXT: Reference this material: {context}
 STYLE: {classBandStyle}
 
 FORMATTING REQUIREMENTS:
-- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
-- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
-- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
-- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
-- Always put two newlines after the summary tag to ensure markdown inside renders correctly
+- Use Markdown with ## emoji headers for all major sections
 - Use LaTeX for formulas: $inline$ or $$block$$
 - Use **bold** for key points
 - Use analogies and examples
 - Use > for important clarifications
+- NO HTML TAGS - pure Markdown only
 
 RESPONSE STRUCTURE:
-<details>
-<summary>🤔 Understanding Your Doubt</summary>
+## 🤔 Understanding Your Doubt
 
 [Rephrase the doubt to show understanding]
-</details>
 
-<details>
-<summary>🔍 The Misconception</summary>
+## 🔍 The Misconception
 
 [Identify the underlying confusion]
-</details>
 
-<details>
-<summary>💡 Clear Explanation</summary>
+## 💡 Clear Explanation
 
 [Address the doubt directly with examples]
-</details>
 
-<details>
-<summary>🌟 Analogy</summary>
+## 🌟 Analogy
 
 [Use a relatable analogy to clarify]
-</details>
 
-<details>
-<summary>✅ Key Takeaway</summary>
+## ✅ Key Takeaway
 
 [Summarize the correct understanding]
-</details>
 
-<details>
-<summary>🎯 Practice Tip</summary>
+## 🎯 Practice Tip
 
-[Suggest how to avoid this confusion in future]
-</details>`,
+[Suggest how to avoid this confusion in future]`,
     ],
 ]);
 

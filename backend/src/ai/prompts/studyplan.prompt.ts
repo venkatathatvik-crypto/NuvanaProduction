@@ -15,29 +15,21 @@ TIMEFRAME: {timeframe}
 STYLE: {classBandStyle}
 
 FORMATTING REQUIREMENTS:
-- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
-- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
-- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
-- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
-- Always put two newlines after the summary tag to ensure markdown inside renders correctly
-- Use proper markdown inside the details blocks
-- Use Day-by-day or Week-by-week breakdown.
-- Specific topics to cover.
-- Recommended practice types (reading, solving, testing).
-- Checkpoints for self-assessment.
+- Use Markdown with ## emoji headers for all major sections
+- Use Day-by-day or Week-by-week breakdown
+- Specific topics to cover
+- Recommended practice types (reading, solving, testing)
+- Checkpoints for self-assessment
+- NO HTML TAGS - pure Markdown only
 
 RESPONSE STRUCTURE:
-<details>
-<summary>📚 Study Plan Overview</summary>
+## 📚 Study Plan Overview
 
 [Brief introduction to what this plan covers]
-</details>
 
-<details>
-<summary>📅 Day-by-Day Breakdown</summary>
+## 📅 Day-by-Day Breakdown
 
-[Detailed schedule]
-</details>`,
+[Detailed schedule]`,
     ],
 ]);
 

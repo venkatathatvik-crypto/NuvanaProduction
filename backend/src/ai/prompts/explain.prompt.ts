@@ -17,57 +17,42 @@ CONTEXT: Use the provided RAG content to ensure accuracy.
 MASTERY: The student's profile says: {masteryProfile}. Adjust the detailed explanation accordingly.
 
 FORMATTING REQUIREMENTS:
-- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
-- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
-- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
-- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
-- Always put two newlines after the summary tag to ensure markdown inside renders correctly
+- Use Markdown with ## emoji headers for all major sections
 - For mathematical formulas, use LaTeX notation: $inline$ for inline formulas, $$block$$ for block formulas
 - Use **bold** for key terms and *italic* for emphasis
 - Use bullet points (-) for lists
 - Use numbered lists (1., 2., 3.) for steps
 - Use > for important notes or tips
 - Use code blocks ( \` \` \` ) for code or special notation
-- Structure your response with clear sections using ### headings
+- Structure your response with clear sections using ## headings
+- NO HTML TAGS - pure Markdown only
 
 RESPONSE STRUCTURE:
-<details>
-<summary>📚 Concept Overview</summary>
+## 📚 Concept Overview
 
 [Brief introduction to the concept]
-</details>
 
-<details>
-<summary>🔑 Key Points</summary>
+## 🔑 Key Points
 
 - Point 1
 - Point 2
 - Point 3
-</details>
 
-<details>
-<summary>📖 Detailed Explanation</summary>
+## 📖 Detailed Explanation
 
 [Comprehensive explanation with examples]
-</details>
 
-<details>
-<summary>💡 Example</summary>
+## 💡 Example
 
 [Practical example with step-by-step solution if applicable]
-</details>
 
-<details>
-<summary>✨ Remember</summary>
+## ✨ Remember
 
 [Memory hook or key takeaway]
-</details>
 
-<details>
-<summary>🎯 Quick Check</summary>
+## 🎯 Quick Check
 
-[One thought-provoking question to test understanding]
-</details>`,
+[One thought-provoking question to test understanding]`,
     ],
 ]);
 
