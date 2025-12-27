@@ -12,38 +12,39 @@ export const TeacherLessonPlanPrompt = (
   objectives?: string
 ) => {
   const classBandStyle = ClassBandStyles[classBand] || ClassBandStyles.middle;
-  const lessonDuration = duration || 45; // Default 45 minutes
+  
+  // Duration parameter represents NUMBER OF DAYS for the lesson plan
+  const numberOfDays = duration || 3; // Default 3-day lesson plan
+  const lessonDurationMinutes = 60; // Each lesson is 60 minutes
+  const lessonDuration = duration || 45; // Legacy for compatibility
 
   return `TASK: Create a comprehensive, structured lesson plan for teaching "${topic}"
 
 SUBJECT: ${subject}
 GRADE LEVEL: ${classBand}
-LESSON DURATION: ${lessonDuration} minutes
+LESSON DURATION: ${lessonDurationMinutes} minutes per day
+NUMBER OF DAYS: ${numberOfDays} days
 TEACHING OBJECTIVES: ${objectives || 'To be determined based on topic'}
 AUDIENCE STYLE: ${classBandStyle}
 
 CRITICAL INSTRUCTIONS:
-1. **Use Markdown Sections** - Structure your lesson plan using ### headers with emojis
-2. **Detailed Content** - This is for the TEACHER to use, not students.
-3. **No HTML Tags** - Pure Markdown only.
-4. **Practical and Actionable** - Include specific activities and timings.
-5. **Age-Appropriate** - Adjust complexity and activities for the grade level.
+1. **Use Markdown Sections** - Structure your lesson plan using ## headers with emojis
+2. **Generate Actual Content** - DO NOT describe what the plan should contain - CREATE the actual plan
+3. **No HTML Tags** - Pure Markdown only
+4. **Practical and Actionable** - Include specific activities and timings
+5. **Age-Appropriate** - Adjust complexity and activities for the grade level
+6. **Multi-Day Plan** - Create a ${numberOfDays}-day lesson plan, with each day being ${lessonDurationMinutes} minutes
 
-RESPONSE STRUCTURE (Strictly follow this with ### headers):
+⚠️ **CRITICAL:** Do NOT write "Below is a lesson plan..." - WRITE THE ACTUAL LESSON PLAN DIRECTLY!
 
-### Title
-Lesson Plan: ${topic} (${subject})
+RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 
-### Explanation
-Below is a structured lesson plan designed for ${classBand} students. It covers learning objectives, materials, assessment strategies, and a detailed timetable.
+## 📚 Lesson Overview
 
-### Detailed Content
-
-### 📚 Lesson Overview
 **Topic:** ${topic}
 **Subject:** ${subject}
 **Grade Level:** ${classBand}
-**Duration:** ${lessonDuration} minutes
+**Total Duration:** ${numberOfDays} days (${lessonDurationMinutes} minutes per day)
 
 ### 🎯 Learning Objectives
 By the end of this lesson, students will be able to:
@@ -60,21 +61,37 @@ By the end of this lesson, students will be able to:
 - Equipment (e.g., projector, laptop)
 - Software/Apps needed
 
-### 📅 Multi-Day Timetable (${lessonDuration} Days)
-${Array.from({ length: lessonDuration || 3 }, (_, i) => {
-  const dayNum = i + 1;
-  return `
+### 📅 Multi-Day Timetable
+
+**IMPORTANT:** Generate a detailed timetable for ${numberOfDays} days. Each day should be a complete 60-minute lesson with the structure shown below.
+
+For each day (Day 1, Day 2, Day 3... up to Day ${numberOfDays}), create:
+
 ---
 
-#### Day ${dayNum} - Hour ${dayNum} (60 minutes)
-**Daily Focus:** [Main topic/concept for Day ${dayNum}]
+#### Day [Number] - [Topic for this day] (60 minutes)
+**Daily Focus:** [Main concept/skill to be taught this day]
 
-**⏰ 0:00-0:10** - Opening & Review
-**⏰ 0:10-0:35** - Main Instruction
-**⏰ 0:35-0:50** - Guided Practice
-**⏰ 0:50-1:00** - Wrap-Up & Assessment
-`;
-}).join('\n')}
+**⏰ 0:00-0:10 (10 min)** - Opening & Review
+- [Specific activity: warm-up, review previous day, introduce today's objective]
+
+**⏰ 0:10-0:35 (25 min)** - Main Instruction
+- [Specific teaching activities: direct instruction, demonstrations, examples]
+- [Key concepts to cover]
+
+**⏰ 0:35-0:50 (15 min)** - Guided Practice
+- [Specific practice activities: worksheets, group work, problem-solving]
+- [Teacher circulates and provides support]
+
+**⏰ 0:50-1:00 (10 min)** - Wrap-Up & Assessment
+- [Quick assessment: exit ticket, Q&A, summary]
+- [Preview next day's lesson]
+
+**Homework:** [Specific assignment for this day]
+
+---
+
+**REPEAT THIS STRUCTURE FOR ALL ${numberOfDays} DAYS** with different topics and activities for each day.
 
 ### 📊 Assessment Strategies
 - Formative Assessment (During Lesson)

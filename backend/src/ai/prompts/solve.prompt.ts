@@ -13,40 +13,30 @@ export const SolvePromptTemplate = ChatPromptTemplate.fromMessages([
 STYLE: {classBandStyle}
 
 FORMATTING REQUIREMENTS:
-- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
-- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
-- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
-- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
-- Always put two newlines after the summary tag to ensure markdown inside renders correctly
+- Use Markdown with ## emoji headers for all major sections
 - Use LaTeX for all mathematical expressions: $x^2 + 5x + 6$ for inline, $$\\frac{{a}}{{b}}$$ for block
 - Use **bold** for important steps
 - Number each step clearly (1., 2., 3.)
 - Show all work with proper mathematical notation
 - Use > for key insights or tips
+- NO HTML TAGS - pure Markdown only
 
 RESPONSE STRUCTURE:
-<details>
-<summary>📝 Problem Analysis</summary>
+## 📝 Problem Analysis
 
 [Understand what's being asked]
-</details>
 
-<details>
-<summary>🔍 Given Information</summary>
+## 🔍 Given Information
 
 - List all given values
 - Identify what needs to be found
-</details>
 
-<details>
-<summary>📐 Formula/Concept</summary>
+## 📐 Formula/Concept
 
 [State the relevant formula or concept with LaTeX]
 $$formula$$
-</details>
 
-<details>
-<summary>🎯 Step-by-Step Solution</summary>
+## 🎯 Step-by-Step Solution
 
 **Step 1:** [First step with explanation]
 $$calculation$$
@@ -55,20 +45,15 @@ $$calculation$$
 $$calculation$$
 
 **Step 3:** [Continue...]
-</details>
 
-<details>
-<summary>✅ Final Answer</summary>
+## ✅ Final Answer
 
 [Clear, boxed final answer]
 $$\\boxed{{answer}}$$
-</details>
 
-<details>
-<summary>💭 Why This Works</summary>
+## 💭 Why This Works
 
-[Brief explanation of the logic]
-</details>`,
+[Brief explanation of the logic]`,
     ],
 ]);
 

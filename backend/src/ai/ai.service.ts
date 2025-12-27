@@ -20,7 +20,7 @@ import { SummaryPrompt } from './prompts/summary.prompt';
 import { ExpandPrompt } from './prompts/expand.prompt';
 import { StudyPlanPrompt } from './prompts/studyplan.prompt';
 import { PredictPrompt } from './prompts/predict.prompt';
-import { MockTestPrompt } from './prompts/mocktest.prompt';
+import { MockTestPrompt } from './prompts/teacher-quiz.prompt';
 import { LifeSkillPrompt } from './prompts/lifeskill.prompt';
 // Teacher-specific prompts
 import { TeacherLessonPlanPrompt } from './prompts/teacher-lessonplan.prompt';
@@ -288,12 +288,13 @@ export class AiService {
             const llmStartTime = Date.now();
             
             // Determine which model to use based on task complexity
-            // Use Pro for high-reasoning tasks, Flash for everything else
+            // Let the GeminiProvider's routing logic decide (gemini-3-flash or gemini-3-pro)
             let targetModel: string | undefined;
-            if (taskType === AiTaskType.TEACHER_GRADE_PAPER || taskType === AiTaskType.STUDY_PLAN) {
-                targetModel = 'gemini-1.5-pro';
-                console.log(`[AI Service] 💎 Complex task detected - Routing to high-reasoning model: ${targetModel}`);
-            }
+            // DISABLED: Hardcoded override causes 404 with v1beta API
+            // if (taskType === AiTaskType.TEACHER_GRADE_PAPER || taskType === AiTaskType.STUDY_PLAN) {
+            //     targetModel = 'gemini-1.5-pro';
+            //     console.log(`[AI Service] 💎 Complex task detected - Routing to high-reasoning model: ${targetModel}`);
+            // }
 
             // Combine system prompt and RAG context into single system message
             // (Gemini LangChain provider requires only one system message)

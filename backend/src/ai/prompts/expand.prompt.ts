@@ -13,30 +13,21 @@ export const ExpandPromptTemplate = ChatPromptTemplate.fromMessages([
 STYLE: {classBandStyle}
 
 FORMATTING REQUIREMENTS:
-- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
-- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
-- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
-- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
-- Always put two newlines after the summary tag to ensure markdown inside renders correctly
+- Use Markdown with ## emoji headers for all major sections
+- NO HTML TAGS - pure Markdown only
 
 RESPONSE STRUCTURE:
-<details>
-<summary>🌍 Real-World Applications</summary>
+## 🌍 Real-World Applications
 
 [Explain how this topic is used in the real world]
-</details>
 
-<details>
-<summary>📅 History & Future</summary>
+## 📅 History & Future
 
 [Provide historical context or future implications]
-</details>
 
-<details>
-<summary>🔗 Interdisciplinary Connections</summary>
+## 🔗 Interdisciplinary Connections
 
-[Explain how this relates to other subjects]
-</details>`,
+[Explain how this relates to other subjects]`,
     ],
 ]);
 

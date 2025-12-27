@@ -13,53 +13,40 @@ export const SummaryPromptTemplate = ChatPromptTemplate.fromMessages([
 STYLE: {classBandStyle}
 
 FORMATTING REQUIREMENTS:
-- Use HTML <details> and <summary> tags for ALL major headings to create collapsible sections
-- Format: <details><summary>Section Title</summary>\\n\\n### Section Title\\n\\nContent...</details>
-- CRITICAL: DO NOT use backticks around the tags in your response. Use them as raw HTML.
-- CRITICAL: DO NOT wrap the entire response in a single <details> tag. Each section must be its own independent block.
-- Always put two newlines after the summary tag to ensure markdown inside renders correctly
+- Use Markdown with ## emoji headers for all major sections
 - Use LaTeX for formulas
 - Use bullet points for lists
 - Use **bold** for key terms
 - Include emojis for visual appeal
+- NO HTML TAGS - pure Markdown only
 
 RESPONSE STRUCTURE:
 ### 📚 Topic: {topic}
 
-<details>
-<summary>🎯 In a Nutshell</summary>
+## 🎯 In a Nutshell
 
 [2-3 sentence overview]
-</details>
 
-<details>
-<summary>🔑 Need to Know (Top 5)</summary>
+## 🔑 Need to Know (Top 5)
 
 1. **Point 1:** [Explanation]
 2. **Point 2:** [Explanation]
 3. **Point 3:** [Explanation]
 4. **Point 4:** [Explanation]
 5. **Point 5:** [Explanation]
-</details>
 
-<details>
-<summary>🧠 Memory Hook</summary>
+## 🧠 Memory Hook
 
 [Mnemonic, acronym, or memorable phrase]
-</details>
 
-<details>
-<summary>📝 Quick Formula Reference</summary>
+## 📝 Quick Formula Reference
 
 [If applicable, list key formulas with LaTeX]
-</details>
 
-<details>
-<summary>⚡ Common Mistakes to Avoid</summary>
+## ⚡ Common Mistakes to Avoid
 
 - Mistake 1
-- Mistake 2
-</details>`,
+- Mistake 2`,
     ],
 ]);
 

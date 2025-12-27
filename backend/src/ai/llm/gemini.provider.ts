@@ -59,8 +59,14 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
 
     /**
      * Heuristic to determine if a task is complex enough to warrant the Pro model
+     * DISABLED: Always use Flash model for cost optimization
      */
     private shouldUseProModel(messages: LLMMessage[]): boolean {
+        // DISABLED: Force Flash model for all requests (student and teacher)
+        // User preference: Use only Flash model to reduce costs
+        return false;
+        
+        /* ORIGINAL LOGIC (DISABLED):
         // Allow disabling Pro entirely via env var if quota is exhausted
         if (this.configService.get<string>('DISABLE_GEMINI_PRO') === 'true') return false;
 
@@ -79,6 +85,7 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         ];
 
         return complexKeywords.some(keyword => totalContent.toLowerCase().includes(keyword));
+        */
     }
 
     /**
