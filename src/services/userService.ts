@@ -79,13 +79,18 @@ export const userService = {
   },
 
   // Update student details (including class assignment)
-  async updateStudentDetails(studentId: string, data: { class_id?: string; roll_number?: string }): Promise<any> {
+  async updateStudentDetails(studentId: string, data: { class_id?: string; roll_number?: string; parent_contact?: string }): Promise<any> {
     return apiClient.post(`/users/${studentId}/student-details`, data);
   },
 
   // Assign student to class (uses student-details endpoint)
   async assignStudentToClass(studentId: string, classId: string): Promise<any> {
     return this.updateStudentDetails(studentId, { class_id: classId });
+  },
+
+  // Unassign student from class (sets class_id to null)
+  async unassignStudentFromClass(studentId: string): Promise<any> {
+    return this.updateStudentDetails(studentId, { class_id: null });
   },
 
   // Delete user

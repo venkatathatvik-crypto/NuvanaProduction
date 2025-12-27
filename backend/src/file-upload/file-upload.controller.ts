@@ -113,7 +113,7 @@ export class FileUploadController {
         validators: [
           new MaxFileSizeValidator({ maxSize: MAX_VIDEO_SIZE }), // Use max video size for validation
           new FileTypeValidator({
-            fileType: /(application\/pdf|video\/)/,
+            fileType: /^(application\/pdf|video\/.+)$/,
           }),
         ],
       }),

@@ -6,6 +6,7 @@ export interface StudentAttendance {
   name: string;
   roll_number: string;
   present: boolean;
+  status?: string;
 }
 
 export interface AttendanceRecord {
@@ -28,7 +29,7 @@ export const getStudentsByClass = async (
 export const getAttendanceForDate = async (
   classId: string,
   attendanceDate: string
-): Promise<Record<string, boolean>> => {
+): Promise<Record<string, boolean | string>> => {
   return attendanceApi.getAttendanceForDate(classId, attendanceDate);
 };
 
@@ -105,5 +106,31 @@ export const getStudentAverageMarksPercentage = async (
     return result.percentage;
   } catch {
     return 0;
+  }
+};
+
+// Get monthly attendance data for a student
+export const getStudentMonthlyAttendance = async (
+  studentId: string,
+  year: number,
+  month: number,
+): Promise<any> => {
+  try {
+    return await attendanceApi.getStudentMonthlyAttendance(studentId, year, month);
+  } catch (error) {
+    console.error('Error fetching monthly attendance:', error);
+    return null;
+  }
+};
+
+// Get monthly attendance summary (all months)
+export const getStudentMonthlyAttendanceSummary = async (
+  studentId: string,
+): Promise<any[]> => {
+  try {
+    return await attendanceApi.getStudentMonthlyAttendanceSummary(studentId);
+  } catch (error) {
+    console.error('Error fetching monthly summary:', error);
+    return [];
   }
 };

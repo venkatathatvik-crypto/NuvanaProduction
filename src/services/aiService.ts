@@ -1,11 +1,11 @@
-import { supabase } from "@/lib/mockBackend";
+import { logger } from '@/lib/logger';
 
 export interface AiRequestDto {
-    taskType: 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
+    taskType: 'start' | 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
     query: string;
+    classId?: string;
     subject?: string;
     topic?: string;
-    classBand?: string;
     studentId?: string;
     additionalContext?: any;
 }
@@ -19,42 +19,41 @@ export interface AiResponseDto {
     rawResponse?: string;
 }
 
-const BACKEND_URL = 'http://localhost:3000'; // Default NestJS port
-
 export const aiService = {
     async processRequest(dto: AiRequestDto): Promise<AiResponseDto> {
+        logger.log('[Frontend AI Service] ========================================');
+        logger.log('[Frontend AI Service] 🚀 Sending AI request');
+        logger.log('[Frontend AI Service] Task Type:', dto.taskType);
+        logger.log('[Frontend AI Service] Query:', dto.query);
+        logger.log('[Frontend AI Service] Subject:', dto.subject || 'Not provided');
+        logger.log('[Frontend AI Service] Student ID:', dto.studentId || 'Not provided');
+
         try {
-            // 1. Try hitting the real backend
-            const response = await fetch(`${BACKEND_URL}/ai/${dto.taskType.replace('_', '')}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    // 'x-api-key': 'your-api-key' // If we enforced it
-                },
-                body: JSON.stringify(dto),
+            const { apiClient } = await import('@/lib/apiClient');
+            
+            // Convert task type to endpoint (e.g., 'study_plan' -> 'studyplan')
+            const endpoint = `/ai/${dto.taskType.replace(/_/g, '')}`;
+            logger.log('[Frontend AI Service] Endpoint:', endpoint);
+
+            const startTime = Date.now();
+            logger.log('[Frontend AI Service] Request payload:', JSON.stringify(dto, null, 2));
+            const response = await apiClient.post<AiResponseDto>(endpoint, dto);
+            const duration = Date.now() - startTime;
+
+            logger.log('[Frontend AI Service] ✅ Response received');
+            logger.log('[Frontend AI Service] Duration:', duration, 'ms');
+            logger.log('[Frontend AI Service] Response title:', response.title);
+            logger.log('[Frontend AI Service] ========================================');
+
+            return response;
+        } catch (error: any) {
+            logger.error('[Frontend AI Service] ❌ Request failed:', error);
+            logger.error('[Frontend AI Service] Error details:', {
+                message: error.message,
+                status: error.status,
+                data: error.data,
             });
-
-            if (!response.ok) {
-                throw new Error(`Backend error: ${response.statusText}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.warn("AI Backend unreachable, falling back to mock response.", error);
-
-            // 2. Fallback Mock Response (for UI development/testing without backend)
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve({
-                        title: `Mock ${dto.taskType} Response`,
-                        keyPoints: ["Point 1: Conceptual understanding", "Point 2: Practical application", "Point 3: Critical analysis"],
-                        explanation: `This is a **simulated response** because the backend at ${BACKEND_URL} is offline.\n\nYou asked: *"${dto.query}"*\n\nIn a real scenario, the AI would analyse your mastery profile and RAG context to give a precise answer.`,
-                        personalizedFeedback: "You seem strong in this area, try tackling harder problems!",
-                        followUpQuestion: "How would you apply this concept to a real-world scenario?",
-                        rawResponse: "..."
-                    });
-                }, 1500);
-            });
+            throw error;
         }
     }
 };

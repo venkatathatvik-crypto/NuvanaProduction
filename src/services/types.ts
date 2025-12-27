@@ -1,15 +1,12 @@
 // Shared types and utilities for all service modules
-import { supabase } from "@/lib/mockBackend";
 
 // Re-export schema types
 export type { NestedClass, FlattenedClass } from "@/schemas/academic";
 
-// Environment bucket constants
-export const FILES_BUCKET =
-  import.meta.env?.VITE_SUPABASE_FILES_BUCKET?.toString() || "FILES_BUCKET";
-export const VOICE_NOTES_BUCKET =
-  import.meta.env?.VITE_SUPABASE_VOICE_NOTES_BUCKET?.toString() ||
-  "FILES_BUCKET";
+// Legacy constants - no longer used as we now use backend storage APIs
+// Kept for backward compatibility in case any code still references them
+export const FILES_BUCKET = "FILES_BUCKET";
+export const VOICE_NOTES_BUCKET = "VOICE_NOTES_BUCKET";
 
 // Common interfaces
 export interface NamedEntity {
@@ -42,5 +39,4 @@ export const resolveName = (
   return entity.name;
 };
 
-// Export supabase instance for use in services
-export { supabase };
+// Supabase has been removed - all services now use backend APIs

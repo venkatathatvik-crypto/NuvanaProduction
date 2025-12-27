@@ -32,7 +32,7 @@ const Index = () => {
           />
         </div>
         <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
-          Digital Learning,Zero Infrastructure.
+          Digital Learning, Zero Infrastructure.
         </p>
       </motion.div>
 
@@ -97,8 +97,9 @@ const Index = () => {
         </p>
       </motion.div>
       <div className="fixed top-4 right-4 z-50">
-        <Button variant="default" className="neon-glow" size="icon" onClick={() => navigate('/admin')}>
+        <Button variant="default" className="neon-glow flex items-center gap-2" onClick={() => navigate('/admin')}>
           <Shield className="w-5 h-5" />
+          <span className="font-bold">Admin</span>
         </Button>
       </div>
     </div>

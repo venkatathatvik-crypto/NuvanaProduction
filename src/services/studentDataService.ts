@@ -5,6 +5,7 @@ export interface StudentData {
   id: string;
   class_id: string | null;
   class_name?: string;
+  grade_id?: number;
   grade_name?: string;
   roll_number?: string;
 }
@@ -61,6 +62,7 @@ export const getStudentData = async (
       id: data.id,
       class_id: studentDetails.class_id || null,
       class_name: classData?.name,
+      grade_id: gradeData?.id,
       grade_name: gradeData?.name,
       roll_number: studentDetails.roll_number || undefined,
     };
@@ -99,7 +101,7 @@ export const getStudentVoiceNotes = async (
       fileSize: record.fileSizeBytes || record.fileSize || 0,
       subject: record.subject || "General",
       gradeSubjectId: "", // Not needed for student view
-      uploadDate: record.uploadDate || record.createdAt,
+      uploadDate: record.uploadDate || record.createdAt || new Date().toISOString(),
     }));
   } catch (error) {
     console.error("Error fetching student voice notes:", error);

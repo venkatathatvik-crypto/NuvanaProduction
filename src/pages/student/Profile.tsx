@@ -2,31 +2,28 @@ import { motion } from "framer-motion";
 import {
   User,
   Mail,
-  Phone,
-  MapPin,
   Award,
   BookOpen,
   Star,
   Calendar,
   Camera,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { uploadProfilePhoto } from "@/services/profileService";
 import { apiClient } from "@/lib/apiClient";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const StudentProfile = () => {
   const navigate = useNavigate();
   const { profile, profileLoading, refreshProfile } = useAuth();
-  const [studentData, setStudentData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState<string>("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,36 +31,19 @@ const StudentProfile = () => {
   // For demo purposes, we'll toggle this with a state or just set it to true
   const [isFeedbackActive] = useState(true);
 
-  useEffect(() => {
-    const fetchStudentDetails = async () => {
-      if (profileLoading) return;
+  // Fetch student data using React Query
+  const { data: studentData, isLoading: loading } = useQuery({
+    queryKey: ['student-profile', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+      const data = await apiClient.get(`/users/${profile.id}`);
+      return data;
+    },
+    enabled: !!profile?.id && !profileLoading,
+    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh for 5 minutes
+  });
 
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Get user email from profile
-        if (profile.email) {
-          setUserEmail(profile.email);
-        }
-
-        // Get student data from backend API
-        const data = await apiClient.get(`/users/${profile.id}`);
-        if (data) {
-          setStudentData(data);
-        }
-      } catch (error) {
-        console.error("Error fetching student details:", error);
-        toast.error("Failed to load student details");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStudentDetails();
-  }, [profile, profileLoading]);
+  const userEmail = profile?.email || "";
 
   const handlePhotoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -125,14 +105,17 @@ const StudentProfile = () => {
           transition={{ duration: 0.5 }}
           className="flex items-center justify-between"
         >
-          <h1 className="text-4xl font-bold neon-text">My Profile</h1>
-          <Button
-            variant="outline"
-            className="glass hover:neon-glow"
-            onClick={() => navigate("/student")}
-          >
-            Back to Dashboard
-          </Button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/student")}
+              className="shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+            </Button>
+            <h1 className="text-4xl font-bold neon-text">My Profile</h1>
+          </div>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -286,19 +269,17 @@ const StudentProfile = () => {
             transition={{ delay: 0.5 }}
           >
             <Card
-              className={`glass-card p-6 border-l-4 ${
-                isFeedbackActive ? "border-l-neon-pink" : "border-l-muted"
-              }`}
+              className={`glass-card p-6 border-l-4 ${isFeedbackActive ? "border-l-neon-pink" : "border-l-muted"
+                }`}
             >
               <div className="flex flex-col h-full justify-between">
                 <div>
                   <h3 className="font-semibold flex items-center gap-2">
                     <Star
-                      className={`w-5 h-5 ${
-                        isFeedbackActive
+                      className={`w-5 h-5 ${isFeedbackActive
                           ? "text-neon-pink fill-neon-pink"
                           : "text-muted"
-                      }`}
+                        }`}
                     />
                     Annual Feedback
                   </h3>
@@ -309,11 +290,10 @@ const StudentProfile = () => {
                   </p>
                 </div>
                 <Button
-                  className={`mt-4 w-full ${
-                    isFeedbackActive
+                  className={`mt-4 w-full ${isFeedbackActive
                       ? "bg-neon-pink/20 text-neon-pink hover:bg-neon-pink/30"
                       : ""
-                  }`}
+                    }`}
                   disabled={!isFeedbackActive}
                   onClick={() => navigate("/student/feedback")}
                 >

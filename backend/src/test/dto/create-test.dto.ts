@@ -8,6 +8,7 @@ import {
   IsArray,
   ValidateNested,
   IsEnum,
+  IsIn,
   Min,
   MaxLength,
 } from 'class-validator';
@@ -18,9 +19,16 @@ export enum QuestionType {
   Essay = 'Essay',
   Short_Answer = 'Short Answer',
   Very_Short_Answer = 'Very Short Answer',
+  // Also accept enum keys directly
+  Short_Answer_Key = 'Short_Answer',
+  Very_Short_Answer_Key = 'Very_Short_Answer',
 }
 
 export class CreateQuestionDto {
+  @IsOptional()
+  @IsUUID()
+  id?: string; // Optional ID for updates
+
   @IsString()
   @MaxLength(5000)
   question_text: string;
@@ -37,8 +45,10 @@ export class CreateQuestionDto {
   @IsString()
   topic?: string;
 
-  @IsEnum(QuestionType)
-  question_type: QuestionType;
+  @IsIn(['MCQ', 'Essay', 'Short Answer', 'Very Short Answer', 'Short_Answer', 'Very_Short_Answer'], {
+    message: 'question_type must be one of the following values: MCQ, Essay, Short Answer, Very Short Answer',
+  })
+  question_type: QuestionType | 'Short_Answer' | 'Very_Short_Answer';
 
   @IsOptional()
   @IsInt()

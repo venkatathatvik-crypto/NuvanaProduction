@@ -1,4 +1,5 @@
-import { supabase } from "@/lib/mockBackend";
+// Email service - Supabase removed
+// TODO: Implement backend email API endpoint when needed
 
 interface SendEmailParams {
   to: string | string[];
@@ -8,48 +9,24 @@ interface SendEmailParams {
 }
 
 /**
- * Send an email via the send-email edge function
+ * Send an email via backend API
  * This is non-blocking - errors are logged but don't throw
+ * Currently returns false as email API is not yet implemented in backend
  */
 export const sendEmail = async (params: SendEmailParams): Promise<boolean> => {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: params,
-    });
-
-    if (error) {
-      console.error('Email send failed:', error);
-      return false;
-    }
-
-    return data?.success ?? false;
-  } catch (error) {
-    console.error('Email service error:', error);
-    return false;
-  }
+  // TODO: Implement backend email API endpoint
+  console.warn('Email functionality not yet implemented in backend API');
+  return false;
 };
 
 /**
  * Get student emails for a class
+ * TODO: Implement backend API endpoint for fetching student emails
  */
 export const getStudentEmailsInClass = async (classId: string): Promise<string[]> => {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('class_id', classId)
-      .eq('role_id', 4); // Students only
-
-    if (error) {
-      console.error('Failed to fetch student emails:', error);
-      return [];
-    }
-
-    return data?.map(p => p.email).filter(Boolean) as string[] || [];
-  } catch (error) {
-    console.error('Error fetching student emails:', error);
-    return [];
-  }
+  // TODO: Implement backend API endpoint to get student emails by class
+  console.warn('getStudentEmailsInClass not yet implemented in backend API');
+  return [];
 };
 
 /**

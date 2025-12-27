@@ -3,6 +3,7 @@ export class StudentAttendanceResponseDto {
   name: string;
   roll_number: string;
   present: boolean;
+  status?: string;
 }
 
 export class AttendanceRecordResponseDto {
@@ -15,7 +16,7 @@ export class AttendanceRecordResponseDto {
 }
 
 export class AttendanceMapResponseDto {
-  [studentId: string]: boolean;
+  [studentId: string]: boolean | string;
 }
 
 export class AttendancePercentageResponseDto {

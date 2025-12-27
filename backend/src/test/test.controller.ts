@@ -14,6 +14,7 @@ import {
   UpdateTestDto,
   SubmitTestDto,
   GradeSubmissionDto,
+  CreateTestFromAiGradingDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Tenant } from '../auth/decorators/tenant.decorator';
@@ -36,6 +37,14 @@ export class TestController {
     @Tenant() schoolId: string,
   ) {
     return this.testService.getTeacherTests(teacherId, schoolId);
+  }
+
+  @Get('grading-queue/teacher/:teacherId')
+  async getTeacherGradingQueue(
+    @Param('teacherId') teacherId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.testService.getTeacherGradingQueue(teacherId, schoolId);
   }
 
   @Get(':id/teacher/:teacherId')
@@ -131,5 +140,34 @@ export class TestController {
     @Tenant() schoolId: string,
   ) {
     return this.testService.getStudentSubmission(id, studentId, schoolId);
+  }
+
+  @Get('student/:studentId/graded')
+  async getStudentGradedTests(
+    @Param('studentId') studentId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.testService.getStudentGradedTests(studentId, schoolId);
+  }
+
+  @Get(':testId/submission/student/:studentId')
+  async getSubmissionByTestAndStudent(
+    @Param('testId') testId: string,
+    @Param('studentId') studentId: string,
+    @Tenant() schoolId: string,
+  ) {
+    return this.testService.getSubmissionByTestAndStudent(testId, studentId, schoolId);
+  }
+
+  // ==================== AI GRADING ENDPOINT ====================
+
+  @Post('from-ai-grading')
+  async createFromAiGrading(
+    @Body() dto: CreateTestFromAiGradingDto,
+    @Tenant() schoolId: string,
+  ) {
+    // Ensure school_id matches tenant
+    dto.school_id = schoolId;
+    return this.testService.createFromAiGrading(dto);
   }
 }

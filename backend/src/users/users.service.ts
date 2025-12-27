@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   UpdateProfileDto,
@@ -6,25 +8,42 @@ import {
   CreateTeacherDetailsDto,
 } from './dto/user.dto';
 
+import { StorageService } from '../storage/storage.service';
+
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storage: StorageService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) { }
 
   async findAll(schoolId?: string, isSuperAdmin: boolean = false, roleId?: number) {
+    // Build cache key based on parameters
+    const cacheKey = `users:school:${schoolId || 'all'}:role:${roleId || 'all'}:admin:${isSuperAdmin}`;
+    
+    // Try cache first
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     // Build where clause
     const where: any = {};
-    
+
     if (schoolId && !isSuperAdmin) {
       where.school_id = schoolId;
     }
-    
+
     if (roleId) {
       where.role_id = roleId;
     }
 
+    let users;
+    
     // Super admin can see all users
     if (isSuperAdmin && !schoolId && !roleId) {
-      return this.prisma.profiles.findMany({
+      users = await this.prisma.profiles.findMany({
         include: {
           user_roles: true,
           schools: true,
@@ -36,21 +55,26 @@ export class UsersService {
           teacher_details: true,
         },
       });
-    }
-
-    // Filter by school and/or role
-    return this.prisma.profiles.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      include: {
-        user_roles: true,
-        student_details: {
-          include: {
-            classes: true,
+    } else {
+      // Filter by school and/or role
+      users = await this.prisma.profiles.findMany({
+        where: Object.keys(where).length > 0 ? where : undefined,
+        include: {
+          user_roles: true,
+          student_details: {
+            include: {
+              classes: true,
+            },
           },
+          teacher_details: true,
         },
-        teacher_details: true,
-      },
-    });
+      });
+    }
+    
+    // Store in cache (TTL: 300 seconds = 5 minutes)
+    await this.cacheManager.set(cacheKey, users, 300 * 1000); // 5 minutes in milliseconds
+    
+    return users;
   }
 
   async findOne(id: string, schoolId?: string, isSuperAdmin: boolean = false) {
@@ -102,6 +126,9 @@ export class UsersService {
         teacher_details: true,
       },
     });
+    
+    // Invalidate user caches
+    await this.invalidateUserCaches(schoolId);
 
     return updated;
   }
@@ -138,6 +165,9 @@ export class UsersService {
       },
     });
 
+    // Invalidate user caches to ensure fresh data
+    await this.invalidateUserCaches(schoolId);
+
     return studentDetails;
   }
 
@@ -172,6 +202,9 @@ export class UsersService {
       },
     });
 
+    // Invalidate user caches to ensure fresh data
+    await this.invalidateUserCaches(schoolId);
+
     return teacherDetails;
   }
 
@@ -186,7 +219,59 @@ export class UsersService {
     await this.prisma.profiles.delete({
       where: { id },
     });
+    
+    // Invalidate user caches
+    await this.invalidateUserCaches(schoolId);
 
     return { message: 'User deleted successfully' };
+  }
+
+  async uploadAvatar(
+    id: string,
+    file: Express.Multer.File,
+    schoolId?: string,
+    isSuperAdmin: boolean = false,
+  ) {
+    // Verify user exists and tenant access
+    const user = await this.findOne(id, schoolId, isSuperAdmin);
+
+    // Upload to storage
+    // We use 'files' bucket but organize in avatars folder
+    const fileExt = file.originalname.split('.').pop() || 'jpg';
+    const fileName = `${id}-${Date.now()}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+
+    const { path } = await this.storage.uploadFile(
+      'files',
+      filePath,
+      file.buffer,
+      file.mimetype,
+      { upsert: true }
+    );
+
+    // Get Public URL
+    const publicUrl = this.storage.getPublicUrl('files', path);
+
+    // Update Profile
+    const updated = await this.prisma.profiles.update({
+      where: { id },
+      data: { avatar_url: publicUrl },
+    });
+
+    return { avatar_url: updated.avatar_url };
+  }
+  
+  // Helper method to invalidate all user-related caches
+  private async invalidateUserCaches(schoolId?: string) {
+    // Clear all user cache variations for this school
+    const patterns = [
+      `users:school:${schoolId || 'all'}:role:all:admin:false`,
+      `users:school:${schoolId || 'all'}:role:all:admin:true`,
+      `users:school:${schoolId || 'all'}:role:3:admin:false`, // Teachers
+      `users:school:${schoolId || 'all'}:role:4:admin:false`, // Students
+      `users:school:all:role:all:admin:true`, // Super admin view
+    ];
+    
+    await Promise.all(patterns.map(key => this.cacheManager.del(key)));
   }
 }

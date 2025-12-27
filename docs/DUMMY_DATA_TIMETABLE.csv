@@ -1,0 +1,57 @@
+class_name,day_of_week,period_number,subject_name,teacher_email,start_time,end_time,room
+10-A,Monday,1,Mathematics,sarah.math@greenwood.edu,09:00,09:45,Room 101
+10-A,Monday,2,Physics,mike.physics@greenwood.edu,09:50,10:35,Lab 1
+10-A,Monday,3,Chemistry,emily.chem@greenwood.edu,10:40,11:25,Lab 2
+10-A,Monday,4,English,lisa.eng@greenwood.edu,11:45,12:30,Room 102
+10-A,Monday,5,Biology,david.bio@greenwood.edu,13:15,14:00,Lab 3
+10-A,Tuesday,1,Mathematics,sarah.math@greenwood.edu,09:00,09:45,Room 101
+10-A,Tuesday,2,Computer Science,tom.cs@greenwood.edu,09:50,10:35,Computer Lab
+10-A,Tuesday,3,History,anna.hist@greenwood.edu,10:40,11:25,Room 103
+10-A,Tuesday,4,Geography,james.geo@greenwood.edu,11:45,12:30,Room 104
+10-A,Tuesday,5,Physics,mike.physics@greenwood.edu,13:15,14:00,Lab 1
+10-A,Wednesday,1,Chemistry,emily.chem@greenwood.edu,09:00,09:45,Lab 2
+10-A,Wednesday,2,Biology,david.bio@greenwood.edu,09:50,10:35,Lab 3
+10-A,Wednesday,3,Mathematics,sarah.math@greenwood.edu,10:40,11:25,Room 101
+10-A,Wednesday,4,English,lisa.eng@greenwood.edu,11:45,12:30,Room 102
+10-A,Wednesday,5,Art,rachel.art@greenwood.edu,13:15,14:00,Art Room
+10-A,Thursday,1,Physics,mike.physics@greenwood.edu,09:00,09:45,Lab 1
+10-A,Thursday,2,Mathematics,sarah.math@greenwood.edu,09:50,10:35,Room 101
+10-A,Thursday,3,Computer Science,tom.cs@greenwood.edu,10:40,11:25,Computer Lab
+10-A,Thursday,4,History,anna.hist@greenwood.edu,11:45,12:30,Room 103
+10-A,Thursday,5,Physical Education,coach.ryan@greenwood.edu,13:15,14:00,Sports Ground
+10-A,Friday,1,English,lisa.eng@greenwood.edu,09:00,09:45,Room 102
+10-A,Friday,2,Chemistry,emily.chem@greenwood.edu,09:50,10:35,Lab 2
+10-A,Friday,3,Geography,james.geo@greenwood.edu,10:40,11:25,Room 104
+10-A,Friday,4,Biology,david.bio@greenwood.edu,11:45,12:30,Lab 3
+10-A,Friday,5,Mathematics,sarah.math@greenwood.edu,13:15,14:00,Room 101
+10-A,Saturday,1,Library Period,lisa.eng@greenwood.edu,09:00,09:45,Library
+10-A,Saturday,2,Sports,coach.ryan@greenwood.edu,09:50,10:35,Sports Ground
+10-A,Saturday,3,Art,rachel.art@greenwood.edu,10:40,11:25,Art Room
+10-B,Monday,1,Mathematics,sarah.math@greenwood.edu,09:00,09:45,Room 105
+10-B,Monday,2,Chemistry,emily.chem@greenwood.edu,09:50,10:35,Lab 2
+10-B,Monday,3,Physics,mike.physics@greenwood.edu,10:40,11:25,Lab 1
+10-B,Monday,4,Biology,david.bio@greenwood.edu,11:45,12:30,Lab 3
+10-B,Monday,5,English,lisa.eng@greenwood.edu,13:15,14:00,Room 102
+10-B,Tuesday,1,Computer Science,tom.cs@greenwood.edu,09:00,09:45,Computer Lab
+10-B,Tuesday,2,Mathematics,sarah.math@greenwood.edu,09:50,10:35,Room 105
+10-B,Tuesday,3,Geography,james.geo@greenwood.edu,10:40,11:25,Room 104
+10-B,Tuesday,4,History,anna.hist@greenwood.edu,11:45,12:30,Room 103
+10-B,Tuesday,5,Chemistry,emily.chem@greenwood.edu,13:15,14:00,Lab 2
+10-B,Wednesday,1,Biology,david.bio@greenwood.edu,09:00,09:45,Lab 3
+10-B,Wednesday,2,Physics,mike.physics@greenwood.edu,09:50,10:35,Lab 1
+10-B,Wednesday,3,English,lisa.eng@greenwood.edu,10:40,11:25,Room 102
+10-B,Wednesday,4,Mathematics,sarah.math@greenwood.edu,11:45,12:30,Room 105
+10-B,Wednesday,5,Art,rachel.art@greenwood.edu,13:15,14:00,Art Room
+10-B,Thursday,1,Chemistry,emily.chem@greenwood.edu,09:00,09:45,Lab 2
+10-B,Thursday,2,Computer Science,tom.cs@greenwood.edu,09:50,10:35,Computer Lab
+10-B,Thursday,3,Mathematics,sarah.math@greenwood.edu,10:40,11:25,Room 105
+10-B,Thursday,4,Geography,james.geo@greenwood.edu,11:45,12:30,Room 104
+10-B,Thursday,5,Physical Education,coach.ryan@greenwood.edu,13:15,14:00,Sports Ground
+10-B,Friday,1,Physics,mike.physics@greenwood.edu,09:00,09:45,Lab 1
+10-B,Friday,2,English,lisa.eng@greenwood.edu,09:50,10:35,Room 102
+10-B,Friday,3,History,anna.hist@greenwood.edu,10:40,11:25,Room 103
+10-B,Friday,4,Biology,david.bio@greenwood.edu,11:45,12:30,Lab 3
+10-B,Friday,5,Mathematics,sarah.math@greenwood.edu,13:15,14:00,Room 105
+10-B,Saturday,1,Library Period,lisa.eng@greenwood.edu,09:00,09:45,Library
+10-B,Saturday,2,Sports,coach.ryan@greenwood.edu,09:50,10:35,Sports Ground
+10-B,Saturday,3,Computer Science,tom.cs@greenwood.edu,10:40,11:25,Computer Lab

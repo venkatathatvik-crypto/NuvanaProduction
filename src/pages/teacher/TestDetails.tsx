@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/auth/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   getTeacherTest,
   updateTeacherTest,
@@ -31,6 +32,7 @@ const TestDetails = () => {
   console.log("testId", testId);
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const [test, setTest] = useState<TeacherTest | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [submissions] = useState<any[]>([]); // Submissions not implemented yet
@@ -77,14 +79,17 @@ const TestDetails = () => {
         return;
       }
 
-      // Transform questions to match service format
+      // Transform questions to match service format, including IDs for updates
       const questions = data.questions.map((q: any) => ({
+        id: q.id, // Include question ID for updates
         text: q.text,
         options: q.options,
         correctOptionIndex: q.correctOptionIndex,
         marks: q.marks,
         chapter: q.chapter,
         topic: q.topic,
+        questionType: q.questionType,
+        expectedAnswerText: q.expectedAnswerText,
       }));
 
       const updatedTest = await updateTeacherTest(test.id, {
@@ -96,10 +101,18 @@ const TestDetails = () => {
         gradeSubjectId,
         examTypeId,
         teacherId: profile.id,
+        schoolId: profile.school_id,
         questions,
       });
 
       setTest(updatedTest);
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["teacher-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-pending-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
+
       toast.success("Test updated successfully");
     } catch (error: any) {
       console.error("Error updating test:", error);
@@ -113,6 +126,13 @@ const TestDetails = () => {
     try {
       await publishTeacherTest(test.id, profile.id, !test.isPublished);
       setTest({ ...test, isPublished: !test.isPublished });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["teacher-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-pending-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
+
       toast.success(
         test.isPublished
           ? "Test unpublished successfully"
@@ -208,9 +228,14 @@ const TestDetails = () => {
         animate={{ opacity: 1, x: 0 }}
       >
         <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate("/teacher/tests")}>
-              <ArrowLeft className="w-4 h-4 mr-2" /> Back
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/teacher")}
+              className="shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
             </Button>
             <div>
               <h1 className="text-3xl font-bold neon-text">{test.title}</h1>

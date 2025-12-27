@@ -3,10 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UploadVoiceNoteDto, UploadFileDto } from './dto';
+import { IngestionService } from '../ai/rag/ingestion.service';
 
 const MAX_VOICE_NOTE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
@@ -32,9 +34,12 @@ const VALID_VIDEO_TYPES = [
 
 @Injectable()
 export class FileUploadService {
+  private readonly logger = new Logger(FileUploadService.name);
+
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    private ingestionService: IngestionService,
   ) {}
 
   /**
@@ -235,7 +240,11 @@ export class FileUploadService {
       }
     }
 
-    // Verify class belongs to school
+    // Verify class belongs to school - now REQUIRED
+    if (!dto.classId) {
+      throw new BadRequestException('Class ID is required');
+    }
+    
     const classExists = await this.prisma.classes.findFirst({
       where: { id: dto.classId, school_id: schoolId },
     });
@@ -309,10 +318,11 @@ export class FileUploadService {
     // Get public URL
     const publicUrl = this.storage.getPublicUrl('files', storageData.path);
 
-    return {
+    const response = {
       id: fileRecord.id,
       name: fileRecord.file_title,
-      class: fileRecord.classes.name,
+      class: fileRecord.classes?.name || 'All Classes',
+      classId: fileRecord.class_id,
       subject: fileRecord.grade_subjects.subjects_master?.name || 'Unknown',
       category: fileRecord.file_categories?.name || 'Uncategorized',
       storageUrl: publicUrl,
@@ -322,6 +332,70 @@ export class FileUploadService {
       fileType: fileRecord.file_type || 'pdf',
       size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
     };
+
+    // Process PDF for RAG asynchronously (non-blocking)
+    if (dto.fileType === 'pdf' && file.buffer) {
+      console.log(`[File Upload] 📄 PDF detected, scheduling RAG processing (file_id: ${fileRecord.id})...`);
+      
+      // Process in background (don't await - non-blocking)
+      this.processPdfForRag(file.buffer, {
+        file_id: fileRecord.id,
+        class_id: dto.classId || 'all',
+        subject: fileRecord.grade_subjects.subjects_master?.name || 'Unknown',
+        classBand: fileRecord.classes?.name ? this.inferClassBand(fileRecord.classes.name) : 'middle',
+        school_id: schoolId,
+      }).catch((error) => {
+        console.error(`[File Upload] ❌ Background PDF processing failed for file_id: ${fileRecord.id}`, error);
+        this.logger.error('Background PDF processing failed', error);
+        // Don't throw - file upload succeeded, processing failed separately
+      });
+    }
+
+    return response;
+  }
+
+  /**
+   * Process PDF for RAG in background (async, non-blocking)
+   * This runs after file upload completes to avoid blocking the upload response
+   */
+  private async processPdfForRag(
+    buffer: Buffer,
+    metadata: {
+      file_id: string;
+      class_id: string;
+      subject: string;
+      classBand?: string;
+      school_id: string;
+    },
+  ): Promise<void> {
+    console.log(`[File Upload] 🚀 Starting background PDF processing for RAG...`);
+    console.log(`[File Upload] File ID: ${metadata.file_id}, Class: ${metadata.class_id}, Subject: ${metadata.subject}`);
+
+    try {
+      const result = await this.ingestionService.processFile(buffer, metadata);
+      console.log(`[File Upload] ✅ PDF processing complete: ${result.chunksProcessed}/${result.totalChunks} chunks stored`);
+      this.logger.log(`PDF processed for RAG: ${result.chunksProcessed} chunks stored for file ${metadata.file_id}`);
+    } catch (error) {
+      console.error(`[File Upload] ❌ PDF processing error:`, error);
+      this.logger.error(`Failed to process PDF for RAG (file_id: ${metadata.file_id})`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Infer class band from class name (e.g., "Class 8B" -> "middle")
+   */
+  private inferClassBand(className: string): string {
+    const lower = className.toLowerCase();
+    if (lower.includes('1') || lower.includes('2') || lower.includes('3') || 
+        lower.includes('4') || lower.includes('5') || lower.includes('kg') || lower.includes('nursery')) {
+      return 'primary';
+    } else if (lower.includes('6') || lower.includes('7') || lower.includes('8')) {
+      return 'middle';
+    } else if (lower.includes('9') || lower.includes('10') || lower.includes('11') || lower.includes('12')) {
+      return 'high';
+    }
+    return 'middle'; // Default
   }
 
   /**
@@ -356,7 +430,8 @@ export class FileUploadService {
       return {
         id: file.id,
         name: file.file_title,
-        class: file.classes.name,
+        class: file.classes?.name || 'All Classes',
+        classId: file.class_id,
         subject: file.grade_subjects.subjects_master?.name || 'Unknown',
         category: file.file_categories?.name || 'Uncategorized',
         storageUrl: publicUrl,
@@ -406,11 +481,16 @@ export class FileUploadService {
    * Filters by class_id and school_id to ensure proper access control
    */
   async getFilesByClass(classId: string, schoolId: string) {
-    // Verify class belongs to school for security
+    // Verify class belongs to school for security and get grade level
     const classExists = await this.prisma.classes.findFirst({
       where: {
         id: classId,
         school_id: schoolId,
+      },
+      include: {
+        grade_levels: {
+          select: { id: true },
+        },
       },
     });
 
@@ -418,10 +498,13 @@ export class FileUploadService {
       throw new NotFoundException('Class not found or access denied');
     }
 
+    const gradeLevelId = classExists.grade_level_id;
+
+    // Get files specifically assigned to this class
     const files = await this.prisma.files.findMany({
       where: {
-        class_id: classId,
         school_id: schoolId,
+        class_id: classId,
       },
       include: {
         file_categories: {
@@ -446,7 +529,7 @@ export class FileUploadService {
       return {
         id: file.id,
         name: file.file_title,
-        class: file.classes.name,
+        class: file.classes?.name || 'All Classes',
         subject: file.grade_subjects.subjects_master?.name || 'Unknown',
         category: file.file_categories?.name || 'Uncategorized',
         storageUrl: publicUrl,
@@ -498,6 +581,13 @@ export class FileUploadService {
 
     return voiceNotes.map((vn) => {
       const publicUrl = this.storage.getPublicUrl('voice_notes', vn.storage_url);
+      // Ensure created_at is never null - use current date as fallback
+      const createdAt = vn.created_at || new Date();
+      // Format as ISO string for consistent frontend handling
+      const uploadDate = createdAt instanceof Date 
+        ? createdAt.toISOString() 
+        : new Date(createdAt).toISOString();
+      
       return {
         id: vn.id,
         title: vn.title,
@@ -507,9 +597,9 @@ export class FileUploadService {
         duration: vn.duration_seconds, // For compatibility
         fileSizeBytes: Number(vn.file_size_bytes),
         fileSize: Number(vn.file_size_bytes), // For compatibility
-        subject: vn.grade_subjects.subjects_master?.name || 'Unknown',
-        uploadDate: vn.created_at,
-        createdAt: vn.created_at, // For compatibility
+        subject: vn.grade_subjects?.subjects_master?.name || 'Unknown',
+        uploadDate: uploadDate,
+        createdAt: uploadDate, // For compatibility
       };
     });
   }

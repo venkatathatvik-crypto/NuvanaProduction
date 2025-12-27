@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   getStudentData,
   getStudentAnnouncements,
@@ -32,116 +32,80 @@ import { formatDistanceToNow } from "date-fns";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { logout, profile, profileLoading } = useAuth();
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
-  const [studentClassId, setStudentClassId] = useState<string | null>(null);
-  const [attendancePercentage, setAttendancePercentage] = useState<
-    number | null
-  >(null);
-  const [loadingAttendance, setLoadingAttendance] = useState(true);
-  const [averageMarks, setAverageMarks] = useState<number | null>(null);
-  const [loadingMarks, setLoadingMarks] = useState(true);
-  const [pendingTests, setPendingTests] = useState<number>(0);
-  const [loadingTests, setLoadingTests] = useState(true);
-  const [pendingAssessments, setPendingAssessments] = useState<number>(0);
-  const [loadingAssessments, setLoadingAssessments] = useState(true);
-  const [todayClasses, setTodayClasses] = useState<Array<{ subject: string; time: string; room: string }>>([]);
-  const [loadingTodayClasses, setLoadingTodayClasses] = useState(true);
+
+  // 1. Fetch Student Data (to get class_id)
+  const { data: studentData, isLoading: loadingStudentData } = useQuery({
+    queryKey: ['student-data', profile?.id],
+    queryFn: () => getStudentData(profile!.id),
+    enabled: !!profile?.id && !profileLoading,
+  });
+
+  const studentClassId = studentData?.class_id;
+
+  // 2. Fetch Announcements
+  const { data: announcements = [], isLoading: loadingAnnouncements } = useQuery({
+    queryKey: ['student-announcements', studentClassId],
+    queryFn: () => getStudentAnnouncements(studentClassId!),
+    enabled: !!studentClassId,
+  });
+
+  // 3. Fetch Attendance
+  const { data: attendancePercentageRaw, isLoading: loadingAttendance } = useQuery({
+    queryKey: ['student-attendance-percent', profile?.id],
+    queryFn: () => getOverallAttendancePercentage(profile!.id),
+    enabled: !!profile?.id,
+  });
+  const attendancePercentage = attendancePercentageRaw !== undefined ? Math.round(attendancePercentageRaw * 10) / 10 : null;
+
+  // 4. Fetch Marks
+  const { data: averageMarks = 0, isLoading: loadingMarks } = useQuery({
+    queryKey: ['student-marks-percent', profile?.id],
+    queryFn: () => getStudentAverageMarksPercentage(profile!.id),
+    enabled: !!profile?.id,
+  });
+
+  // 5. Fetch Pending Tests
+  const { data: pendingTests = 0, isLoading: loadingTests } = useQuery({
+    queryKey: ['student-pending-tests', profile?.id],
+    queryFn: () => getStudentPendingTestsCount(profile!.id),
+    enabled: !!profile?.id,
+  });
+
+  // 6. Fetch Pending Assessments
+  const { data: pendingAssessments = 0, isLoading: loadingAssessments } = useQuery({
+    queryKey: ['student-pending-assessments', profile?.id],
+    queryFn: () => getStudentPendingAssessmentsCount(profile!.id),
+    enabled: !!profile?.id,
+  });
+
+  // 7. Fetch Timetable
+  const { data: timetableData = {}, isLoading: loadingTodayClasses } = useQuery({
+    queryKey: ['student-timetable', studentClassId, profile?.school_id],
+    queryFn: () => getStudentTimetable(studentClassId!, profile!.school_id!),
+    enabled: !!studentClassId && !!profile?.school_id,
+  });
 
   const handleLogout = async () => {
     await logout();
     navigate("/login");
   };
 
-  useEffect(() => {
-    const fetchStudentData = async () => {
-      if (profileLoading) return;
-
-      if (!profile) {
-        setLoadingAnnouncements(false);
-        setLoadingAttendance(false);
-        setLoadingMarks(false);
-        setLoadingTests(false);
-        setLoadingAssessments(false);
-        setLoadingTodayClasses(false);
-        return;
-      }
-
-      try {
-        // Fetch all initial data in parallel
-        const [attendance, marks, pending, assessments, studentData] = await Promise.all([
-          getOverallAttendancePercentage(profile.id),
-          getStudentAverageMarksPercentage(profile.id),
-          getStudentPendingTestsCount(profile.id),
-          getStudentPendingAssessmentsCount(profile.id),
-          getStudentData(profile.id),
-        ]);
-
-        setAttendancePercentage(Math.round(attendance * 10) / 10);
-        setAverageMarks(marks);
-        setPendingTests(pending);
-        setPendingAssessments(assessments);
-
-        if (studentData && studentData.class_id) {
-          setStudentClassId(studentData.class_id);
-
-          console.log('🎓 Student Data:', {
-            studentId: profile.id,
-            classId: studentData.class_id,
-            schoolId: profile.school_id,
-          });
-
-          // Fetch announcements and timetable in parallel (they depend on class_id)
-          const [announcementsData, timetableData] = await Promise.all([
-            getStudentAnnouncements(studentData.class_id),
-            profile.school_id ? getStudentTimetable(studentData.class_id, profile.school_id) : Promise.resolve({}),
-          ]);
-
-          console.log('📢 Announcements Received:', {
-            count: announcementsData?.length || 0,
-            data: announcementsData,
-          });
-
-          setAnnouncements(announcementsData);
-
-          // Get today's classes from timetable
-          const jsDay = new Date().getDay();
-          const dayName = jsDay === 0 ? null : DAY_NAMES[jsDay - 1];
-
-          if (dayName && timetableData[dayName]) {
-            setTodayClasses(timetableData[dayName].map((p: any) => ({
-              subject: p.subject,
-              time: p.time,
-              room: p.room,
-              teacher: p.teacher,
-            })));
-          } else {
-            setTodayClasses([]);
-          }
-        }
-      } catch (error) {
-        // Error fetching student data - silently fail
-      } finally {
-        setLoadingAnnouncements(false);
-        setLoadingAttendance(false);
-        setLoadingMarks(false);
-        setLoadingTests(false);
-        setLoadingAssessments(false);
-        setLoadingTodayClasses(false);
-      }
-    };
-
-    fetchStudentData();
-  }, [profile, profileLoading]);
+  // Compute today's classes from timetable
+  const todayClasses = (() => {
+    const jsDay = new Date().getDay();
+    const dayName = jsDay === 0 ? null : DAY_NAMES[jsDay - 1];
+    if (dayName && timetableData[dayName]) {
+      return timetableData[dayName].map((p: any) => ({
+        subject: p.subject,
+        time: p.time,
+        room: p.room,
+        teacher: p.teacher,
+      }));
+    }
+    return [];
+  })();
 
   const quickActions = [
-    {
-      label: "AI Tutor",
-      value: "Ask Now",
-      icon: Brain,
-      color: "text-neon-purple animate-pulse",
-      path: "/student/ai-tutor",
-    },
     {
       label: "Attendance",
       value: loadingAttendance ? "..." : `${attendancePercentage}%`,
@@ -214,8 +178,8 @@ const Dashboard = () => {
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2 truncate">
-              Welcome back, {profile?.name || "Student"}! 👋
+            <h1 className="text-2xl sm:text-2xl font-bold neon-text mb-1 sm:mb-2 truncate">
+              Welcome back, {profile?.name || "Student"}!
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base">
               Here's what's happening today
@@ -243,7 +207,7 @@ const Dashboard = () => {
         </motion.div>
 
         {/* Quick Actions Grid - All actions at the top */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {quickActions.map((action, index) => (
             <motion.div
               key={action.label}
@@ -257,8 +221,8 @@ const Dashboard = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{action.label}</p>
-                    <p className="text-lg sm:text-2xl font-bold mt-1 sm:mt-2 truncate">{action.value}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate font-medium">{action.label}</p>
+                    <p className={`font-bold mt-1 truncate ${action.value === 'Library' ? 'text-xs sm:text-lg' : 'text-sm sm:text-xl'}`}>{action.value}</p>
                   </div>
                   <action.icon className={`w-8 h-8 sm:w-10 sm:h-10 ${action.color} shrink-0 ml-2`} />
                 </div>
