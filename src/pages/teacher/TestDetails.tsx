@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/auth/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   getTeacherTest,
   updateTeacherTest,
@@ -31,6 +32,7 @@ const TestDetails = () => {
   console.log("testId", testId);
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const [test, setTest] = useState<TeacherTest | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [submissions] = useState<any[]>([]); // Submissions not implemented yet
@@ -99,10 +101,18 @@ const TestDetails = () => {
         gradeSubjectId,
         examTypeId,
         teacherId: profile.id,
+        schoolId: profile.school_id,
         questions,
       });
 
       setTest(updatedTest);
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["teacher-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-pending-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
+
       toast.success("Test updated successfully");
     } catch (error: any) {
       console.error("Error updating test:", error);
@@ -116,6 +126,13 @@ const TestDetails = () => {
     try {
       await publishTeacherTest(test.id, profile.id, !test.isPublished);
       setTest({ ...test, isPublished: !test.isPublished });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["teacher-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-pending-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
+
       toast.success(
         test.isPublished
           ? "Test unpublished successfully"

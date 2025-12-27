@@ -23,30 +23,19 @@ SUBJECT: ${subject}
 GRADE LEVEL: ${classBand}
 STYLE: ${classBandStyle}
 
-${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]' ? `\nCONTENT SOURCE:\nI have access to uploaded educational materials for this subject. Questions will be generated based on the provided content.\n` : `\nNOTE: No specific educational materials found. Questions will be general knowledge-based for this topic.\n`}
+${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]' ? `\nCONTENT SOURCE:\nI have access to the educational materials you've provided for this subject. I will generate questions based on these materials.\n` : `\nNOTE: No specific materials were found for this topic. I will generate general academic questions based on standard curriculum.\n`}
 
-## 📝 Quiz Creation Setup
+## 📝 Quiz Creation: Let's Get Started!
 
-Before I generate your quiz, I need a few details:
+To generate the best quiz for your students, I just need two quick details:
 
-**Required Information:**
-1. **How many questions?** (e.g., 10, 15,20, 30)
-2. **Question types?** (Choose one or mix)
-   - MCQ (Multiple Choice Questions)
-   - Short Answer
-   - Essay/Long Answer
-   - Mix of all types
+1. **How many questions** would you like? (e.g., 10, 15, 20)
+2. **What type of questions?** (e.g., MCQ only, Short Answer, or a **Mixed Type**)
 
-3. **Difficulty level?** (Choose one)
-   - Easy
-   - Medium
-   - Hard
-   - Mixed
+**Just reply with something like:**
+"15 questions, mixed type"
 
-**Example Response:**
-"15 questions, mostly MCQ with some short answers, medium difficulty"
-
-**Please provide these details, and I'll generate a comprehensive quiz for you!**`;
+Once you provide these, I'll generate the full quiz with an answer key and marking rubric for you!`;
   }
 
   // Calculate question distribution
@@ -67,28 +56,27 @@ STYLE: ${classBandStyle}
 ${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]' ? `EDUCATIONAL CONTENT FOR QUESTION GENERATION:
 ${ragContext}
 
-IMPORTANT: Generate questions DIRECTLY from the above educational content. Extract key concepts, facts, definitions, examples, and problem-solving approaches from the provided material. Questions should test understanding of THIS specific content, not general topic knowledge.
+IMPORTANT: Generate questions DIRECTLY from the above educational content. Extract key concepts, facts, definitions, examples, and problem-solving approaches from the provided material. Questions should test understanding of THIS specific content.
 ` : 'NOTE: Generate general knowledge questions on this topic as no specific educational materials were provided.\n'}
 
 CRITICAL INSTRUCTIONS:
-1. **Use Markdown Sections** - Structure using ## headers with emojis
-2. **Section Format** - Use exactly this format: ## 📝 Section Title
-3. **No HTML Tags** - Pure Markdown only
-4. **Generate EXACTLY ${questionCount} questions** - No more, no less
-5. **Include Answer Key** - Separated section at the end
-6. **Ready to Use** - Format for easy copy to test creation system
-7. **Marks Allocation** - Suggest marks for each question
+1. **Use Markdown Sections** - Structure using ### headers with emojis
+2. **Detailed Content** - You MUST generate EXACTLY ${questionCount} actual questions. Do NOT just describe them.
+3. **No HTML Tags** - Pure Markdown only.
+4. **Include Answer Key** - Separated section at the end.
+5. **Ready to Use** - Format for easy copy to test creation system.
 
-QUESTION DISTRIBUTION:
-- MCQ (Multiple Choice): ${mcqCount} questions
-- Short Answer: ${saCount} questions
-- Essay/Long Answer: ${essayCount} questions
-- **Total: ${questionCount} questions**
+RESPONSE STRUCTURE (Strictly follow this with ### headers):
 
-RESPONSE STRUCTURE (use this exact format with ## emoji headers):
+### Title
+${topic}: ${questionCount}-Question ${difficulty} Quiz
 
-## 📋 Quiz Overview
+### Explanation
+Below is the complete quiz designed for ${classBand} students. It includes ${questionCount} questions with a full answer key and marking rubric.
 
+### Detailed Content
+
+### 📋 Quiz Overview
 **Topic:** ${topic}
 **Subject:** ${subject}
 **Grade Level:** ${classBand}
@@ -98,7 +86,7 @@ RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 **Total Marks:** ${mcqCount * 2 + saCount * 3 + essayCount * 5}
 **Suggested Duration:** ${mcqCount + saCount * 4 + essayCount * 12} minutes
 
-## 📝 Multiple Choice Questions (${mcqCount} questions)
+### 📝 Multiple Choice Questions (${mcqCount} questions)
 
 ${mcqCount > 0 ? `Generate EXACTLY ${mcqCount} MCQ questions numbered 1 to ${mcqCount}.
 
@@ -116,7 +104,7 @@ D) Fourth option
 
 GENERATE ALL ${mcqCount} MCQ QUESTIONS NOW.` : '(No MCQ questions requested)'}
 
-## ✍️ Short Answer Questions (${saCount} questions)
+### ✍️ Short Answer Questions (${saCount} questions)
 
 ${saCount > 0 ? `Generate EXACTLY ${saCount} short answer questions numbered ${mcqCount + 1} to ${mcqCount + saCount}.
 
@@ -131,7 +119,7 @@ FORMAT for EACH question:
 
 GENERATE ALL ${saCount} SHORT ANSWER QUESTIONS NOW.` : '(No short answer questions requested)'}
 
-## 📖 Essay/Long Answer Questions (${essayCount} questions)
+### 📖 Essay/Long Answer Questions (${essayCount} questions)
 
 ${essayCount > 0 ? `Generate EXACTLY ${essayCount} essay questions numbered ${mcqCount + saCount + 1} to ${questionCount}.
 
@@ -146,7 +134,7 @@ FORMAT for EACH question:
 
 GENERATE ALL ${essayCount} ESSAY QUESTIONS NOW.` : '(No essay questions requested)'}
 
-## ✅ Answer Key
+### ✅ Answer Key
 
 ### MCQ Answers (${mcqCount} answers)
 ${mcqCount > 0 ? `Provide answers for questions 1-${mcqCount}:
@@ -174,7 +162,7 @@ ${essayCount > 0 ? `Provide rubrics for questions ${mcqCount + saCount + 1}-${qu
 
 (Continue for all ${essayCount} essays)` : '(No essay rubrics)'}
 
-## 💡 Teacher Notes
+### 💡 Teacher Notes
 
 **Total Marks:** ${mcqCount * 2 + saCount * 3 + essayCount * 5} marks
 **Suggested Duration:** ${mcqCount + saCount * 4 + essayCount * 12} minutes

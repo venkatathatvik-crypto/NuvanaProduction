@@ -12,6 +12,16 @@ import { academicService } from "@/services/academicApiService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminSettings() {
   const navigate = useNavigate();
@@ -32,6 +42,12 @@ export default function AdminSettings() {
   const [editingFileCategory, setEditingFileCategory] = useState<any>(null);
   const [editFileCategoryForm, setEditFileCategoryForm] = useState<any>({});
   const [savingFileCategory, setSavingFileCategory] = useState(false);
+  
+  // Delete dialog states
+  const [showDeleteExamTypeDialog, setShowDeleteExamTypeDialog] = useState(false);
+  const [examTypeToDelete, setExamTypeToDelete] = useState<number | null>(null);
+  const [showDeleteFileCategoryDialog, setShowDeleteFileCategoryDialog] = useState(false);
+  const [fileCategoryToDelete, setFileCategoryToDelete] = useState<number | null>(null);
 
   const { data: examTypes = [], isLoading: examTypesLoading } = useQuery({
     queryKey: ['settings-exam-types'],
@@ -67,14 +83,22 @@ export default function AdminSettings() {
     }
   };
 
-  const deleteExamType = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this exam type? This action cannot be undone.")) return;
+  const deleteExamType = (id: number) => {
+    setExamTypeToDelete(id);
+    setShowDeleteExamTypeDialog(true);
+  };
+
+  const confirmDeleteExamType = async () => {
+    if (examTypeToDelete === null) return;
     try {
-      await academicService.deleteExamType(id);
+      await academicService.deleteExamType(examTypeToDelete);
       toast.success("Exam type deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['settings-exam-types'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete exam type");
+    } finally {
+      setShowDeleteExamTypeDialog(false);
+      setExamTypeToDelete(null);
     }
   };
 
@@ -122,14 +146,22 @@ export default function AdminSettings() {
     }
   };
 
-  const deleteFileCategory = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this file category? This action cannot be undone.")) return;
+  const deleteFileCategory = (id: number) => {
+    setFileCategoryToDelete(id);
+    setShowDeleteFileCategoryDialog(true);
+  };
+
+  const confirmDeleteFileCategory = async () => {
+    if (fileCategoryToDelete === null) return;
     try {
-      await academicService.deleteFileCategory(id);
+      await academicService.deleteFileCategory(fileCategoryToDelete);
       toast.success("File category deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['settings-file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete file category");
+    } finally {
+      setShowDeleteFileCategoryDialog(false);
+      setFileCategoryToDelete(null);
     }
   };
 
@@ -183,7 +215,7 @@ export default function AdminSettings() {
             animate={{ opacity: 1, x: 0 }}
             className="min-w-0"
           >
-            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Settings</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Exam & File Settings</h1>
             <p className="text-muted-foreground text-sm sm:text-base">Manage exam types and file categories</p>
           </motion.div>
         </div>
@@ -409,6 +441,42 @@ export default function AdminSettings() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Delete Exam Type Dialog */}
+      <AlertDialog open={showDeleteExamTypeDialog} onOpenChange={setShowDeleteExamTypeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the exam type.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteExamType} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete File Category Dialog */}
+      <AlertDialog open={showDeleteFileCategoryDialog} onOpenChange={setShowDeleteFileCategoryDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the file category.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteFileCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

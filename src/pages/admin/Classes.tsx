@@ -9,6 +9,16 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminClasses() {
   const { profile } = useAuth();
@@ -17,8 +27,9 @@ export default function AdminClasses() {
   const [selectedGrade, setSelectedGrade] = useState<string>("");
   const [filterGradeForClasses, setFilterGradeForClasses] = useState<string>("");
   const [addingClass, setAddingClass] = useState(false);
-  const [isImportingClasses, setIsImportingClasses] = useState(false);
   const [classImportProgress, setClassImportProgress] = useState<any>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
   const { data: grades = [], isLoading: gradesLoading } = useQuery({
     queryKey: ['classes-grades'],
@@ -45,7 +56,12 @@ export default function AdminClasses() {
       toast.success("Class created");
       setNewClass("");
       setSelectedGrade("");
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create class");
     } finally {
@@ -132,7 +148,12 @@ export default function AdminClasses() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} class(es)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} class(es). Check details below.`);
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
     } catch (error: any) {
       console.error("Class CSV Import Error:", error);
       toast.error("Failed to process CSV file");
@@ -142,14 +163,26 @@ export default function AdminClasses() {
     }
   };
 
-  const deleteItem = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this class? This action cannot be undone.")) return;
+  const deleteItem = (id: string) => {
+    setItemToDelete(id);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
     try {
-      await academicService.deleteClass(id);
+      await academicService.deleteClass(itemToDelete);
       toast.success("Class deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete class");
+    } finally {
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
     }
   };
 
@@ -320,6 +353,23 @@ export default function AdminClasses() {
           </div>
         </Card>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the class and all associated student assignments.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

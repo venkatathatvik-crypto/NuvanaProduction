@@ -11,7 +11,13 @@ import { AcademicModule } from './academic/academic.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SchoolsModule } from './schools/schools.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { MessagesModule } from './messages/messages.module';
 import { HealthModule } from './health/health.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { FileUploadModule } from './file-upload/file-upload.module';
+import { TestModule } from './test/test.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
     imports: [
@@ -84,6 +90,12 @@ import { HealthModule } from './health/health.module';
         AnalyticsModule,
         SchoolsModule,
         NotificationsModule,
+        MessagesModule,
+        AttendanceModule,
+        AnnouncementsModule,
+        FileUploadModule,
+        TestModule,
+        StorageModule,
         HealthModule,
     ],
 })

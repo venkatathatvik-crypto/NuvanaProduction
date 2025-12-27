@@ -72,14 +72,15 @@ export class AiService {
                 console.warn('[AI Service] Cache check failed, proceeding without cache:', cacheError.message);
             }
 
-            // 0. Get Student's Class ID and Grade Level (for RAG filtering and class band)
-            let studentClassId: string | undefined;
+            // 0. Get Class ID for RAG filtering
+            // Priority: 1. dto.classId (Teacher selection), 2. profile.student_details (Student profile)
+            let studentClassId = dto.classId;
             let autoClassBand: string | undefined;
             
             if (studentId) {
-                console.log(`[AI Service] Step 0: Getting student's class and grade information...`);
+                console.log(`[AI Service] Step 0: Getting profile information for context...`);
                 try {
-                    const student = await this.prisma.profiles.findFirst({
+                    const profile = await this.prisma.profiles.findFirst({
                         where: { id: studentId },
                         include: {
                             student_details: {
@@ -99,28 +100,25 @@ export class AiService {
                         },
                     });
 
-                    if (student?.student_details?.class_id) {
-                        studentClassId = student.student_details.class_id;
-                        console.log(`[AI Service] ✓ Student class_id: ${studentClassId}`);
-                        
-                        // Get grade level name to determine class band
-                        const gradeLevel = student.student_details.classes?.grade_levels;
-                        if (gradeLevel?.name) {
-                            console.log(`[AI Service] ✓ Student grade level: ${gradeLevel.name}`);
-                            
-                            // Auto-determine class band from grade level name
-                            autoClassBand = this.determineClassBandFromGrade(gradeLevel.name);
-                            console.log(`[AI Service] ✓ Auto-determined class band: ${autoClassBand} (from grade: ${gradeLevel.name})`);
-                        } else {
-                            console.log(`[AI Service] ⚠️ Grade level not found for student's class`);
-                        }
-                    } else {
-                        console.log(`[AI Service] ⚠️ Student class_id not found (student may not be assigned to a class)`);
+                    // If it's a student and classId wasn't provided, use their actual class
+                    if (!studentClassId && profile?.student_details?.class_id) {
+                        studentClassId = profile.student_details.class_id;
+                        console.log(`[AI Service] ✓ Auto-using student class_id: ${studentClassId}`);
+                    }
+                    
+                    // Auto-determine class band from grade level name (for both students and teachers if class info is available)
+                    const gradeLevel = profile?.student_details?.classes?.grade_levels;
+                    if (gradeLevel?.name) {
+                        autoClassBand = this.determineClassBandFromGrade(gradeLevel.name);
+                        console.log(`[AI Service] ✓ Auto-determined class band: ${autoClassBand} (from grade: ${gradeLevel.name})`);
                     }
                 } catch (error) {
-                    console.error(`[AI Service] ❌ Error getting student class:`, error);
-                    // Continue without class_id - RAG will work but less specific
+                    console.error(`[AI Service] ❌ Error getting profile context:`, error);
                 }
+            }
+
+            if (dto.classId) {
+                console.log(`[AI Service] ✓ Using explicitly provided class_id (Teacher mode): ${dto.classId}`);
             }
 
             // Use auto-determined class band, fallback to frontend-provided, then default to 'middle'
@@ -221,10 +219,12 @@ export class AiService {
                     // Teacher quiz generation with RAG support
                     if (isTeacher) {
                         // Extract question count from query
-                        const questionCount = this.extractQuestionCount(query);
-                        const questionTypes = this.extractQuestionTypes(query);
+                        const questionCount = this.extractQuestionCount(query) || 10; // Default to 10 if number found but unclear
+                        const questionTypes = this.extractQuestionTypes(query) || 'Mixed';
                         const quizDifficulty = this.extractDifficulty(query) || difficulty;
                         
+                        console.log(`[AI Service] 📝 Quiz Generation Params: Count=${questionCount}, Types=${questionTypes}, Difficulty=${quizDifficulty}`);
+
                         userPrompt = TeacherQuizPrompt(
                             dto.topic || query,
                             subject || 'General',
@@ -287,6 +287,14 @@ export class AiService {
             console.log(`[AI Service] Step 4: Calling Gemini LLM...`);
             const llmStartTime = Date.now();
             
+            // Determine which model to use based on task complexity
+            // Use Pro for high-reasoning tasks, Flash for everything else
+            let targetModel: string | undefined;
+            if (taskType === AiTaskType.TEACHER_GRADE_PAPER || taskType === AiTaskType.STUDY_PLAN) {
+                targetModel = 'gemini-1.5-pro';
+                console.log(`[AI Service] 💎 Complex task detected - Routing to high-reasoning model: ${targetModel}`);
+            }
+
             // Combine system prompt and RAG context into single system message
             // (Gemini LangChain provider requires only one system message)
             const systemMessage = `${SYSTEM_ROOT_PROMPT}
@@ -297,7 +305,7 @@ ${ragContext}`;
             const rawContent = await this.llmProvider.generate([
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: userPrompt }
-            ]);
+            ], targetModel);
             const llmDuration = Date.now() - llmStartTime;
             console.log(`[AI Service] ✓ LLM response received (${llmDuration}ms, ${rawContent.length} chars)`);
 
@@ -407,11 +415,19 @@ ${ragContext}`;
      */
     private extractSection(text: string, sectionName: string): string | null {
         // Try different markdown formats
+        // For 'Explanation' or 'Content', we want to be less aggressive with lookaheads 
+        // to avoid truncating at sub-headers (like ##)
+        const isMainContent = ['explanation', 'content', 'detailed content'].includes(sectionName.toLowerCase());
+        
         const patterns = [
-            new RegExp(`###\\s+${sectionName}\\s+([\\s\\S]*?)(?=###|$)`, 'i'),
-            new RegExp(`##\\s+${sectionName}\\s+([\\s\\S]*?)(?=##|$)`, 'i'),
-            new RegExp(`#\\s+${sectionName}\\s+([\\s\\S]*?)(?=#|$)`, 'i'),
-            new RegExp(`\\*\\*${sectionName}\\*\\*\\s*:?\\s*([\\s\\S]*?)(?=\\*\\*|$)`, 'i'),
+            // If it's main content and starts with ###, only stop at another ### (not ##)
+            isMainContent 
+                ? new RegExp(`###\\s+${sectionName}\\s+([\\s\\S]*?)(?=###|$)`, 'i')
+                : new RegExp(`###\\s+${sectionName}\\s+([\\s\\S]*?)(?=###|##|$)`, 'i'),
+            
+            new RegExp(`##\\s+${sectionName}\\s+([\\s\\S]*?)(?=##|###|$)`, 'i'),
+            new RegExp(`#\\s+${sectionName}\\s+([\\s\\S]*?)(?=#|##|###|$)`, 'i'),
+            new RegExp(`\\*\\*${sectionName}\\*\\*\\s*:?\\s*([\\s\\S]*?)(?=\\*\\*|##|###|$)`, 'i'),
         ];
 
         for (const pattern of patterns) {
@@ -521,17 +537,29 @@ ${ragContext}`;
      * Looks for patterns like "10 questions", "15 MCQ", "20", etc.
      */
     private extractQuestionCount(query: string): number | undefined {
+        const lowerQuery = query.toLowerCase();
         const patterns = [
-            /(\d+)\s*(?:questions?|q|mcq|quiz)/i,
-            /(?:^|\s)(\d+)(?:\s|$)/  // Just a number
+            /(\d+)\s*(?:questions?|q\s|mcq|quiz|items?|prob)/i,
+            /(?:grade|level|class|standard)\s+\d+/i, // Skip class numbers
+            /(?:^|\b)(\d+)(?:\s|$)/  // Just a standalone number
         ];
         
         for (const pattern of patterns) {
+            // Special case: ignore numbers that are likely classes (e.g., "Class 10")
+            if (pattern.source.includes('grade|level')) continue;
+
             const match = query.match(pattern);
-            if (match) {
+            if (match && match[1]) {
                 const count = parseInt(match[1]);
-                // Reasonable range check (5-100 questions)
-                if (count >= 5 && count <= 100) {
+                // Reasonable range check (1-100 questions)
+                if (count >= 1 && count <= 100) {
+                    // Avoid picking up the class number if it's the only number
+                    if (lowerQuery.includes('grade') || lowerQuery.includes('class')) {
+                        const classMatch = lowerQuery.match(/(?:class|grade|standard|std)\s*(\d+)/);
+                        if (classMatch && parseInt(classMatch[1]) === count) {
+                            continue; // This number is likely the class, look for another
+                        }
+                    }
                     return count;
                 }
             }

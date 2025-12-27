@@ -1,6 +1,7 @@
 // Full updated AnalyticsDashboard.tsx with Topic/Chapter-wise performance added
 // ---------- START OF FILE ----------
 
+import * as React from "react";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -57,6 +58,8 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 const NEON_COLORS = {
     primary: "#8884d8",
@@ -89,108 +92,103 @@ interface TopicChapterData {
 // ---------------- MAIN COMPONENT ----------------
 const AnalyticsDashboard = () => {
     const { profile, profileLoading } = useAuth();
-    const [classes, setClasses] = useState<FlattenedClass[]>([]);
-    const [selectedClass, setSelectedClass] = useState<FlattenedClass | undefined>();
     const navigate = useNavigate();
     const [selectedStudent, setSelectedStudent] = useState<string>("");
-    const [loading, setLoading] = useState(true);
 
     // State for topic/chapter analytics (class level)
     const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
-    const [analyticsData, setAnalyticsData] = useState<{
-        chapters: { name: string; avgScore: number; totalQuestions: number }[];
-        topics: { name: string; avgScore: number; totalQuestions: number; chapters: string[] }[];
-    }>({ chapters: [], topics: [] });
-    const [analyticsLoading, setAnalyticsLoading] = useState(false);
-
-    // State for class insights tab
-    const [performanceTrendData, setPerformanceTrendData] = useState<ClassPerformanceTrend[]>([]);
-    const [subjectAverageData, setSubjectAverageData] = useState<SubjectAverage[]>([]);
-    const [attendanceVsMarksData, setAttendanceVsMarksData] = useState<AttendanceVsMarks[]>([]);
-    const [classInsightsLoading, setClassInsightsLoading] = useState(false);
 
     // State for student analysis tab
-    const [studentsList, setStudentsList] = useState<StudentWithScore[]>([]);
     const [studentAnalyticsData, setStudentAnalyticsData] = useState<Record<string, StudentAnalyticsData>>({});
     const [topicChapterData, setTopicChapterData] = useState<Record<string, Record<string, TopicChapterData>>>({});
-    const [studentAnalysisLoading, setStudentAnalysisLoading] = useState(false);
 
-    // State for test metrics tab
-    const [recentTestsData, setRecentTestsData] = useState<RecentTestMetrics[]>([]);
-    const [questionTypeData, setQuestionTypeData] = useState<QuestionTypeDistribution[]>([]);
-    const [testMetricsLoading, setTestMetricsLoading] = useState(false);
+    // Fetch teacher's classes using React Query
+    const { data: classes = [], isLoading: loading } = useQuery({
+        queryKey: queryKeys.teacher.classes(profile?.id ?? '', profile?.school_id ?? ''),
+        queryFn: async () => {
+            if (!profile?.id || !profile?.school_id) return [];
+            return await getTeacherClasses(profile.id, profile.school_id);
+        },
+        enabled: !!profile?.id && !!profile?.school_id,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
 
-    // Fetch class insights data when class changes
+    // Set first class as selected when classes are loaded
+    const [selectedClass, setSelectedClass] = useState<FlattenedClass | undefined>();
     useEffect(() => {
-        const fetchClassInsights = async () => {
-            if (!selectedClass) return;
+        if (classes.length > 0 && !selectedClass) {
+            setSelectedClass(classes[0]);
+        }
+    }, [classes, selectedClass]);
 
-            setClassInsightsLoading(true);
-            try {
-                const [trend, subjects, attVsMarks] = await Promise.all([
-                    getClassPerformanceTrend(selectedClass.class_id),
-                    getClassSubjectAverages(selectedClass.class_id),
-                    getAttendanceVsMarksData(selectedClass.class_id)
-                ]);
-                setPerformanceTrendData(trend);
-                setSubjectAverageData(subjects);
-                setAttendanceVsMarksData(attVsMarks);
-            } catch (error: any) {
-                console.error('Error fetching class insights:', error);
-                toast.error('Failed to load class insights');
-            } finally {
-                setClassInsightsLoading(false);
-            }
-        };
+    // Fetch class insights data using React Query
+    const { data: classInsightsData, isLoading: classInsightsLoading } = useQuery({
+        queryKey: ['class-insights', selectedClass?.class_id ?? ''],
+        queryFn: async () => {
+            if (!selectedClass) return null;
+            const [trend, subjects, attVsMarks] = await Promise.all([
+                getClassPerformanceTrend(selectedClass.class_id),
+                getClassSubjectAverages(selectedClass.class_id),
+                getAttendanceVsMarksData(selectedClass.class_id)
+            ]);
+            return { trend, subjects, attVsMarks };
+        },
+        enabled: !!selectedClass,
+        staleTime: 3 * 60 * 1000, // 3 minutes
+    });
 
-        fetchClassInsights();
-    }, [selectedClass]);
+    const performanceTrendData = classInsightsData?.trend ?? [];
+    const subjectAverageData = classInsightsData?.subjects ?? [];
+    const attendanceVsMarksData = classInsightsData?.attVsMarks ?? [];
 
-    // Fetch chapter/topic analytics data when class changes
+    // Fetch chapter/topic analytics using React Query
+    const { data: analyticsData = { chapters: [], topics: [] }, isLoading: analyticsLoading } = useQuery({
+        queryKey: ['chapter-topic-analytics', selectedClass?.class_id ?? ''],
+        queryFn: async () => {
+            if (!selectedClass) return { chapters: [], topics: [] };
+            return await getChapterTopicAnalytics(selectedClass.class_id);
+        },
+        enabled: !!selectedClass,
+        staleTime: 3 * 60 * 1000, // 3 minutes
+    });
+
+    // Fetch students list using React Query
+    const { data: studentsList = [], isLoading: studentAnalysisLoading } = useQuery({
+        queryKey: ['class-students-scores', selectedClass?.class_id ?? ''],
+        queryFn: async () => {
+            if (!selectedClass) return [];
+            return await getClassStudentsWithScores(selectedClass.class_id);
+        },
+        enabled: !!selectedClass,
+        staleTime: 2 * 60 * 1000, // 2 minutes
+    });
+
+    // Set first student as selected when students list is loaded
     useEffect(() => {
-        const fetchAnalyticsData = async () => {
-            if (!selectedClass) return;
+        if (studentsList.length > 0 && !selectedStudent) {
+            setSelectedStudent(studentsList[0].id);
+        }
+    }, [studentsList, selectedStudent]);
 
-            setAnalyticsLoading(true);
-            try {
-                const data = await getChapterTopicAnalytics(selectedClass.class_id);
-                setAnalyticsData(data);
-            } catch (error: any) {
-                console.error('Error fetching analytics:', error);
-                toast.error('Failed to load analytics data');
-            } finally {
-                setAnalyticsLoading(false);
-            }
-        };
+    // Fetch test metrics using React Query
+    const { data: testMetricsData, isLoading: testMetricsLoading } = useQuery({
+        queryKey: ['test-metrics', selectedClass?.class_id ?? ''],
+        queryFn: async () => {
+            if (!selectedClass) return null;
+            const [recentTests, questionTypes] = await Promise.all([
+                getRecentTestsMetrics(selectedClass.class_id),
+                getQuestionTypeDistribution(selectedClass.class_id)
+            ]);
+            return { recentTests, questionTypes };
+        },
+        enabled: !!selectedClass,
+        staleTime: 2 * 60 * 1000, // 2 minutes
+    });
 
-        fetchAnalyticsData();
-    }, [selectedClass]);
+    const recentTestsData = testMetricsData?.recentTests ?? [];
+    const questionTypeData = testMetricsData?.questionTypes ?? [];
 
-    // Fetch students list when class changes
-    useEffect(() => {
-        const fetchStudentsList = async () => {
-            if (!selectedClass) return;
-
-            setStudentAnalysisLoading(true);
-            try {
-                const students = await getClassStudentsWithScores(selectedClass.class_id);
-                setStudentsList(students);
-                // Set first student as selected if available
-                if (students.length > 0 && !selectedStudent) {
-                    setSelectedStudent(students[0].id);
-                }
-            } catch (error: any) {
-                console.error('Error fetching students list:', error);
-                toast.error('Failed to load students');
-            } finally {
-                setStudentAnalysisLoading(false);
-            }
-        };
-
-        fetchStudentsList();
-    }, [selectedClass]);
-
-    // Fetch individual student analytics when student selection changes
+    // Fetch individual student analytics when student selection changes (keep in useEffect due to dependency)
     useEffect(() => {
         const fetchStudentAnalytics = async () => {
             if (!selectedStudent || !selectedClass) return;
@@ -217,55 +215,35 @@ const AnalyticsDashboard = () => {
         };
 
         fetchStudentAnalytics();
-    }, [selectedStudent, selectedClass]);
+    }, [selectedStudent, selectedClass, studentAnalyticsData]);
 
-    // Fetch test metrics when class changes
-    useEffect(() => {
-        const fetchTestMetrics = async () => {
-            if (!selectedClass) return;
+    const handleExportCSV = () => {
+        if (!selectedClass) return;
 
-            setTestMetricsLoading(true);
-            try {
-                const [recentTests, questionTypes] = await Promise.all([
-                    getRecentTestsMetrics(selectedClass.class_id),
-                    getQuestionTypeDistribution(selectedClass.class_id)
-                ]);
-                setRecentTestsData(recentTests);
-                setQuestionTypeData(questionTypes);
-            } catch (error: any) {
-                console.error('Error fetching test metrics:', error);
-                toast.error('Failed to load test metrics');
-            } finally {
-                setTestMetricsLoading(false);
-            }
-        };
+        // Export student performance list
+        const header = "Student ID,Name,Avg Score,Attendance %\n";
+        const rows = studentsList.map(s => 
+            `${s.id},"${s.name.replace(/"/g, '""')}",${s.avgScore},${s.attendancePercentage}`
+        ).join("\n");
+        
+        const csvContent = header + rows;
+        const filename = `report_${selectedClass.class_name}_${new Date().toISOString().split('T')[0]}.csv`;
 
-        fetchTestMetrics();
-    }, [selectedClass]);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success("Data exported to CSV!");
+    };
 
-    // Fetch classes on mount
-    useEffect(() => {
-        const fetchClasses = async () => {
-            if (profileLoading) return;
-            if (!profile) {
-                setClasses([]);
-                setSelectedClass(undefined);
-                setLoading(false);
-                return;
-            }
-            try {
-                const res = await getTeacherClasses(profile.id, profile.school_id);
-                setClasses(res || []);
-                setSelectedClass(res?.[0]);
-            } catch {
-                toast.error("Failed to load classes");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchClasses();
-    }, [profile, profileLoading]);
+    const handlePrint = () => {
+        window.print();
+    };
 
     // Helper function to calculate linear regression trend line
     const calculateTrendLine = (data: AttendanceVsMarks[]) => {
@@ -307,9 +285,9 @@ const AnalyticsDashboard = () => {
 
     return (
         <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8 bg-background">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div className="flex items-center gap-2 sm:gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/teacher")} className="shrink-0">
+                    <Button variant="ghost" size="icon" onClick={() => navigate("/teacher")} className="shrink-0 print:hidden">
                         <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                     </Button>
                     <div className="min-w-0">
@@ -318,14 +296,26 @@ const AnalyticsDashboard = () => {
                     </div>
                 </div>
 
-                <Select value={selectedClass?.class_id} onValueChange={(id) => setSelectedClass(classes.find((c) => c.class_id === id))}>
-                    <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        {classes.map((cls) => (
-                            <SelectItem key={cls.class_id} value={cls.class_id}>{cls.class_name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto print:hidden">
+                    <Button variant="outline" size="sm" onClick={handleExportCSV} className="glass shrink-0">
+                        <TrendingUp className="w-4 h-4 mr-2" />
+                        Export CSV
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handlePrint} className="glass shrink-0">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Save PDF
+                    </Button>
+                    <div className="w-full sm:w-48 ml-0 lg:ml-2">
+                        <Select value={selectedClass?.class_id} onValueChange={(id) => setSelectedClass(classes.find((c) => c.class_id === id))}>
+                            <SelectTrigger className="glass w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                {classes.map((cls) => (
+                                    <SelectItem key={cls.class_id} value={cls.class_id}>{cls.class_name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
             </motion.div>
 
             <Tabs defaultValue="class" className="space-y-4 sm:space-y-6">

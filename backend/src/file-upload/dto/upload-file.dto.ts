@@ -7,8 +7,8 @@ export class UploadFileDto {
   title: string;
 
   @IsString()
-  @IsNotEmpty()
-  classId: string;
+  @IsOptional()
+  classId?: string;
 
   @IsString()
   @IsNotEmpty()

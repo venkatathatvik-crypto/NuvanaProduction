@@ -240,7 +240,11 @@ export class FileUploadService {
       }
     }
 
-    // Verify class belongs to school
+    // Verify class belongs to school - now REQUIRED
+    if (!dto.classId) {
+      throw new BadRequestException('Class ID is required');
+    }
+    
     const classExists = await this.prisma.classes.findFirst({
       where: { id: dto.classId, school_id: schoolId },
     });
@@ -317,7 +321,8 @@ export class FileUploadService {
     const response = {
       id: fileRecord.id,
       name: fileRecord.file_title,
-      class: fileRecord.classes.name,
+      class: fileRecord.classes?.name || 'All Classes',
+      classId: fileRecord.class_id,
       subject: fileRecord.grade_subjects.subjects_master?.name || 'Unknown',
       category: fileRecord.file_categories?.name || 'Uncategorized',
       storageUrl: publicUrl,
@@ -335,9 +340,9 @@ export class FileUploadService {
       // Process in background (don't await - non-blocking)
       this.processPdfForRag(file.buffer, {
         file_id: fileRecord.id,
-        class_id: dto.classId,
+        class_id: dto.classId || 'all',
         subject: fileRecord.grade_subjects.subjects_master?.name || 'Unknown',
-        classBand: this.inferClassBand(fileRecord.classes.name),
+        classBand: fileRecord.classes?.name ? this.inferClassBand(fileRecord.classes.name) : 'middle',
         school_id: schoolId,
       }).catch((error) => {
         console.error(`[File Upload] ❌ Background PDF processing failed for file_id: ${fileRecord.id}`, error);
@@ -425,7 +430,8 @@ export class FileUploadService {
       return {
         id: file.id,
         name: file.file_title,
-        class: file.classes.name,
+        class: file.classes?.name || 'All Classes',
+        classId: file.class_id,
         subject: file.grade_subjects.subjects_master?.name || 'Unknown',
         category: file.file_categories?.name || 'Uncategorized',
         storageUrl: publicUrl,
@@ -475,11 +481,16 @@ export class FileUploadService {
    * Filters by class_id and school_id to ensure proper access control
    */
   async getFilesByClass(classId: string, schoolId: string) {
-    // Verify class belongs to school for security
+    // Verify class belongs to school for security and get grade level
     const classExists = await this.prisma.classes.findFirst({
       where: {
         id: classId,
         school_id: schoolId,
+      },
+      include: {
+        grade_levels: {
+          select: { id: true },
+        },
       },
     });
 
@@ -487,10 +498,13 @@ export class FileUploadService {
       throw new NotFoundException('Class not found or access denied');
     }
 
+    const gradeLevelId = classExists.grade_level_id;
+
+    // Get files specifically assigned to this class
     const files = await this.prisma.files.findMany({
       where: {
-        class_id: classId,
         school_id: schoolId,
+        class_id: classId,
       },
       include: {
         file_categories: {
@@ -515,7 +529,7 @@ export class FileUploadService {
       return {
         id: file.id,
         name: file.file_title,
-        class: file.classes.name,
+        class: file.classes?.name || 'All Classes',
         subject: file.grade_subjects.subjects_master?.name || 'Unknown',
         category: file.file_categories?.name || 'Uncategorized',
         storageUrl: publicUrl,

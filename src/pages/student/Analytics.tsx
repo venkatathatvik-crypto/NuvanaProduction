@@ -37,6 +37,7 @@ import {
 } from "@/services/academic";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const NEON_COLORS = {
     primary: "#8884d8",
@@ -49,64 +50,46 @@ const StudentAnalytics = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
 
-    // State for all analytics data
-    const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState<StudentStatsSummary>({
-        overallPercentage: 0,
-        totalTests: 0,
-        bestSubject: "N/A",
-        attendancePercentage: 0
-    });
-    const [subjectData, setSubjectData] = useState<SubjectPerformance[]>([]);
-    const [trendData, setTrendData] = useState<ProgressTrendPoint[]>([]);
-    const [strengths, setStrengths] = useState<StrengthWeaknessItem[]>([]);
-    const [weaknesses, setWeaknesses] = useState<StrengthWeaknessItem[]>([]);
-    const [chapterTopicData, setChapterTopicData] = useState<StudentChapterTopicAnalytics>({
-        chapters: [],
-        topics: []
+    const queryClient = useQueryClient();
+
+    // Stats Summary Query
+    const { data: stats = { overallPercentage: 0, totalTests: 0, bestSubject: "N/A", attendancePercentage: 0 }, isLoading: statsLoading } = useQuery({
+        queryKey: ["student-analytics-stats", profile?.id],
+        queryFn: () => getStudentStatsSummary(profile!.id),
+        enabled: !!profile,
     });
 
-    // Fetch all analytics data
-    useEffect(() => {
-        const fetchAnalytics = async () => {
-            if (profileLoading) return;
-            if (!profile) {
-                setLoading(false);
-                return;
-            }
+    // Subject Performance Query
+    const { data: subjectData = [], isLoading: subjectLoading } = useQuery({
+        queryKey: ["student-analytics-subjects", profile?.id],
+        queryFn: () => getStudentSubjectPerformance(profile!.id),
+        enabled: !!profile,
+    });
 
-            try {
-                // Fetch all data in parallel
-                const [
-                    statsResult,
-                    subjectResult,
-                    trendResult,
-                    strengthsResult,
-                    chapterTopicResult
-                ] = await Promise.all([
-                    getStudentStatsSummary(profile.id),
-                    getStudentSubjectPerformance(profile.id),
-                    getStudentProgressTrend(profile.id),
-                    getStudentStrengthsWeaknesses(profile.id),
-                    getStudentChapterTopicAnalytics(profile.id)
-                ]);
+    // Progress Trend Query
+    const { data: trendData = [], isLoading: trendLoading } = useQuery({
+        queryKey: ["student-analytics-trend", profile?.id],
+        queryFn: () => getStudentProgressTrend(profile!.id),
+        enabled: !!profile,
+    });
 
-                setStats(statsResult);
-                setSubjectData(subjectResult);
-                setTrendData(trendResult);
-                setStrengths(strengthsResult.strengths);
-                setWeaknesses(strengthsResult.weaknesses);
-                setChapterTopicData(chapterTopicResult);
-            } catch (error) {
-                console.error("Error fetching analytics:", error);
-                toast.error("Failed to load analytics data");
-            } finally {
-                setLoading(false);
-            }
-        };
+    // Strengths & Weaknesses Query
+    const { data: swData = { strengths: [], weaknesses: [] }, isLoading: swLoading } = useQuery({
+        queryKey: ["student-analytics-sw", profile?.id],
+        queryFn: () => getStudentStrengthsWeaknesses(profile!.id),
+        enabled: !!profile,
+    });
 
-        fetchAnalytics();
-    }, [profile, profileLoading]);
+    // Chapter & Topic Analytics Query
+    const { data: chapterTopicData = { chapters: [], topics: [] }, isLoading: ctLoading } = useQuery({
+        queryKey: ["student-analytics-ct", profile?.id],
+        queryFn: () => getStudentChapterTopicAnalytics(profile!.id),
+        enabled: !!profile,
+    });
+
+    const strengths = swData.strengths || [];
+    const weaknesses = swData.weaknesses || [];
+    const loading = statsLoading || subjectLoading || trendLoading || swLoading || ctLoading;
 
     if (loading || profileLoading) {
         return (

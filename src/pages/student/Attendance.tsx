@@ -27,6 +27,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface SubjectAttendance {
   subject: string;
@@ -40,69 +41,42 @@ interface SubjectAttendance {
 const Attendance = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [overallAttendance, setOverallAttendance] = useState(0);
-  const [subjectAttendance, setSubjectAttendance] = useState<
-    SubjectAttendance[]
-  >([]);
-  const [monthlySummary, setMonthlySummary] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [monthlyData, setMonthlyData] = useState<any>(null);
-  const [loadingMonthly, setLoadingMonthly] = useState(false);
 
-  useEffect(() => {
-    const loadAttendanceData = async () => {
-      if (!profile?.id) {
-        setLoading(false);
-        return;
-      }
+  // 1. Overall Attendance
+  const { data: overallAttendanceRaw, isLoading: loadingOverall } = useQuery({
+    queryKey: ['student-attendance-percent', profile?.id],
+    queryFn: () => getOverallAttendancePercentage(profile!.id),
+    enabled: !!profile?.id,
+  });
+  const overallAttendance = overallAttendanceRaw !== undefined ? Math.round(overallAttendanceRaw * 10) / 10 : 0;
 
-      try {
-        setLoading(true);
-        const [overall, bySubject, summary] = await Promise.all([
-          getOverallAttendancePercentage(profile.id),
-          getStudentAttendanceBySubject(profile.id),
-          getStudentMonthlyAttendanceSummary(profile.id),
-        ]);
+  // 2. Subject Attendance
+  const { data: subjectAttendance = [], isLoading: loadingSubjects } = useQuery({
+    queryKey: ['student-attendance-by-subject', profile?.id],
+    queryFn: () => getStudentAttendanceBySubject(profile!.id),
+    enabled: !!profile?.id,
+  });
 
-        setOverallAttendance(Math.round(overall * 10) / 10);
-        setSubjectAttendance(bySubject);
-        setMonthlySummary(summary);
-        
-        // Don't auto-select a month - show monthly overview first
-      } catch (error) {
-        console.error("Error loading attendance data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // 3. Monthly Summary
+  const { data: monthlySummary = [], isLoading: loadingSummary } = useQuery({
+    queryKey: ['student-attendance-monthly-summary', profile?.id],
+    queryFn: () => getStudentMonthlyAttendanceSummary(profile!.id),
+    enabled: !!profile?.id,
+  });
 
-    loadAttendanceData();
-  }, [profile?.id]);
-
-  // Load monthly data when month is selected
-  useEffect(() => {
-    const loadMonthlyData = async () => {
-      if (!profile?.id || !selectedMonth) {
-        setMonthlyData(null);
-        return;
-      }
-
+  // 4. Monthly Data (Enabled when selectedMonth changes)
+  const { data: monthlyData, isLoading: loadingMonthly } = useQuery({
+    queryKey: ['student-attendance-monthly', profile?.id, selectedMonth],
+    queryFn: async () => {
       const [year, month] = selectedMonth.split('-').map(Number);
-      try {
-        setLoadingMonthly(true);
-        const data = await getStudentMonthlyAttendance(profile.id, year, month);
-        setMonthlyData(data);
-      } catch (error) {
-        console.error("Error loading monthly attendance:", error);
-        setMonthlyData(null);
-      } finally {
-        setLoadingMonthly(false);
-      }
-    };
+      return getStudentMonthlyAttendance(profile!.id, year, month);
+    },
+    enabled: !!profile?.id && !!selectedMonth,
+  });
 
-    loadMonthlyData();
-  }, [profile?.id, selectedMonth]);
+  const loading = loadingOverall || loadingSubjects || loadingSummary;
 
   // Prepare chart data for the selected month
   const chartData = useMemo(() => {
@@ -421,18 +395,11 @@ const Attendance = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={async () => {
+                              onClick={() => {
                                 if (profile?.id && selectedMonth) {
-                                  const [year, month] = selectedMonth.split('-').map(Number);
-                                  setLoadingMonthly(true);
-                                  try {
-                                    const data = await getStudentMonthlyAttendance(profile.id, year, month);
-                                    setMonthlyData(data);
-                                  } catch (error) {
-                                    console.error("Error refreshing attendance:", error);
-                                  } finally {
-                                    setLoadingMonthly(false);
-                                  }
+                                  queryClient.invalidateQueries({
+                                    queryKey: ['student-attendance-monthly', profile.id, selectedMonth]
+                                  });
                                 }
                               }}
                             >
@@ -479,8 +446,8 @@ const Attendance = () => {
                             const isCurrentMonth = monthlyData.year === today.getFullYear() && 
                                                    monthlyData.month === today.getMonth() + 1;
                             return isCurrentMonth 
-                              ? "Showing days up to tomorrow. Weekends are included for the current month."
-                              : "Showing weekdays only (weekends excluded) for past months.";
+                              ? "Showing days up to tomorrow. Sundays are excluded."
+                              : "Showing days excluding Sundays for past months.";
                           })()}
                         </p>
                       </div>
@@ -517,8 +484,8 @@ const Attendance = () => {
                                       <p className="text-muted-foreground text-sm">No record</p>
                                     )}
                                     {data.isSaturday && (
-                                      <p className="text-xs text-amber-500 mt-1">
-                                        <span className="text-amber-500">●</span> Weekend (Saturday)
+                                      <p className="text-xs text-secondary mt-1">
+                                        <span className="text-secondary">●</span> Saturday
                                       </p>
                                     )}
                                   </div>
@@ -555,8 +522,8 @@ const Attendance = () => {
                             return (
                               <>
                                 <div className="flex items-center gap-1">
-                                  <div className="w-3 h-3 bg-amber-500 rounded"></div>
-                                  <span>Weekend (Saturday)</span>
+                                  <div className="w-3 h-3 bg-secondary rounded"></div>
+                                  <span>Saturday</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <div className="w-3 h-3 bg-cyan-500 rounded"></div>

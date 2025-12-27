@@ -6,6 +6,7 @@ export interface StudentAttendance {
   name: string;
   roll_number: string;
   present: boolean;
+  status?: string;
 }
 
 export interface AttendanceRecord {
@@ -28,7 +29,7 @@ export const getStudentsByClass = async (
 export const getAttendanceForDate = async (
   classId: string,
   attendanceDate: string
-): Promise<Record<string, boolean>> => {
+): Promise<Record<string, boolean | string>> => {
   return attendanceApi.getAttendanceForDate(classId, attendanceDate);
 };
 

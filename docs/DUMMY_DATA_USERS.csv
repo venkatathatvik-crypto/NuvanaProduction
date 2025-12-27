@@ -1,0 +1,27 @@
+name,email,role_id,password,roll_number,parent_contact,admission_date,bio,specialization,joining_date
+John Anderson,admin@greenwood.edu,2,Test@123,,,,,,
+Sarah Johnson,sarah.math@greenwood.edu,3,Test@123,,,,Mathematics teacher with 10 years experience,Mathematics & Algebra,2020-06-15
+Mike Williams,mike.physics@greenwood.edu,3,Test@123,,,,Physics teacher specializing in mechanics,Physics & Mechanics,2019-08-20
+Emily Davis,emily.chem@greenwood.edu,3,Test@123,,,,Chemistry teacher,Organic Chemistry,2021-01-10
+David Brown,david.bio@greenwood.edu,3,Test@123,,,,Biology teacher,Botany & Zoology,2018-03-25
+Lisa White,lisa.eng@greenwood.edu,3,Test@123,,,,English literature teacher,English Literature,2020-09-01
+Tom Wilson,tom.cs@greenwood.edu,3,Test@123,,,,Computer Science teacher,Programming & AI,2022-01-15
+Anna Taylor,anna.hist@greenwood.edu,3,Test@123,,,,History teacher,World History,2019-07-10
+James Martin,james.geo@greenwood.edu,3,Test@123,,,,Geography teacher,Physical Geography,2020-02-20
+Rachel Green,rachel.art@greenwood.edu,3,Test@123,,,,Art teacher,Fine Arts,2021-05-12
+Coach Ryan,coach.ryan@greenwood.edu,3,Test@123,,,,Physical Education coach,Sports & Fitness,2018-11-05
+Emma Davis,emma.student1@greenwood.edu,4,Test@123,10A001,9876543210,2023-04-01,,,
+Liam Brown,liam.student2@greenwood.edu,4,Test@123,10A002,9876543211,2023-04-01,,,
+Olivia Wilson,olivia.student3@greenwood.edu,4,Test@123,10A003,9876543212,2023-04-01,,,
+Noah Martinez,noah.student4@greenwood.edu,4,Test@123,10A004,9876543213,2023-04-01,,,
+Ava Anderson,ava.student5@greenwood.edu,4,Test@123,10A005,9876543214,2023-04-01,,,
+Sophia Thomas,sophia.student6@greenwood.edu,4,Test@123,10B001,9876543215,2023-04-01,,,
+Jackson Taylor,jackson.student7@greenwood.edu,4,Test@123,10B002,9876543216,2023-04-01,,,
+Isabella Moore,isabella.student8@greenwood.edu,4,Test@123,10B003,9876543217,2023-04-01,,,
+Lucas Jackson,lucas.student9@greenwood.edu,4,Test@123,10B004,9876543218,2023-04-01,,,
+Mia White,mia.student10@greenwood.edu,4,Test@123,10B005,9876543219,2023-04-01,,,
+Ethan Harris,ethan.student11@greenwood.edu,4,Test@123,9A001,9876543220,2023-04-01,,,
+Charlotte Clark,charlotte.student12@greenwood.edu,4,Test@123,9A002,9876543221,2023-04-01,,,
+Aiden Lewis,aiden.student13@greenwood.edu,4,Test@123,9A003,9876543222,2023-04-01,,,
+Amelia Walker,amelia.student14@greenwood.edu,4,Test@123,9A004,9876543223,2023-04-01,,,
+Harper Hall,harper.student15@greenwood.edu,4,Test@123,9A005,9876543224,2023-04-01,,,

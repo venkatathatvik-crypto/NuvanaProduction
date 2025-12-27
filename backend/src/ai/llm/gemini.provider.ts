@@ -11,96 +11,163 @@ import { LLMMessage, LLMProvider } from './llm.provider.interface';
 @Injectable()
 export class GeminiProvider implements LLMProvider, OnModuleInit {
     private apiKey: string | null = null;
-    private modelName: string;
-    private model: ChatGoogleGenerativeAI | null = null;
+    private flashModelName: string;
+    private proModelName: string;
+    private flashModel: ChatGoogleGenerativeAI | null = null;
+    private proModel: ChatGoogleGenerativeAI | null = null;
+    private modelCache: Map<string, ChatGoogleGenerativeAI> = new Map();
     private readonly logger = new Logger(GeminiProvider.name);
 
     constructor(private configService: ConfigService) {
         const rawApiKey = this.configService.get<string>('GEMINI_API_KEY');
         this.apiKey = rawApiKey ? rawApiKey.trim() : null;
-        
-        // Use gemini-2.5-flash as default (from official docs)
-        // Fallback to gemini-pro for backward compatibility
-        this.modelName = this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.5-flash';
+
+        // Use Gemini 3 preview models
+        this.flashModelName = this.configService.get<string>('GEMINI_FLASH_MODEL') || 'gemini-3-flash-preview';
+        this.proModelName = this.configService.get<string>('GEMINI_PRO_MODEL') || 'gemini-3-pro-preview';
 
         if (this.apiKey) {
             this.logger.log(`Initialized Gemini with Key: ${this.apiKey.substring(0, 5)}...${this.apiKey.substring(this.apiKey.length - 4)}`);
-            this.logger.log(`Using model: ${this.modelName}`);
+            this.logger.log(`Flash Model: ${this.flashModelName}`);
+            this.logger.log(`Pro Model: ${this.proModelName}`);
         } else {
             this.logger.warn('GEMINI_API_KEY is not set. GeminiProvider will fail if used.');
         }
     }
 
     onModuleInit() {
-        if (!this.apiKey || this.apiKey.trim() === '') {
-            this.logger.error('❌ GEMINI_API_KEY is missing or empty. AI features will not work.');
-            this.logger.error('   Please set GEMINI_API_KEY in your .env file');
-            return;
-        }
+        if (!this.apiKey) return;
 
         try {
-            // Initialize LangChain ChatGoogleGenerativeAI model
-            this.model = new ChatGoogleGenerativeAI({
-                model: this.modelName,
-                apiKey: this.apiKey,
-                temperature: 0.7, // Default temperature, can be made configurable
-                maxOutputTokens: 8192, // Default max tokens
-            });
-
-            this.logger.log('✓ GeminiProvider ready for requests (using LangChain)');
-            this.logger.log(`   Model: ${this.modelName}`);
+            // Initialize default Flash model
+            this.flashModel = this.createModel(this.flashModelName);
+            this.logger.log('✓ Gemini Flash Provider ready (v1beta)');
         } catch (error) {
-            this.logger.error('❌ Failed to initialize ChatGoogleGenerativeAI:', error);
-            this.model = null;
+            this.logger.error('❌ Failed to initialize Gemini Flash model:', error);
         }
     }
 
+    private createModel(modelName: string): ChatGoogleGenerativeAI {
+        return new ChatGoogleGenerativeAI({
+            model: modelName,
+            apiKey: this.apiKey!,
+            apiVersion: 'v1beta', // Required for Gemini 3 preview models
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+        });
+    }
+
     /**
-     * Generate content using LangChain ChatGoogleGenerativeAI
-     * Converts LLMMessage[] to LangChain message format and invokes the model
+     * Heuristic to determine if a task is complex enough to warrant the Pro model
      */
-    async generate(messages: LLMMessage[]): Promise<string> {
-        if (!this.apiKey) {
-            throw new Error('Gemini API key not initialized. Check GEMINI_API_KEY.');
+    private shouldUseProModel(messages: LLMMessage[]): boolean {
+        // Allow disabling Pro entirely via env var if quota is exhausted
+        if (this.configService.get<string>('DISABLE_GEMINI_PRO') === 'true') return false;
+
+        const totalContent = messages.map(m => m.content).join(' ');
+        
+        // Criteria for Pro model:
+        // 1. Long context (increased threshold: 12000 chars)
+        // Gemini 1.5/3 Flash handles up to 1M tokens, but reasoning degrades slightly
+        if (totalContent.length > 12000) return true;
+
+        // 2. Keywords indicating extremely complex reasoning
+        // Removed 'grade paper' and 'detailed lesson plan' as Flash (especially v3) is excellent at these
+        const complexKeywords = [
+            'critical analysis', 'advanced mathematics', 'complex logic', 
+            'coding architecture', 'adversarial testing'
+        ];
+
+        return complexKeywords.some(keyword => totalContent.toLowerCase().includes(keyword));
+    }
+
+    /**
+     * Merges system messages into the first human message for better API compatibility
+     */
+    private convertMessages(messages: LLMMessage[]): (HumanMessage | SystemMessage)[] {
+        const systemPrompts = messages
+            .filter(msg => msg.role === 'system')
+            .map(msg => msg.content)
+            .join('\n\n');
+
+        const langchainMessages: (HumanMessage | SystemMessage)[] = [];
+        let firstHumanPassed = false;
+
+        messages.forEach(msg => {
+            if (msg.role === 'user') {
+                if (!firstHumanPassed && systemPrompts) {
+                    langchainMessages.push(new HumanMessage(`${systemPrompts}\n\n---\n\n${msg.content}`));
+                    firstHumanPassed = true;
+                } else {
+                    langchainMessages.push(new HumanMessage(msg.content));
+                    firstHumanPassed = true;
+                }
+            } else if (msg.role === 'assistant') {
+                langchainMessages.push(new HumanMessage(msg.content));
+            }
+        });
+
+        if (!firstHumanPassed && systemPrompts) {
+            langchainMessages.push(new HumanMessage(systemPrompts));
         }
 
-        if (!this.model) {
-            throw new Error('ChatGoogleGenerativeAI model not initialized. Check GEMINI_API_KEY.');
+        return langchainMessages;
+    }
+
+    async generate(messages: LLMMessage[], modelOverride?: string): Promise<string> {
+        if (!this.apiKey) {
+            throw new Error('Gemini API key not initialized.');
+        }
+
+        let targetModelName = modelOverride;
+        let activeModel: ChatGoogleGenerativeAI | null = null;
+
+        // Determine active model based on override or routing logic
+        if (modelOverride) {
+            if (this.modelCache.has(modelOverride)) {
+                activeModel = this.modelCache.get(modelOverride)!;
+            } else {
+                activeModel = this.createModel(modelOverride);
+                this.modelCache.set(modelOverride, activeModel);
+            }
+        } else if (this.shouldUseProModel(messages)) {
+            targetModelName = this.proModelName;
+            if (!this.proModel) {
+                this.proModel = this.createModel(this.proModelName);
+            }
+            activeModel = this.proModel;
+        } else {
+            targetModelName = this.flashModelName;
+            activeModel = this.flashModel;
+        }
+
+        if (!activeModel) {
+            throw new Error(`Gemini model [${targetModelName}] failed to initialize.`);
         }
 
         try {
-            // Convert LLMMessage[] to LangChain message format
-            const langchainMessages = messages.map(msg => {
-                if (msg.role === 'system') {
-                    return new SystemMessage(msg.content);
-                } else if (msg.role === 'user') {
-                    return new HumanMessage(msg.content);
-                } else {
-                    // For assistant messages, use HumanMessage as fallback
-                    // (LangChain ChatGoogleGenerativeAI handles conversation context)
-                    return new HumanMessage(msg.content);
-                }
-            });
-
-            // Invoke the model with LangChain messages
-            const response = await this.model.invoke(langchainMessages);
-
-            // Extract text content from LangChain response
-            if (!response || !response.content) {
-                throw new Error('Gemini returned empty content in response.');
-            }
+            this.logger.log(`[Gemini] Routing to: ${targetModelName}`);
+            const langchainMessages = this.convertMessages(messages);
+            const response = await activeModel.invoke(langchainMessages);
 
             const text = typeof response.content === 'string' 
                 ? response.content 
-                : String(response.content);
+                : JSON.stringify(response.content);
 
             if (!text || text.trim().length === 0) {
                 throw new Error('Gemini returned empty text.');
             }
 
             return text;
-        } catch (error) {
-            this.logger.error('Gemini generation failed:', error);
+        } catch (error: any) {
+            this.logger.error(`[Gemini] Generation failed (${targetModelName}):`, error.message);
+            
+            // Fallback: If Pro fails, try Flash (unless Flash was already the target)
+            if (targetModelName === this.proModelName && this.flashModel) {
+                this.logger.warn(`[Gemini] Pro model failed, falling back to Flash: ${this.flashModelName}`);
+                return this.generate(messages, this.flashModelName);
+            }
+            
             throw error;
         }
     }

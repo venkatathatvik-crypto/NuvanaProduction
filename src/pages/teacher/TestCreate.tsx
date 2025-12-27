@@ -6,12 +6,14 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
 import { createTeacherTest, getGradeSubjectIdBySubjectName, getExamTypeIdByName } from "@/services/academic";
+import { useQueryClient } from "@tanstack/react-query";
 
 const TestCreate = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const defaultType = searchParams.get("type");
     const { profile } = useAuth();
+    const queryClient = useQueryClient();
 
     const handleSubmit = async (data: {
         title: string;
@@ -39,10 +41,9 @@ const TestCreate = () => {
         }
 
         try {
-            // Convert subject name to grade_subject_id
-            // getGradeSubjectIdBySubjectName already handles object extraction and returns string | null
-            const gradeSubjectId = await getGradeSubjectIdBySubjectName(data.classId, data.subject);
-            console.log('[TestCreate] gradeSubjectId received:', gradeSubjectId, 'type:', typeof gradeSubjectId);
+            // gradeSubjectId is now set directly in the form when subject is selected
+            const gradeSubjectId = data.gradeSubjectId;
+            console.log('[TestCreate] gradeSubjectId from form:', gradeSubjectId, 'type:', typeof gradeSubjectId);
             
             // Validate it's a non-empty string
             if (!gradeSubjectId || typeof gradeSubjectId !== 'string' || gradeSubjectId.trim() === '') {
@@ -117,7 +118,6 @@ const TestCreate = () => {
                 description: data.description,
                 durationMinutes: data.durationMinutes,
                 isPublished: data.isPublished,
-                classId: data.classId,
                 gradeSubjectId: gradeSubjectId,
                 examTypeId,
                 teacherId: profile.id,
@@ -129,16 +129,25 @@ const TestCreate = () => {
                 })),
             };
             
-            console.log('[TestCreate] Sending test data to createTeacherTest:', {
-                ...testData,
-                questions: `[${questions.length} questions]`
-            });
+            console.log('[TestCreate] Sending test data to createTeacherTest for', data.classIds.length, 'classes');
             console.log('[TestCreate] gradeSubjectId in testData:', testData.gradeSubjectId, 'type:', typeof testData.gradeSubjectId);
             console.log('[TestCreate] examTypeId in testData:', testData.examTypeId, 'type:', typeof testData.examTypeId);
 
-            await createTeacherTest(testData);
+            // Create test for each selected class
+            const testPromises = data.classIds.map(classId =>
+                createTeacherTest({
+                    ...testData,
+                    classId: classId,
+                })
+            );
 
-            toast.success("Test created successfully");
+            await Promise.all(testPromises);
+
+            // Invalidate caches so students see the test immediately
+            queryClient.invalidateQueries({ queryKey: ['student-tests'] });
+            queryClient.invalidateQueries({ queryKey: ['teacher-tests'] });
+
+            toast.success(`Test created successfully for ${data.classIds.length} class(es)!`);
             navigate("/teacher/tests");
         } catch (error: unknown) {
             console.error("Error creating test:", error);

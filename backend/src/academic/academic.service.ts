@@ -22,6 +22,7 @@ import {
   UpdateExamTypeDto,
   CreatePeriodDto,
   UpdatePeriodDto,
+  SaveManualMarksDto,
 } from "./dto";
 
 @Injectable()
@@ -100,8 +101,9 @@ export class AcademicService {
 
     await this.prisma.grade_levels.delete({ where: { id } });
     
-    // Invalidate grades cache
+    // Invalidate grades and classes cache
     await this.cacheManager.del(`school:${schoolId}:grades`);
+    await this.cacheManager.del(`school:${schoolId}:classes`);
     
     return { message: "Grade deleted successfully" };
   }
@@ -481,6 +483,109 @@ export class AcademicService {
     });
   }
 
+  /**
+   * Get all classes where a teacher teaches, including:
+   * 1. Classes where teacher is assigned as class teacher (teacher_classes)
+   * 2. Classes where teacher teaches subjects (via teacher_subjects -> grade_subjects -> grade_levels -> classes)
+   * 
+   * Returns classes with relationship type indicator
+   */
+  async getAllTeachingClassesByTeacher(teacherId: string, schoolId: string) {
+    // 1. Get classes where teacher is class teacher
+    const classTeacherAssignments = await this.prisma.teacher_classes.findMany({
+      where: { teacher_id: teacherId, school_id: schoolId },
+      include: {
+        classes: {
+          select: { 
+            id: true, 
+            name: true,
+            grade_level_id: true,
+            grade_levels: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    });
+
+    // 2. Get all subjects teacher teaches
+    const teacherSubjects = await this.prisma.teacher_subjects.findMany({
+      where: { teacher_id: teacherId, school_id: schoolId },
+      include: {
+        grade_subjects: {
+          include: {
+            grade_levels: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    });
+
+    // 3. Get unique grade level IDs from teacher's subjects
+    const gradeLevelIds = new Set(
+      teacherSubjects.map(ts => ts.grade_subjects.grade_level_id)
+    );
+
+    // 4. Get all classes for those grade levels
+    const subjectTeachingClasses = gradeLevelIds.size > 0
+      ? await this.prisma.classes.findMany({
+          where: {
+            school_id: schoolId,
+            grade_level_id: { in: Array.from(gradeLevelIds) },
+          },
+          include: {
+            grade_levels: {
+              select: { id: true, name: true },
+            },
+          },
+        })
+      : [];
+
+    // 5. Combine and deduplicate classes, marking relationship type
+    const classMap = new Map<string, {
+      id: string;
+      name: string;
+      grade_level_id: number;
+      grade_levels: { id: number; name: string };
+      isClassTeacher: boolean;
+      isSubjectTeacher: boolean;
+    }>();
+
+    // Add class teacher assignments
+    classTeacherAssignments.forEach(tc => {
+      if (tc.classes) {
+        classMap.set(tc.classes.id, {
+          ...tc.classes,
+          isClassTeacher: true,
+          isSubjectTeacher: false,
+        });
+      }
+    });
+
+    // Add subject teaching classes (merge if already exists)
+    subjectTeachingClasses.forEach(cls => {
+      const existing = classMap.get(cls.id);
+      if (existing) {
+        // Already exists as class teacher, mark as both
+        existing.isSubjectTeacher = true;
+      } else {
+        // New class, only subject teacher
+        classMap.set(cls.id, {
+          id: cls.id,
+          name: cls.name,
+          grade_level_id: cls.grade_level_id,
+          grade_levels: cls.grade_levels,
+          isClassTeacher: false,
+          isSubjectTeacher: true,
+        });
+      }
+    });
+
+    // Convert map to array
+    return Array.from(classMap.values());
+  }
+
   async deleteTeacherClass(id: string, schoolId: string) {
     // Verify assignment belongs to school
     const assignment = await this.prisma.teacher_classes.findFirst({
@@ -585,6 +690,35 @@ export class AcademicService {
         },
       },
     });
+  }
+
+  async getAllSubjectsByTeacher(teacherId: string, schoolId: string) {
+    const teacherSubjects = await this.prisma.teacher_subjects.findMany({
+      where: { teacher_id: teacherId, school_id: schoolId },
+      include: {
+        grade_subjects: {
+          include: {
+            subjects_master: {
+              select: { id: true, name: true },
+            },
+            grade_levels: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    });
+
+    // Transform to a more usable format for file upload
+    return teacherSubjects.map((ts) => ({
+      id: ts.grade_subject_id,
+      grade_subject_id: ts.grade_subject_id,
+      subject_id: ts.grade_subjects.subject_master_id,
+      subject_name: ts.grade_subjects.subjects_master.name,
+      grade_id: ts.grade_subjects.grade_level_id,
+      grade_name: ts.grade_subjects.grade_levels.name,
+      display_name: `${ts.grade_subjects.subjects_master.name} (${ts.grade_subjects.grade_levels.name})`,
+    }));
   }
 
   async deleteTeacherSubject(id: string, schoolId: string) {
@@ -1096,5 +1230,87 @@ export class AcademicService {
     }
 
     return examType.id;
+  }
+
+  async saveManualMarks(dto: SaveManualMarksDto, teacherId: string, schoolId: string) {
+    // 1. Create a "Shadow" Test for this manual assessment
+    const test = await this.prisma.tests.create({
+      data: {
+        school_id: schoolId,
+        title: dto.title,
+        description: dto.description || 'Manual assessment entry',
+        duration_minutes: 0,
+        is_published: true,
+        class_id: dto.class_id,
+        grade_subject_id: dto.grade_subject_id,
+        exam_type_id: dto.exam_type_id,
+        teacher_id: teacherId,
+        due_date: new Date(),
+      },
+    });
+
+    // 2. Add a dummy question for max marks reference in analytics
+    await this.prisma.questions.create({
+      data: {
+        test_id: test.id,
+        question_text: 'Manual Assessment',
+        marks: dto.max_marks,
+        question_type: 'Short Answer' as any,
+      },
+    });
+
+    // 3. Create submissions for each student
+    const result = await Promise.all(
+      dto.marks.map(async (mark) => {
+        return this.prisma.test_submissions.create({
+          data: {
+            test_id: test.id,
+            student_id: mark.student_id,
+            is_graded: true,
+            total_marks_obtained: mark.marks_obtained,
+            submitted_at: new Date(),
+          },
+        });
+      }),
+    );
+
+    // Invalidate caches
+    await this.cacheManager.del(`school:${schoolId}:teacher:${teacherId}:grading-queue`);
+    // Invalidate student marks caches
+    await Promise.all(
+      dto.marks.map(m => this.cacheManager.del(`school:${schoolId}:student:${m.student_id}:marks`))
+    );
+    
+    return {
+      success: true,
+      test_id: test.id,
+      submissions_count: result.length,
+    };
+  }
+
+  async getStudentsByClassId(classId: string, schoolId: string) {
+    return this.prisma.profiles.findMany({
+      where: {
+        student_details: {
+          class_id: classId,
+        },
+        school_id: schoolId,
+        role_id: 4, // Student role
+      },
+      select: {
+        id: true,
+        name: true,
+        student_details: {
+          select: {
+            roll_number: true,
+          },
+        },
+      },
+      orderBy: {
+        student_details: {
+          roll_number: 'asc',
+        },
+      },
+    });
   }
 }

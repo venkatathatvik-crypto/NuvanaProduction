@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   MarkAttendanceDto,
@@ -94,10 +94,10 @@ export class AttendanceService {
       },
     });
 
-    // Create a map of student_id to present/absent
-    const attendanceMap: AttendanceMapResponseDto = {};
+    // Create a map of student_id to status
+    const attendanceMap: Record<string, string> = {};
     attendanceRecords.forEach((record) => {
-      attendanceMap[record.student_id] = record.status === 'present';
+      attendanceMap[record.student_id] = record.status;
     });
 
     return attendanceMap;
@@ -110,30 +110,53 @@ export class AttendanceService {
     const studentIds = dto.students.map((s) => s.id);
     const attendanceDate = new Date(dto.attendanceDate);
 
+    // Validate that the date is not a Sunday (0)
+    if (attendanceDate.getDay() === 0) {
+      throw new BadRequestException('Attendance cannot be marked for Sundays');
+    }
+
     // Delete existing attendance records for this date and students
+    // NOTE: period_id logic is prepared but commented out as per user request to avoid DB issues
     await this.prisma.attendance.deleteMany({
       where: {
         student_id: { in: studentIds },
         attendance_date: attendanceDate,
         school_id: schoolId,
+        // ...(dto.periodId && { period_id: dto.periodId }),
       },
     });
 
     // Create new attendance records
-    const attendanceRecords = dto.students.map((student) => ({
-      student_id: student.id,
-      attendance_date: attendanceDate,
-      status: student.present ? 'present' : 'absent',
-      taken_by: dto.teacherId,
-      school_id: schoolId,
-      recorded_at: new Date(),
-    }));
+    const attendanceRecords = dto.students.map((student) => {
+      let status: any = 'absent';
+      
+      if (student.status) {
+        status = student.status;
+      } else if (student.present !== undefined) {
+        status = student.present ? 'present' : 'absent';
+      }
 
-    await this.prisma.attendance.createMany({
-      data: attendanceRecords as any,
+      const record: any = {
+        student_id: student.id,
+        attendance_date: attendanceDate,
+        status,
+        taken_by: dto.teacherId,
+        school_id: schoolId,
+        recorded_at: new Date(),
+      };
+
+      // if (dto.periodId) record.period_id = dto.periodId;
+
+      return record;
     });
 
-    const presentCount = dto.students.filter((s) => s.present).length;
+    await this.prisma.attendance.createMany({
+      data: attendanceRecords,
+    });
+
+    const presentCount = dto.students.filter((s) => 
+      s.status === 'present' || s.status === 'late' || s.present
+    ).length;
 
     return {
       message: 'Attendance marked successfully',
@@ -153,7 +176,13 @@ export class AttendanceService {
   }> {
     const studentIds = dto.students.map((s: any) => s.id);
     const attendanceDates = dto.attendanceDates.map(
-      (dateStr: string) => new Date(dateStr)
+      (dateStr: string) => {
+        const date = new Date(dateStr);
+        if (date.getDay() === 0) {
+          throw new BadRequestException(`Attendance cannot be marked for Sunday: ${dateStr}`);
+        }
+        return date;
+      }
     );
 
     // Delete existing attendance records for all date-student combinations
@@ -172,7 +201,7 @@ export class AttendanceService {
         allRecords.push({
           student_id: student.id,
           attendance_date: date,
-          status: student.present ? 'present' : 'absent',
+          status: student.status || (student.present ? 'present' : 'absent'),
           taken_by: dto.teacherId,
           school_id: schoolId,
           recorded_at: new Date(),
@@ -618,8 +647,8 @@ export class AttendanceService {
       const dayOfWeek = currentDate.getDay();
       const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek];
       
-      // Check if it's a weekend
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      // Check if it's a Sunday
+      const isSunday = dayOfWeek === 0;
       
       // For current month: show up to today, and include tomorrow
       if (isCurrentMonth) {
@@ -627,8 +656,8 @@ export class AttendanceService {
           continue; // Skip future days beyond tomorrow
         }
       } else {
-        // For older months: skip weekends (Saturdays and Sundays)
-        if (isWeekend) {
+        // For older months: skip Sundays only
+        if (isSunday) {
           continue;
         }
       }
@@ -640,7 +669,8 @@ export class AttendanceService {
         day: day,
         dayName: dayName,
         status: status || null, // null means no attendance record
-        isWeekend: isWeekend,
+        isWeekend: dayOfWeek === 0, // Only Sunday is "weekend" for exclusion logic
+        isSaturday: dayOfWeek === 6,
         present: status === 'present' ? 1 : 0,
         absent: status === 'absent' ? 1 : 0,
       });

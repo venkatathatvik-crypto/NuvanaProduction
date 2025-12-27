@@ -9,6 +9,16 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminGrades() {
   const { profile } = useAuth();
@@ -18,6 +28,8 @@ export default function AdminGrades() {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
   const { data: grades = [], isLoading: loading } = useQuery({
     queryKey: ['grades'],
@@ -35,7 +47,12 @@ export default function AdminGrades() {
       await academicService.createGrade(newGrade.trim());
       toast.success("Grade created");
       setNewGrade("");
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['grades'] });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create grade");
     } finally {
@@ -43,16 +60,26 @@ export default function AdminGrades() {
     }
   };
 
-  const deleteItem = async (id: number) => {
-    if (!confirm(`Are you sure you want to delete this grade? This action cannot be undone.`))
-      return;
+  const deleteItem = (id: number) => {
+    setItemToDelete(id);
+    setShowDeleteDialog(true);
+  };
 
+  const confirmDelete = async () => {
+    if (itemToDelete === null) return;
     try {
-      await academicService.deleteGrade(id);
+      await academicService.deleteGrade(itemToDelete);
       toast.success("Grade deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['grades'] });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete grade");
+    } finally {
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
     }
   };
 
@@ -74,7 +101,12 @@ export default function AdminGrades() {
       await academicService.updateGrade(editingItem.id, editForm.name);
       toast.success("Updated successfully");
       cancelEdit();
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['grades'] });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-classes'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to update");
     } finally {
@@ -217,6 +249,23 @@ export default function AdminGrades() {
           </div>
         </Card>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the grade level and all associated classes and subject mappings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

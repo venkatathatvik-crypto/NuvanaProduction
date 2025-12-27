@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   User,
@@ -18,35 +18,32 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { uploadProfilePhoto } from "@/services/profileService";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const TeacherProfile = () => {
   const navigate = useNavigate();
   const { profile, refreshProfile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [assignedClasses, setAssignedClasses] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (profile?.id) {
-      fetchTeacherData();
-    }
-  }, [profile?.id]);
+  // Fetch assigned classes using React Query
+  const { data: assignedClasses = [], isLoading: loadingClasses } = useQuery({
+    queryKey: ['teacher-classes', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      const classesData = await academicService.getClassesByTeacher(profile.id);
+      return classesData || [];
+    },
+    enabled: !!profile?.id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-  const fetchTeacherData = async () => {
-    setLoading(true);
-    try {
-      // Fetch assigned classes via teacher_classes API
-      const classesData = await academicService.getClassesByTeacher(
-        profile!.id
-      );
-      setAssignedClasses(classesData || []);
-
-      // Fetch subjects from teacher_subjects API
-      const subjectsData = await academicService.getSubjectsByTeacher(
-        profile!.id
-      );
+  // Fetch subjects using React Query
+  const { data: subjects = [], isLoading: loadingSubjects } = useQuery({
+    queryKey: ['teacher-subjects', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      const subjectsData = await academicService.getSubjectsByTeacher(profile.id);
       if (subjectsData) {
         // Get unique subject names
         const subjectNames = [
@@ -56,15 +53,15 @@ const TeacherProfile = () => {
               .filter(Boolean)
           ),
         ] as string[];
-        setSubjects(subjectNames);
+        return subjectNames;
       }
-    } catch (error) {
-      console.error("Error fetching teacher data:", error);
-      toast.error("Failed to load teacher data");
-    } finally {
-      setLoading(false);
-    }
-  };
+      return [];
+    },
+    enabled: !!profile?.id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const loading = loadingClasses || loadingSubjects;
 
   const handlePhotoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -271,8 +268,8 @@ const TeacherProfile = () => {
                       className="px-3 py-1 rounded-md bg-secondary/50 border border-white/10"
                     >
                       {tc?.classes?.name}{" "}
-                      {tc?.classes?.grade_levels?.name &&
-                        `(${tc.classes.grade_levels.name})`}
+                      {(tc?.classes as any)?.grade_levels?.name &&
+                        `(${(tc.classes as any).grade_levels.name})`}
                     </span>
                   ))
                 ) : (

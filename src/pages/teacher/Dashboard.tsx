@@ -17,63 +17,41 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
 import NotificationBell from "@/components/NotificationBell";
 import { getNotifications, type Notification } from "@/services/notificationService";
 import { formatDistanceToNow } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
   const { logout, profile } = useAuth();
-  const [classes, setClasses] = useState<FlattenedClass[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(true);
 
-  useEffect(() => {
-    const fetchClasses = async () => {
-      if (!profile?.id) {
-        setLoading(false);
-        return;
-      }
+  // Fetch teacher's classes using React Query
+  const { data: classes = [], isLoading: loadingClasses } = useQuery({
+    queryKey: queryKeys.teacher.classes(profile?.id ?? '', profile?.school_id ?? ''),
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      return await getTeacherClasses(profile.id, profile.school_id);
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-      try {
-        const teacherClasses = await getTeacherClasses(profile.id, profile.school_id);
-        setClasses(teacherClasses);
-      } catch (error) {
-        console.error("Error fetching teacher classes:", error);
-        setClasses([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchClasses();
-  }, [profile?.id, profile?.school_id]);
-
-  useEffect(() => {
-    const fetchRecentNotifications = async () => {
-      if (!profile?.id) {
-        setLoadingNotifications(false);
-        return;
-      }
-
-      try {
-        const recentNotifications = await getNotifications(profile.id, 5);
-        setNotifications(recentNotifications || []);
-      } catch (error) {
-        console.error('Error fetching notifications:', error);
-        setNotifications([]);
-      } finally {
-        setLoadingNotifications(false);
-      }
-    };
-
-    fetchRecentNotifications();
-  }, [profile?.id]);
+  // Fetch recent notifications using React Query
+  const { data: notifications = [], isLoading: loadingNotifications } = useQuery({
+    queryKey: queryKeys.teacher.notifications(profile?.id ?? '', 5),
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      return await getNotifications(profile.id, 5);
+    },
+    enabled: !!profile?.id,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -144,12 +122,12 @@ const TeacherDashboard = () => {
                 <h2 className="text-xl sm:text-2xl font-semibold">Class Overview</h2>
               </div>
               <div className="space-y-4">
-                {loading ? (
+                {loadingClasses ? (
                   <p className="text-muted-foreground text-center py-8">
                     Loading classes...
                   </p>
                 ) : null}
-                {!loading && classes.length > 0 ? (
+                {!loadingClasses && classes.length > 0 ? (
                   <div className="space-y-4">
                     {classes.map((cls) => (
                       <div
@@ -178,7 +156,7 @@ const TeacherDashboard = () => {
                     ))}
                   </div>
                 ) : null}
-                {!loading && classes.length === 0 ? (
+                {!loadingClasses && classes.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No classes assigned yet.
                   </p>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+
 import { motion } from "framer-motion";
 import { CheckSquare, AlertCircle, ArrowRight, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -10,34 +10,23 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherGradingQueue, GradingQueueItem } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 const TeacherTasks = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
-    const [gradingTasks, setGradingTasks] = useState<GradingQueueItem[]>([]);
-    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchGradingQueue = async () => {
-            if (profileLoading) return;
-            if (!profile) {
-                setLoading(false);
-                return;
-            }
-
-            try {
-                const queue = await getTeacherGradingQueue(profile.id);
-                setGradingTasks(queue);
-            } catch (error: any) {
-                console.error("Error fetching grading queue:", error);
-                toast.error("Failed to load grading queue");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchGradingQueue();
-    }, [profile, profileLoading]);
+    // Fetch grading queue using React Query
+    const { data: gradingTasks = [], isLoading: loading } = useQuery({
+        queryKey: ['teacher-grading-queue', profile?.id ?? ''],
+        queryFn: async () => {
+            if (!profile?.id) return [];
+            return await getTeacherGradingQueue(profile.id);
+        },
+        enabled: !!profile?.id,
+        staleTime: 2 * 60 * 1000, // 2 minutes
+    });
 
     const getUrgencyBadge = (pendingCount: number) => {
         if (pendingCount > 20) {

@@ -749,3 +749,53 @@ export const finalizeSubmissionGrading = async (
     throw error;
   }
 };
+
+// ==================== MANUAL MARKS ====================
+
+export interface ManualMarkEntry {
+  student_id: string;
+  marks_obtained: number;
+}
+
+export interface SaveManualMarksParams {
+  title: string;
+  classId: string;
+  gradeSubjectId: string;
+  examTypeId: number;
+  maxMarks: number;
+  marks: ManualMarkEntry[];
+  description?: string;
+}
+
+export const saveManualMarks = async (params: SaveManualMarksParams): Promise<any> => {
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    return await apiClient.post('/academic/manual-marks', {
+      title: params.title,
+      class_id: params.classId,
+      grade_subject_id: params.gradeSubjectId,
+      exam_type_id: params.examTypeId,
+      max_marks: params.maxMarks,
+      marks: params.marks,
+      description: params.description,
+    });
+  } catch (error) {
+    logger.error('[saveManualMarks] Error:', error);
+    throw error;
+  }
+};
+
+export const getClassStudents = async (classId: string): Promise<any[]> => {
+  try {
+    const { apiClient } = await import('@/lib/apiClient');
+    const students = await apiClient.get<any[]>(`/academic/classes/${classId}/students`);
+    return students.map(s => ({
+      id: s.id,
+      name: s.name,
+      rollNo: s.student_details?.roll_number,
+    }));
+  } catch (error) {
+    logger.error('[getClassStudents] Error:', error);
+    throw error;
+  }
+};

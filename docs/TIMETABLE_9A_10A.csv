@@ -1,0 +1,57 @@
+class_name,day_of_week,period_number,subject_name,teacher_email,start_time,end_time,room
+9-A,Monday,1,Mathematics,teacher1@yopmail.com,09:00,09:45,Room 201
+9-A,Monday,2,English,teacher2@yopmail.com,09:50,10:35,Room 202
+9-A,Monday,3,Science,teacher1@yopmail.com,10:40,11:25,Lab 1
+9-A,Monday,4,Social Studies,teacher2@yopmail.com,11:45,12:30,Room 203
+9-A,Monday,5,Physical Education,teacher1@yopmail.com,13:15,14:00,Sports Ground
+9-A,Tuesday,1,English,teacher1@yopmail.com,09:00,09:45,Room 202
+9-A,Tuesday,2,Mathematics,teacher2@yopmail.com,09:50,10:35,Room 201
+9-A,Tuesday,3,Social Studies,teacher1@yopmail.com,10:40,11:25,Room 203
+9-A,Tuesday,4,Science,teacher2@yopmail.com,11:45,12:30,Lab 1
+9-A,Tuesday,5,English,teacher1@yopmail.com,13:15,14:00,Room 202
+9-A,Wednesday,1,Science,teacher1@yopmail.com,09:00,09:45,Lab 1
+9-A,Wednesday,2,Social Studies,teacher2@yopmail.com,09:50,10:35,Room 203
+9-A,Wednesday,3,Mathematics,teacher1@yopmail.com,10:40,11:25,Room 201
+9-A,Wednesday,4,English,teacher2@yopmail.com,11:45,12:30,Room 202
+9-A,Wednesday,5,Physical Education,teacher1@yopmail.com,13:15,14:00,Sports Ground
+9-A,Thursday,1,Mathematics,teacher1@yopmail.com,09:00,09:45,Room 201
+9-A,Thursday,2,Science,teacher2@yopmail.com,09:50,10:35,Lab 1
+9-A,Thursday,3,English,teacher1@yopmail.com,10:40,11:25,Room 202
+9-A,Thursday,4,Social Studies,teacher2@yopmail.com,11:45,12:30,Room 203
+9-A,Thursday,5,Mathematics,teacher1@yopmail.com,13:15,14:00,Room 201
+9-A,Friday,1,Social Studies,teacher1@yopmail.com,09:00,09:45,Room 203
+9-A,Friday,2,English,teacher2@yopmail.com,09:50,10:35,Room 202
+9-A,Friday,3,Science,teacher1@yopmail.com,10:40,11:25,Lab 1
+9-A,Friday,4,Mathematics,teacher2@yopmail.com,11:45,12:30,Room 201
+9-A,Friday,5,Physical Education,teacher1@yopmail.com,13:15,14:00,Sports Ground
+9-A,Saturday,1,English,teacher1@yopmail.com,09:00,09:45,Room 202
+9-A,Saturday,2,Mathematics,teacher2@yopmail.com,09:50,10:35,Room 201
+9-A,Saturday,3,Science,teacher1@yopmail.com,10:40,11:25,Lab 1
+10-A,Monday,1,Mathematics,teacher2@yopmail.com,09:00,09:45,Room 301
+10-A,Monday,2,Science,teacher1@yopmail.com,09:50,10:35,Lab 2
+10-A,Monday,3,English,teacher2@yopmail.com,10:40,11:25,Room 302
+10-A,Monday,4,Social Studies,teacher1@yopmail.com,11:45,12:30,Room 303
+10-A,Monday,5,Physical Education,teacher2@yopmail.com,13:15,14:00,Sports Ground
+10-A,Tuesday,1,English,teacher2@yopmail.com,09:00,09:45,Room 302
+10-A,Tuesday,2,Mathematics,teacher1@yopmail.com,09:50,10:35,Room 301
+10-A,Tuesday,3,Science,teacher2@yopmail.com,10:40,11:25,Lab 2
+10-A,Tuesday,4,Social Studies,teacher1@yopmail.com,11:45,12:30,Room 303
+10-A,Tuesday,5,English,teacher2@yopmail.com,13:15,14:00,Room 302
+10-A,Wednesday,1,Social Studies,teacher1@yopmail.com,09:00,09:45,Room 303
+10-A,Wednesday,2,Science,teacher2@yopmail.com,09:50,10:35,Lab 2
+10-A,Wednesday,3,Mathematics,teacher1@yopmail.com,10:40,11:25,Room 301
+10-A,Wednesday,4,English,teacher2@yopmail.com,11:45,12:30,Room 302
+10-A,Wednesday,5,Physical Education,teacher1@yopmail.com,13:15,14:00,Sports Ground
+10-A,Thursday,1,Mathematics,teacher2@yopmail.com,09:00,09:45,Room 301
+10-A,Thursday,2,English,teacher1@yopmail.com,09:50,10:35,Room 302
+10-A,Thursday,3,Science,teacher2@yopmail.com,10:40,11:25,Lab 2
+10-A,Thursday,4,Social Studies,teacher1@yopmail.com,11:45,12:30,Room 303
+10-A,Thursday,5,Mathematics,teacher2@yopmail.com,13:15,14:00,Room 301
+10-A,Friday,1,Science,teacher1@yopmail.com,09:00,09:45,Lab 2
+10-A,Friday,2,Social Studies,teacher2@yopmail.com,09:50,10:35,Room 303
+10-A,Friday,3,English,teacher1@yopmail.com,10:40,11:25,Room 302
+10-A,Friday,4,Mathematics,teacher2@yopmail.com,11:45,12:30,Room 301
+10-A,Friday,5,Physical Education,teacher1@yopmail.com,13:15,14:00,Sports Ground
+10-A,Saturday,1,Mathematics,teacher1@yopmail.com,09:00,09:45,Room 301
+10-A,Saturday,2,English,teacher2@yopmail.com,09:50,10:35,Room 302
+10-A,Saturday,3,Science,teacher1@yopmail.com,10:40,11:25,Lab 2

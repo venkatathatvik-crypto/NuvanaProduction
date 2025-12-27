@@ -14,6 +14,16 @@ import { DAY_NAMES } from "@/services/timetableService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminTimetable() {
   const navigate = useNavigate();
@@ -41,7 +51,19 @@ export default function AdminTimetable() {
   });
   const [isEditingPeriod, setIsEditingPeriod] = useState(false);
   const [addingPeriod, setAddingPeriod] = useState(false);
-  const [activeTab, setActiveTab] = useState<"manual" | "csv">("manual");
+  const [activeTab, setActiveTab] = useState<"manual" | "quick" | "csv">("manual");
+  const [quickAddPeriods, setQuickAddPeriods] = useState<Array<{
+    period_number: number;
+    subject_id: string;
+    teacher_id: string;
+    start_time: string;
+    end_time: string;
+    room: string;
+  }>>([]);
+  const [copyFromDay, setCopyFromDay] = useState<number>(0);
+  const [savingQuickAdd, setSavingQuickAdd] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [periodToDelete, setPeriodToDelete] = useState<string | null>(null);
 
   // Timetable CSV Import states
   const [isImportingTimetable, setIsImportingTimetable] = useState(false);
@@ -132,15 +154,23 @@ export default function AdminTimetable() {
     setIsEditingPeriod(true);
   };
 
-  const handleDeletePeriod = async (periodId: string) => {
-    if (!confirm("Are you sure you want to delete this period?")) return;
+  const handleDeletePeriod = (periodId: string) => {
+    setPeriodToDelete(periodId);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeletePeriod = async () => {
+    if (!periodToDelete) return;
     try {
-      await academicService.deletePeriod(periodId);
+      await academicService.deletePeriod(periodToDelete);
       toast.success("Period deleted");
       fetchTimetable(selectedTimetableClass);
     } catch (error: any) {
       console.error("Error deleting period:", error);
       toast.error(error.message || "Failed to delete period");
+    } finally {
+      setShowDeleteDialog(false);
+      setPeriodToDelete(null);
     }
   };
 
@@ -154,6 +184,115 @@ export default function AdminTimetable() {
       room: "",
     });
     setIsEditingPeriod(false);
+  };
+
+  // Initialize Quick Add periods with default time slots
+  const initializeQuickAddPeriods = () => {
+    const timeSlots = [
+      { start: "09:00", end: "09:45" },
+      { start: "09:50", end: "10:35" },
+      { start: "10:40", end: "11:25" },
+      { start: "11:45", end: "12:30" },
+      { start: "13:15", end: "14:00" },
+      { start: "14:05", end: "14:50" },
+    ];
+    
+    setQuickAddPeriods(
+      timeSlots.map((slot, index) => ({
+        period_number: index + 1,
+        subject_id: "",
+        teacher_id: "",
+        start_time: slot.start,
+        end_time: slot.end,
+        room: "",
+      }))
+    );
+  };
+
+  // Copy periods from another day
+  const handleCopyFromDay = async () => {
+    if (!copyFromDay || !selectedTimetableClass) return;
+    
+    const dayPeriods = timetableData[copyFromDay]?.timetable_periods || [];
+    if (dayPeriods.length === 0) {
+      toast.error("No periods found for the selected day");
+      return;
+    }
+
+    const copiedPeriods = dayPeriods.map((period: any) => ({
+      period_number: period.period_number,
+      subject_id: period.subject_id || period.grade_subject_id,
+      teacher_id: period.teacher_id,
+      start_time: period.start_time,
+      end_time: period.end_time,
+      room: period.room || "",
+    }));
+
+    setQuickAddPeriods(copiedPeriods);
+    toast.success(`Copied ${copiedPeriods.length} periods from ${DAY_NAMES[copyFromDay - 1]}`);
+    setCopyFromDay(0);
+  };
+
+  // Save all quick add periods
+  const handleSaveQuickAddPeriods = async () => {
+    if (!selectedTimetableClass) {
+      toast.error("Please select a class first");
+      return;
+    }
+
+    const validPeriods = quickAddPeriods.filter(
+      (p) => p.subject_id && p.teacher_id
+    );
+
+    if (validPeriods.length === 0) {
+      toast.error("Please fill at least one period");
+      return;
+    }
+
+    setSavingQuickAdd(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const period of validPeriods) {
+        try {
+          await academicService.createOrUpdatePeriod({
+            class_id: selectedTimetableClass,
+            day_of_week: selectedTimetableDay,
+            period_number: period.period_number,
+            subject_id: period.subject_id,
+            teacher_id: period.teacher_id,
+            start_time: period.start_time,
+            end_time: period.end_time,
+            room: period.room,
+          });
+          successCount++;
+        } catch (error) {
+          failCount++;
+          console.error(`Failed to save period ${period.period_number}:`, error);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully saved ${successCount} period(s)`);
+        initializeQuickAddPeriods();
+        fetchTimetable(selectedTimetableClass);
+      }
+      if (failCount > 0) {
+        toast.error(`Failed to save ${failCount} period(s)`);
+      }
+    } catch (error: any) {
+      toast.error("Failed to save periods");
+    } finally {
+      setSavingQuickAdd(false);
+    }
+  };
+
+  // Update a specific quick add period
+  const updateQuickAddPeriod = (index: number, field: string, value: any) => {
+    const updated = [...quickAddPeriods];
+    updated[index] = { ...updated[index], [field]: value };
+    setQuickAddPeriods(updated);
   };
 
   // Helper function to map day name to number
@@ -564,9 +703,15 @@ export default function AdminTimetable() {
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "manual" | "csv")} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs value={activeTab} onValueChange={(value) => {
+            setActiveTab(value as "manual" | "quick" | "csv");
+            if (value === "quick" && quickAddPeriods.length === 0) {
+              initializeQuickAddPeriods();
+            }
+          }} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+              <TabsTrigger value="quick">Quick Add</TabsTrigger>
               <TabsTrigger value="csv">CSV Import</TabsTrigger>
             </TabsList>
 
@@ -709,6 +854,178 @@ export default function AdminTimetable() {
               )}
             </TabsContent>
 
+            {/* Quick Add Tab */}
+            <TabsContent value="quick" className="space-y-6 mt-6">
+              {!selectedTimetableClass ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Select a class to manage its timetable</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                    <div className="flex gap-2 flex-wrap">
+                      {DAY_NAMES.map((day, index) => (
+                        <Button
+                          key={day}
+                          variant={selectedTimetableDay === index + 1 ? "default" : "outline"}
+                          onClick={() => setSelectedTimetableDay(index + 1)}
+                          size="sm"
+                        >
+                          {day.slice(0, 3)}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        className="bg-muted border border-border rounded-md h-9 px-3 text-sm"
+                        value={copyFromDay}
+                        onChange={(e) => setCopyFromDay(parseInt(e.target.value))}
+                      >
+                        <option value="0">Copy from...</option>
+                        {DAY_NAMES.map((day, index) => (
+                          index + 1 !== selectedTimetableDay && (
+                            <option key={day} value={index + 1}>
+                              {day}
+                            </option>
+                          )
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCopyFromDay}
+                        disabled={!copyFromDay}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Card className="glass-card p-4 sm:p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg">Quick Add Periods for {DAY_NAMES[selectedTimetableDay - 1]}</h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={initializeQuickAddPeriods}
+                      >
+                        Reset
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {quickAddPeriods.map((period, index) => (
+                        <div key={index} className="flex flex-col gap-2 p-3 rounded-lg bg-secondary/10 border border-border/50">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="w-16 justify-center shrink-0">P{period.period_number}</Badge>
+                            <div className="flex gap-1 items-center text-xs flex-1">
+                              <Input
+                                type="time"
+                                value={period.start_time}
+                                onChange={(e) => updateQuickAddPeriod(index, "start_time", e.target.value)}
+                                className="h-9 text-xs"
+                              />
+                              <span className="text-muted-foreground">-</span>
+                              <Input
+                                type="time"
+                                value={period.end_time}
+                                onChange={(e) => updateQuickAddPeriod(index, "end_time", e.target.value)}
+                                className="h-9 text-xs"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <select
+                              className="w-full bg-muted border border-border rounded-md h-9 px-2 text-sm"
+                              value={period.subject_id}
+                              onChange={(e) => updateQuickAddPeriod(index, "subject_id", e.target.value)}
+                            >
+                              <option value="">Select Subject</option>
+                              {filteredSubjectsForClass.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="w-full bg-muted border border-border rounded-md h-9 px-2 text-sm"
+                              value={period.teacher_id}
+                              onChange={(e) => updateQuickAddPeriod(index, "teacher_id", e.target.value)}
+                            >
+                              <option value="">Select Teacher</option>
+                              {teachers.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name}
+                                </option>
+                              ))}
+                            </select>
+                            <Input
+                              placeholder="Room (e.g. Lab 1)"
+                              value={period.room}
+                              onChange={(e) => updateQuickAddPeriod(index, "room", e.target.value)}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2 mt-6">
+                      <Button
+                        className="flex-1"
+                        onClick={handleSaveQuickAddPeriods}
+                        disabled={savingQuickAdd}
+                      >
+                        {savingQuickAdd ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Save All Periods
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={initializeQuickAddPeriods}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                  </Card>
+
+                  {/* Show existing periods */}
+                  {timetableData[selectedTimetableDay]?.timetable_periods?.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm text-muted-foreground">Existing Periods</h3>
+                      <div className="space-y-2">
+                        {timetableData[selectedTimetableDay]?.timetable_periods.map((period: any) => (
+                          <div key={period.id} className="p-3 rounded-lg bg-secondary/20 border border-border/50 flex justify-between items-center">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">P{period.period_number}</Badge>
+                                <span className="font-medium text-sm">{period.subject_name || "Unknown"}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {period.start_time?.slice(0, 5)} - {period.end_time?.slice(0, 5)} | {period.teacher_name || "TBA"}
+                              </p>
+                            </div>
+                            <Button size="sm" variant="destructive" onClick={() => handleDeletePeriod(period.id)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
             {/* CSV Import Tab */}
             <TabsContent value="csv" className="space-y-6 mt-6">
               <div className="space-y-4">
@@ -839,6 +1156,24 @@ export default function AdminTimetable() {
           </Tabs>
         </Card>
       </div>
+
+      {/* Delete Period Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Period?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this period? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeletePeriod} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

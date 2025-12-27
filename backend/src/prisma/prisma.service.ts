@@ -8,14 +8,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Create connection pool with pooling parameters
+    // Create connection pool with pooling parameters optimized for production
     const connectionString = process.env.DATABASE_URL as string;
     
     const pool = new Pool({
       connectionString,
-      max: 20, // Maximum number of clients in the pool
-      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-      connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection cannot be established
+      max: 30, // Maximum number of clients in the pool (increased for production load)
+      idleTimeoutMillis: 60000, // Close idle clients after 60 seconds
+      connectionTimeoutMillis: 30000, // Return an error after 30 seconds if connection cannot be established
+    });
+
+    // Log pool errors for better monitoring
+    pool.on('error', (err) => {
+      this.logger.error('Unexpected pool error:', err);
     });
 
     const adapter = new PrismaPg(pool);
@@ -30,7 +35,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleInit() {
     await this.$connect();
-    this.logger.log('✅ Database connected successfully with connection pooling (max: 20 connections)');
+    this.logger.log('✅ Database connected successfully with connection pooling (max: 30 connections)');
   }
 
   async onModuleDestroy() {

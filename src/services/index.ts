@@ -27,7 +27,7 @@ export {
 } from "./types";
 
 // Re-export from schemas (for backward compatibility)
-export type { NestedClass, FlattenedClass } from "@/schemas/academic";
+export type { NestedClass, FlattenedClass, TeacherClassWithRelationship } from "@/schemas/academic";
 
 // Re-export from classService
 export {
@@ -38,8 +38,10 @@ export {
   getSubjects,
   getFileCategories,
   getTeacherClasses,
+  getAllTeachingClasses,
   getGradeSubjectsDetailed,
   getTeacherSubjectsForClass,
+  getTeacherAllSubjectsDetailed,
 } from "./classService";
 
 // Re-export from fileService
@@ -140,17 +142,20 @@ export {
   getTestSubmissionsForGrading,
   gradeStudentAnswer,
   finalizeSubmissionGrading,
-  type StudentTestWithQuestions,
+  saveManualMarks,
+  getClassStudents,
   type StudentSubmission,
   type TestResult,
   type StudentGradedTest,
   type SubmitTestParams,
   type GradingQueueItem,
   type SubmissionToGrade,
+  type ManualMarkEntry,
+  type SaveManualMarksParams,
 } from "./testService";
 
 // Import analyticsApi for use in wrapper functions
-import { analyticsApi } from "./analyticsApiService";
+import { analyticsApi, StudentWithScore, SubjectAverage } from "./analyticsApiService";
 
 // Re-export from analyticsApiService
 export {

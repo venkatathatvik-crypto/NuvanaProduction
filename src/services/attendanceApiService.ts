@@ -6,10 +6,11 @@ export interface StudentAttendance {
   name: string;
   roll_number: string;
   present: boolean;
+  status?: string;
 }
 
 export interface AttendanceMap {
-  [studentId: string]: boolean;
+  [studentId: string]: boolean | string;
 }
 
 export interface AttendancePercentage {

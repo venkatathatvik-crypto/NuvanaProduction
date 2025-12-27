@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Mic,
@@ -27,20 +27,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  getTeacherClasses,
+  getAllTeachingClasses,
   getTeacherVoiceNotes,
   uploadTeacherVoiceNote,
   deleteTeacherVoiceNote,
   TeacherVoiceNote,
+  getTeacherAllSubjectsDetailed,
 } from "@/services/academic";
 import { getTeacherSubjectsForClass, GradeSubjectOption } from "@/services/classService";
 import { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const VoiceUpload = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
+  const queryClient = useQueryClient();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -51,8 +56,7 @@ const VoiceUpload = () => {
   );
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [recordings, setRecordings] = useState<TeacherVoiceNote[]>([]);
-  const [recordingsLoading, setRecordingsLoading] = useState(true);
+
   const [recordingTitle, setRecordingTitle] = useState<string>("");
   const [playingVoiceNoteId, setPlayingVoiceNoteId] = useState<string | null>(
     null
@@ -63,116 +67,63 @@ const VoiceUpload = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Dropdown states
-  const [classes, setClasses] = useState<FlattenedClass[]>([]);
-  const [subjects, setSubjects] = useState<GradeSubjectOption[]>([]);
-  const [selectedClass, setSelectedClass] = useState<
-    FlattenedClass | undefined
-  >(undefined);
-  const [selectedSubject, setSelectedSubject] = useState<GradeSubjectOption | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedGradeSubjectId, setSelectedGradeSubjectId] = useState<string>("");
+  const [selectedTargetClassIds, setSelectedTargetClassIds] = useState<string[]>([]);
+  
+  // Delete dialog states
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [voiceNoteToDelete, setVoiceNoteToDelete] = useState<TeacherVoiceNote | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- EFFECT 1: INITIAL DATA LOAD (Classes) ---
+  // Fetch ALL classes where teacher teaches (both as class teacher and subject teacher)
+  const { data: classes = [], isLoading: loading } = useQuery({
+    queryKey: ['teacher-all-teaching-classes', profile?.id ?? '', profile?.school_id ?? ''],
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      return await getAllTeachingClasses(profile.id, profile.school_id);
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Fetch voice notes using React Query
+  const { data: recordings = [], isLoading: recordingsLoading } = useQuery({
+    queryKey: queryKeys.teacher.voiceNotes(profile?.id ?? '', profile?.school_id ?? ''),
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      return await getTeacherVoiceNotes(profile.id, profile.school_id);
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 3 * 60 * 1000, // 3 minutes
+  });
+
+  // Get all teacher subjects across all classes
+  const { data: allTeacherSubjects = [] } = useQuery({
+    queryKey: ['teacher-all-subjects', profile?.id ?? '', profile?.school_id ?? ''],
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      const subjects = await getTeacherAllSubjectsDetailed(profile.id);
+      return subjects;
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filter classes based on selected subject's grade level
+  const filteredClassesForSubject = useMemo(() => {
+    if (!selectedGradeSubjectId || !classes.length) return [];
+    
+    const selectedSubject = allTeacherSubjects.find(s => s.grade_subject_id === selectedGradeSubjectId);
+    if (!selectedSubject) return [];
+    
+    return classes.filter(cls => cls.grade_id === selectedSubject.grade_id);
+  }, [selectedGradeSubjectId, classes, allTeacherSubjects]);
+
+  // Reset selected classes when subject changes
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (profileLoading) return;
-
-      if (!profile) {
-        setClasses([]);
-        setSelectedClass(undefined);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const classResponse = await getTeacherClasses(profile.id, profile.school_id);
-        if (classResponse && classResponse.length > 0) {
-          setClasses(classResponse);
-          setSelectedClass(classResponse[0]); // Set the default class object
-        } else {
-          setClasses([]);
-          setSelectedClass(undefined);
-        }
-      } catch (error) {
-        console.error("Error fetching classes for voice upload:", error);
-        toast.error("Failed to load classes.");
-        setClasses([]);
-        setSelectedClass(undefined);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInitialData();
-  }, [profile, profileLoading]);
-
-  // --- EFFECT 2: DYNAMIC SUBJECT LOAD (DEPENDS ON selectedClass) ---
-  useEffect(() => {
-    if (selectedClass && profile) {
-      const fetchSubjectsForClass = async () => {
-        const gradeId = selectedClass.grade_id;
-        const classId = selectedClass.class_id;
-
-        try {
-          // Get teacher's assigned subjects for this class
-          const subjectOptions = await getTeacherSubjectsForClass(
-            profile.id,
-            classId,
-            gradeId
-          );
-          
-          if (subjectOptions.length > 0) {
-            setSubjects(subjectOptions);
-            // Set the default subject
-            setSelectedSubject(subjectOptions[0]);
-          } else {
-            setSubjects([]);
-            setSelectedSubject(null);
-            toast.warning("No subjects assigned to you for this class.");
-          }
-        } catch (error) {
-          console.error(
-            `Error fetching subjects for class ${classId}, grade ${gradeId}:`,
-            error
-          );
-          setSubjects([]);
-          setSelectedSubject(null);
-        }
-      };
-
-      fetchSubjectsForClass();
-    } else {
-      setSubjects([]);
-      setSelectedSubject(null);
-    }
-  }, [selectedClass, profile]); // Reruns whenever selectedClass or profile changes
-
-  // Fetch voice notes
-  useEffect(() => {
-    const fetchVoiceNotes = async () => {
-      if (profileLoading) return;
-
-      if (!profile) {
-        setRecordings([]);
-        setRecordingsLoading(false);
-        return;
-      }
-
-      try {
-        const voiceNotes = await getTeacherVoiceNotes(profile.id, profile.school_id);
-        setRecordings(voiceNotes);
-      } catch (error) {
-        console.error("Error fetching voice notes:", error);
-        toast.error("Failed to load voice notes.");
-        setRecordings([]);
-      } finally {
-        setRecordingsLoading(false);
-      }
-    };
-
-    fetchVoiceNotes();
-  }, [profile, profileLoading]);
+    setSelectedTargetClassIds([]);
+  }, [selectedGradeSubjectId]);
 
   // Cleanup audio URL on unmount
   useEffect(() => {
@@ -183,16 +134,9 @@ const VoiceUpload = () => {
     };
   }, [audioUrl]);
 
-  const handleClassChange = (classId: string) => {
-    const cls = classes.find((c) => c.class_id === classId);
-    if (cls) {
-      setSelectedClass(cls);
-    }
-  };
-
   const startRecording = async () => {
-    if (!selectedClass || !selectedSubject) {
-      toast.error("Please select a class and subject first");
+    if (!selectedGradeSubjectId || selectedTargetClassIds.length === 0) {
+      toast.error("Please select a subject and at least one class first");
       return;
     }
 
@@ -225,8 +169,9 @@ const VoiceUpload = () => {
 
         // Set default title if not set
         if (!recordingTitle) {
+          const selectedSubject = allTeacherSubjects.find(s => s.grade_subject_id === selectedGradeSubjectId);
           setRecordingTitle(
-            `${selectedSubject?.name || "Unknown"} - Recording ${new Date().toLocaleTimeString()}`
+            `${selectedSubject?.subject_name || "Unknown"} - Recording ${new Date().toLocaleTimeString()}`
           );
         }
 
@@ -271,39 +216,36 @@ const VoiceUpload = () => {
   };
 
   const handleUpload = async () => {
-    if (!audioBlob || !selectedClass || !selectedSubject || !profile) {
+    if (!audioBlob || !selectedGradeSubjectId || selectedTargetClassIds.length === 0 || !profile) {
       toast.error(
-        "Please ensure class, subject are selected and recording is ready"
+        "Please ensure subject and classes are selected and recording is ready"
       );
       return;
     }
 
     setIsUploading(true);
     try {
-      // Use the grade_subject_id directly from selected subject
-      if (!selectedSubject || !selectedSubject.id) {
-        toast.error("Please select a subject.");
-        setIsUploading(false);
-        return;
-      }
-
-      const gradeSubjectId = selectedSubject.id;
-
+      const selectedSubject = allTeacherSubjects.find(s => s.grade_subject_id === selectedGradeSubjectId);
+      
       const title =
         recordingTitle.trim() ||
-        `${selectedSubject.name} - Recording ${new Date().toLocaleTimeString()}`;
+        `${selectedSubject?.subject_name || "Recording"} - ${new Date().toLocaleTimeString()}`;
 
-      const newVoiceNote = await uploadTeacherVoiceNote({
-        file: audioBlob,
-        title,
-        classId: selectedClass.class_id,
-        gradeSubjectId,
-        teacherId: profile.id,
-        schoolId: profile.school_id,
-        durationSeconds: recordingTime,
-      });
+      // Upload for each selected class
+      const uploadPromises = selectedTargetClassIds.map(classId =>
+        uploadTeacherVoiceNote({
+          file: audioBlob,
+          title,
+          classId: classId,
+          gradeSubjectId: selectedGradeSubjectId,
+          teacherId: profile.id,
+          schoolId: profile.school_id,
+          durationSeconds: recordingTime,
+        })
+      );
 
-      setRecordings([newVoiceNote, ...recordings]);
+      await Promise.all(uploadPromises);
+
       setAudioBlob(null);
       setAudioUrl(null);
       setRecordingTime(0);
@@ -314,6 +256,11 @@ const VoiceUpload = () => {
       }
       setIsPlaying(false);
       toast.success("Voice note uploaded successfully!");
+
+      // Invalidate queries to reflect new voice note
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) });
+      queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error: any) {
       console.error("Error uploading voice note:", error);
       toast.error(error.message || "Failed to upload voice note.");
@@ -326,8 +273,8 @@ const VoiceUpload = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!selectedClass || !selectedSubject) {
-      toast.error("Please select a class and subject first");
+    if (!selectedGradeSubjectId || selectedTargetClassIds.length === 0) {
+      toast.error("Please select a subject and at least one class first");
       event.target.value = "";
       return;
     }
@@ -340,9 +287,9 @@ const VoiceUpload = () => {
   };
 
   const handleUploadFile = async () => {
-    if (!uploadedFile || !selectedClass || !selectedSubject || !profile) {
+    if (!uploadedFile || !selectedGradeSubjectId || selectedTargetClassIds.length === 0 || !profile) {
       toast.error(
-        "Please ensure class, subject are selected and file is ready"
+        "Please ensure subject and classes are selected and file is ready"
       );
       return;
     }
@@ -373,31 +320,28 @@ const VoiceUpload = () => {
 
       const durationSeconds = await durationPromise;
 
-      // Use the grade_subject_id directly from selected subject
-      if (!selectedSubject || !selectedSubject.id) {
-        toast.error("Please select a subject.");
-        setIsUploading(false);
-        return;
-      }
-
-      const gradeSubjectId = selectedSubject.id;
+      const selectedSubject = allTeacherSubjects.find(s => s.grade_subject_id === selectedGradeSubjectId);
 
       const title =
         recordingTitle.trim() ||
         uploadedFileName ||
-        `${selectedSubject.name} - Upload ${new Date().toLocaleTimeString()}`;
+        `${selectedSubject?.subject_name || "Upload"} - ${new Date().toLocaleTimeString()}`;
 
-      const newVoiceNote = await uploadTeacherVoiceNote({
-        file: uploadedFile,
-        title,
-        classId: selectedClass.class_id,
-        gradeSubjectId,
-        teacherId: profile.id,
-        schoolId: profile.school_id,
-        durationSeconds,
-      });
+      // Upload for each selected class
+      const uploadPromises = selectedTargetClassIds.map(classId =>
+        uploadTeacherVoiceNote({
+          file: uploadedFile,
+          title,
+          classId: classId,
+          gradeSubjectId: selectedGradeSubjectId,
+          teacherId: profile.id,
+          schoolId: profile.school_id,
+          durationSeconds,
+        })
+      );
 
-      setRecordings([newVoiceNote, ...recordings]);
+      await Promise.all(uploadPromises);
+
       setRecordingTitle(""); // Clear title after upload
       setUploadedFile(null);
       setUploadedFileUrl(null);
@@ -410,6 +354,11 @@ const VoiceUpload = () => {
       if (fileInput) fileInput.value = "";
 
       toast.success("Voice note uploaded successfully!");
+
+      // Invalidate queries to reflect new voice note
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) });
+      queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error: any) {
       console.error("Error uploading voice note:", error);
       toast.error(error.message || "Failed to upload voice note.");
@@ -431,24 +380,37 @@ const VoiceUpload = () => {
     if (fileInput) fileInput.value = "";
   };
 
-  const handleDelete = async (voiceNote: TeacherVoiceNote) => {
-    if (!profile) return;
+  const handleDeleteClick = (voiceNote: TeacherVoiceNote) => {
+    setVoiceNoteToDelete(voiceNote);
+    setDeleteDialogOpen(true);
+  };
 
-    if (!confirm(`Are you sure you want to delete "${voiceNote.title}"?`)) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (!profile || !voiceNoteToDelete) return;
 
     try {
       await deleteTeacherVoiceNote(
-        voiceNote.id,
-        voiceNote.storagePath,
+        voiceNoteToDelete.id,
+        voiceNoteToDelete.storagePath,
         profile.id
       );
-      setRecordings(recordings.filter((r) => r.id !== voiceNote.id));
       toast.success("Voice note deleted successfully");
+
+      // Invalidate queries using proper queryKeys
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) 
+      });
+      queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
+      
+      // Refetch to update UI immediately
+      await queryClient.refetchQueries({ 
+        queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) 
+      });
     } catch (error: any) {
       console.error("Error deleting voice note:", error);
       toast.error(error.message || "Failed to delete voice note.");
+    } finally {
+      setVoiceNoteToDelete(null);
     }
   };
 
@@ -502,14 +464,6 @@ const VoiceUpload = () => {
     return <LoadingSpinner />;
   }
 
-  if (!selectedClass) {
-    return (
-      <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">
-        No classes available or assigned.
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen p-3 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
@@ -549,100 +503,100 @@ const VoiceUpload = () => {
                 <h2 className="text-2xl font-semibold mb-6">New Recording</h2>
 
                 <div className="space-y-4 mb-6">
+                  {/* Subject Selection */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Class</label>
+                    <label className="text-sm font-medium">Subject *</label>
                     <Select
-                      value={selectedClass?.class_id || ""}
-                      onValueChange={handleClassChange}
+                      value={selectedGradeSubjectId}
+                      onValueChange={setSelectedGradeSubjectId}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select Class" />
+                        <SelectValue placeholder="Select Subject" />
                       </SelectTrigger>
                       <SelectContent>
-                        {classes.map((cls) => (
-                          <SelectItem key={cls.class_id} value={cls.class_id}>
-                            {cls.class_name}
+                        {allTeacherSubjects.map((subject) => (
+                          <SelectItem key={subject.grade_subject_id} value={subject.grade_subject_id}>
+                            {subject.subject_name} ({subject.grade_name})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
+                  {/* Multi-Class Selection */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Subject</label>
-                    <Select
-                      value={selectedSubject?.id || ""}
-                      onValueChange={(value) => {
-                        const subject = subjects.find(s => s.id === value);
-                        setSelectedSubject(subject || null);
-                      }}
-                      disabled={!selectedClass || subjects.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Subject">
-                          {selectedSubject?.name || "Select Subject"}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {subjects.map((subject) => (
-                          <SelectItem key={subject.id} value={subject.id}>
-                            {subject.name}
-                          </SelectItem>
-                        ))}
-                        {subjects.length === 0 && (
-                          <SelectItem value="No Subjects" disabled>
-                            No subjects
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <label className="text-sm font-medium">
+                      Select Classes * (at least one required)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-border rounded-lg bg-secondary/5">
+                      {filteredClassesForSubject.length > 0 ? (
+                        filteredClassesForSubject.map((cls) => (
+                          <div
+                            key={cls.class_id}
+                            className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer ${
+                              selectedTargetClassIds.includes(cls.class_id)
+                                ? 'bg-primary/10 border-primary text-primary shadow-sm'
+                                : 'bg-muted border-border hover:border-primary/50 text-muted-foreground'
+                            }`}
+                            onClick={() => {
+                              if (selectedTargetClassIds.includes(cls.class_id)) {
+                                setSelectedTargetClassIds(prev => prev.filter(id => id !== cls.class_id));
+                              } else {
+                                setSelectedTargetClassIds(prev => [...prev, cls.class_id]);
+                              }
+                            }}
+                          >
+                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                              selectedTargetClassIds.includes(cls.class_id)
+                                ? 'bg-primary border-primary'
+                                : 'border-muted-foreground'
+                            }`}>
+                              {selectedTargetClassIds.includes(cls.class_id) && (
+                                <svg className="w-2 h-2 text-white fill-current" viewBox="0 0 20 20"><path d="M0 11l2-2 5 5L18 3l2 2L7 18z"/></svg>
+                              )}
+                            </div>
+                            <span className="text-sm font-medium">{cls.class_name}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="col-span-full text-center py-2 text-xs text-amber-500 italic">
+                          {selectedGradeSubjectId ? "No classes found for this subject's grade level." : "Please select a subject first."}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-border rounded-2xl bg-secondary/10 mb-6">
-                  <div
-                    className={`w-32 h-32 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${isRecording
-                      ? "bg-red-500/20 animate-pulse"
-                      : "bg-primary/20"
-                      }`}
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={audioBlob !== null}
+                    className={`w-32 h-32 rounded-full flex items-center justify-center mb-4 transition-all duration-300 cursor-pointer hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isRecording
+                        ? "bg-red-500/20 animate-pulse shadow-lg shadow-red-500/50"
+                        : "bg-blue-500/20 hover:bg-blue-500/30 shadow-lg shadow-blue-500/30"
+                    }`}
+                    title={isRecording ? "Click to stop recording" : "Click to start recording"}
                   >
                     <Mic
-                      className={`w-16 h-16 ${isRecording ? "text-red-500" : "text-primary"
-                        }`}
+                      className={`w-16 h-16 transition-colors ${
+                        isRecording ? "text-red-500" : "text-blue-500"
+                      }`}
                     />
-                  </div>
+                  </button>
                   <div className="text-4xl font-mono font-bold mb-2">
                     {formatTime(recordingTime)}
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground text-center">
                     {isRecording
-                      ? "Recording in progress..."
-                      : "Ready to record"}
+                      ? "Recording in progress... Click mic to stop"
+                      : audioBlob
+                      ? "Recording ready to upload"
+                      : "Click mic icon to start recording"}
                   </p>
                 </div>
 
-                <div className="space-y-4">
-                  {!isRecording && !audioBlob && (
-                    <Button
-                      className="w-full h-12 text-lg"
-                      onClick={startRecording}
-                    >
-                      <Mic className="mr-2 w-5 h-5" /> Start Recording
-                    </Button>
-                  )}
-
-                  {isRecording && (
-                    <Button
-                      variant="destructive"
-                      className="w-full h-12 text-lg"
-                      onClick={stopRecording}
-                    >
-                      <Square className="mr-2 w-5 h-5 fill-current" /> Stop
-                      Recording
-                    </Button>
-                  )}
-
-                  {audioBlob && (
+                <div className="space-y-4">{audioBlob && (
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
@@ -894,7 +848,7 @@ const VoiceUpload = () => {
                             size="icon"
                             variant="ghost"
                             className="hover:text-destructive"
-                            onClick={() => handleDelete(rec)}
+                            onClick={() => handleDeleteClick(rec)}
                           >
                             <Trash2 className="w-5 h-5" />
                           </Button>
@@ -914,6 +868,22 @@ const VoiceUpload = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDelete}
+        title="Delete Voice Note"
+        description={
+          voiceNoteToDelete
+            ? `Are you sure you want to delete "${voiceNoteToDelete.title}"? This action cannot be undone and students will no longer have access to this voice note.`
+            : "Are you sure you want to delete this voice note?"
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+      />
     </div>
   );
 };

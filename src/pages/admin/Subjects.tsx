@@ -9,6 +9,16 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminSubjects() {
   const { profile } = useAuth();
@@ -20,6 +30,10 @@ export default function AdminSubjects() {
   const [assigningSubjectsToGrade, setAssigningSubjectsToGrade] = useState(false);
   const [isImportingSubjects, setIsImportingSubjects] = useState(false);
   const [subjectImportProgress, setSubjectImportProgress] = useState<any>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showRemoveFromGradeDialog, setShowRemoveFromGradeDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [gradeSubjectToRemove, setGradeSubjectToRemove] = useState<string | null>(null);
 
   const { data: grades = [], isLoading: gradesLoading } = useQuery({
     queryKey: ['subjects-grades'],
@@ -51,7 +65,10 @@ export default function AdminSubjects() {
       await academicService.createSubject(newSubject.trim());
       toast.success("Subject created");
       setNewSubject("");
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects-gradeSubjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-subjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to create subject");
     } finally {
@@ -69,7 +86,9 @@ export default function AdminSubjects() {
       const result = await academicService.assignSubjectsToGrade(parseInt(selectedGradeForSubject), selectedSubjects);
       toast.success(result.message);
       setSelectedSubjects([]);
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['subjects-gradeSubjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-gradeSubjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to assign subjects to grade");
     } finally {
@@ -131,7 +150,10 @@ export default function AdminSubjects() {
       }
       if (successCount > 0) toast.success(`Successfully created ${successCount} subject(s)`);
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} subject(s). Check details below.`);
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects-gradeSubjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-subjects'] });
     } catch (error: any) {
       console.error("Subject CSV Import Error:", error);
       toast.error("Failed to process CSV file");
@@ -141,25 +163,44 @@ export default function AdminSubjects() {
     }
   };
 
-  const deleteItem = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this subject? This action cannot be undone.")) return;
+  const deleteItem = (id: string) => {
+    setItemToDelete(id);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
     try {
-      await academicService.deleteSubject(id);
+      await academicService.deleteSubject(itemToDelete);
       toast.success("Subject deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects-gradeSubjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-subjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete subject");
+    } finally {
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
     }
   };
 
-  const deleteGradeSubject = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this subject from the grade? This action cannot be undone.")) return;
+  const deleteGradeSubject = (id: string) => {
+    setGradeSubjectToRemove(id);
+    setShowRemoveFromGradeDialog(true);
+  };
+
+  const confirmRemoveFromGrade = async () => {
+    if (!gradeSubjectToRemove) return;
     try {
-      await academicService.deleteGradeSubject(id);
+      await academicService.deleteGradeSubject(gradeSubjectToRemove);
       toast.success("Subject removed from grade successfully");
       queryClient.invalidateQueries({ queryKey: ['subjects-gradeSubjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-gradeSubjects'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to remove subject from grade");
+    } finally {
+      setShowRemoveFromGradeDialog(false);
+      setGradeSubjectToRemove(null);
     }
   };
 
@@ -322,6 +363,40 @@ export default function AdminSubjects() {
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the subject and remove it from all assigned grades.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showRemoveFromGradeDialog} onOpenChange={setShowRemoveFromGradeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove subject from grade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this subject from the selected grade?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveFromGrade} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

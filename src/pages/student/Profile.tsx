@@ -13,19 +13,17 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { uploadProfilePhoto } from "@/services/profileService";
 import { apiClient } from "@/lib/apiClient";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const StudentProfile = () => {
   const navigate = useNavigate();
   const { profile, profileLoading, refreshProfile } = useAuth();
-  const [studentData, setStudentData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState<string>("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -33,36 +31,19 @@ const StudentProfile = () => {
   // For demo purposes, we'll toggle this with a state or just set it to true
   const [isFeedbackActive] = useState(true);
 
-  useEffect(() => {
-    const fetchStudentDetails = async () => {
-      if (profileLoading) return;
+  // Fetch student data using React Query
+  const { data: studentData, isLoading: loading } = useQuery({
+    queryKey: ['student-profile', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+      const data = await apiClient.get(`/users/${profile.id}`);
+      return data;
+    },
+    enabled: !!profile?.id && !profileLoading,
+    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh for 5 minutes
+  });
 
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Get user email from profile
-        if (profile.email) {
-          setUserEmail(profile.email);
-        }
-
-        // Get student data from backend API
-        const data = await apiClient.get(`/users/${profile.id}`);
-        if (data) {
-          setStudentData(data);
-        }
-      } catch (error) {
-        console.error("Error fetching student details:", error);
-        toast.error("Failed to load student details");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStudentDetails();
-  }, [profile, profileLoading]);
+  const userEmail = profile?.email || "";
 
   const handlePhotoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>

@@ -30,6 +30,7 @@ import {
   UpdateExamTypeDto,
   CreatePeriodDto,
   UpdatePeriodDto,
+  SaveManualMarksDto,
 } from "./dto";
 
 
@@ -176,6 +177,15 @@ export class AcademicController {
     return this.academicService.getClassesByTeacher(teacherId, schoolId);
   }
 
+  @Get("teacher-classes/teacher/:teacherId/all")
+  @Roles("school_admin", "teacher", "super_admin")
+  getAllTeachingClassesByTeacher(
+    @Param("teacherId") teacherId: string,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.getAllTeachingClassesByTeacher(teacherId, schoolId);
+  }
+
   @Delete("teacher-classes/:id")
   @Roles("school_admin", "super_admin")
   deleteTeacherClass(@Param("id") id: string, @Tenant() schoolId: string) {
@@ -205,6 +215,15 @@ export class AcademicController {
     @Tenant() schoolId: string
   ) {
     return this.academicService.getSubjectsByTeacher(teacherId, schoolId);
+  }
+
+  @Get("teacher-subjects/teacher/:teacherId/all")
+  @Roles("teacher", "super_admin")
+  getAllSubjectsByTeacher(
+    @Param("teacherId") teacherId: string,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.getAllSubjectsByTeacher(teacherId, schoolId);
   }
 
   @Delete("teacher-subjects/:id")
@@ -342,5 +361,22 @@ export class AcademicController {
     return { id: examTypeId };
   }
 
-  
+  @Post("manual-marks")
+  @Roles("teacher")
+  saveManualMarks(
+    @Body() dto: SaveManualMarksDto,
+    @CurrentUser() user: any,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.saveManualMarks(dto, user.id, schoolId);
+  }
+
+  @Get("classes/:classId/students")
+  @Roles("teacher", "school_admin")
+  getStudentsByClassId(
+    @Param("classId") classId: string,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.getStudentsByClassId(classId, schoolId);
+  }
 }
