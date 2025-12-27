@@ -6,6 +6,7 @@ import {
   ReactNode,
 } from "react";
 import { UserProfile, authService, UserRole } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 // Session type - simplified to just contain user data
 interface Session {
@@ -21,7 +22,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   profileLoading: boolean;
-  login: (email: string, password: string, role?: UserRole) => Promise<void>;
+  login: (email: string, password: string, role?: UserRole, schoolId?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -43,14 +44,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         // Check if we have JWT tokens
         const accessToken = authService.getAccessToken();
-        console.log(
+        logger.log(
           "[AuthProvider] Initializing auth, token present:",
           !!accessToken
         );
 
         if (!accessToken) {
           // No token, user is not authenticated
-          console.log("[AuthProvider] No access token found");
+          logger.log("[AuthProvider] No access token found");
           setSession(null);
           setProfile(null);
           setLoading(false);
@@ -58,13 +59,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         // Validate session with backend
-        console.log("[AuthProvider] Validating session with backend...");
+        logger.log("[AuthProvider] Validating session with backend...");
         setProfileLoading(true);
         const userProfile = await authService.validateSession();
 
         if (userProfile) {
           // Session is valid, set session and profile
-          console.log(
+          logger.log(
             "[AuthProvider] Session valid, user:",
             userProfile.email,
             "role:",
@@ -80,7 +81,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setProfile(userProfile);
         } else {
           // Session validation failed, clear everything
-          console.log(
+          logger.log(
             "[AuthProvider] Session validation returned null, clearing auth"
           );
           setSession(null);
@@ -103,10 +104,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   // Login function
-  const login = async (email: string, password: string, role?: UserRole) => {
+  const login = async (email: string, password: string, role?: UserRole, schoolId?: string) => {
     setProfileLoading(true);
     try {
-      const data = await authService.login(email, password, role);
+      const data = await authService.login(email, password, role, schoolId);
 
       if (data) {
         // Set session and profile from login response

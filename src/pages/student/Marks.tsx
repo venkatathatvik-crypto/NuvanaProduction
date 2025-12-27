@@ -10,6 +10,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { getStudentGradedTests, StudentGradedTest } from "@/services/academic";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LineChart,
   Line,
@@ -26,30 +27,13 @@ import {
 const Marks = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
-  const [gradedTests, setGradedTests] = useState<StudentGradedTest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchGradedTests = async () => {
-      if (profileLoading) return;
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const tests = await getStudentGradedTests(profile.id);
-        setGradedTests(tests);
-      } catch (error: any) {
-        console.error("Error fetching graded tests:", error);
-        toast.error("Failed to load marks");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGradedTests();
-  }, [profile, profileLoading]);
+  const { data: gradedTests = [], isLoading: loading } = useQuery({
+    queryKey: ["student-marks", profile?.id],
+    queryFn: () => getStudentGradedTests(profile!.id),
+    enabled: !!profile,
+  });
 
   // Group tests by subject
   const testsBySubject = useMemo(() => {

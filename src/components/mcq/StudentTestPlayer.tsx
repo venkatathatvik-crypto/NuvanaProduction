@@ -37,6 +37,9 @@ export const StudentTestPlayer = ({ test, onComplete, isSubmitting = false }: St
 
     const handleSubmit = useCallback(() => {
         const timeTakenSeconds = (test.durationMinutes * 60) - timeLeft;
+        console.log('[StudentTestPlayer] Submitting with answers:', answers);
+        console.log('[StudentTestPlayer] Answers object keys:', Object.keys(answers));
+        console.log('[StudentTestPlayer] Answers entries:', Object.entries(answers));
         onComplete(answers, timeTakenSeconds);
     }, [answers, onComplete, test.durationMinutes, timeLeft]);
 
@@ -56,10 +59,21 @@ export const StudentTestPlayer = ({ test, onComplete, isSubmitting = false }: St
     }, [handleSubmit]);
 
     const handleOptionSelect = (value: string) => {
-        setAnswers(prev => ({
-            ...prev,
-            [currentQuestion.id]: parseInt(value)
-        }));
+        const optionIndex = parseInt(value, 10);
+        console.log('[StudentTestPlayer] Option selected:', {
+            questionId: currentQuestion.id,
+            value,
+            parsedIndex: optionIndex,
+            isNaN: isNaN(optionIndex),
+        });
+        setAnswers(prev => {
+            const newAnswers = {
+                ...prev,
+                [currentQuestion.id]: optionIndex
+            };
+            console.log('[StudentTestPlayer] Updated answers:', newAnswers);
+            return newAnswers;
+        });
     };
 
     const handleTextAnswerChange = (value: string) => {

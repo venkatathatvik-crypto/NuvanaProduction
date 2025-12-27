@@ -101,7 +101,7 @@ export const testApi = {
   async updateTest(
     testId: string,
     teacherId: string,
-    data: Partial<Omit<CreateTestParams, 'teacher_id' | 'questions'>>,
+    data: Partial<Omit<CreateTestParams, 'teacher_id'>>,
   ): Promise<TeacherTest> {
     return apiClient.patch(`/tests/${testId}/teacher/${teacherId}`, data);
   },
@@ -124,13 +124,19 @@ export const testApi = {
     return apiClient.get(`/tests/${testId}/submissions/teacher/${teacherId}`);
   },
 
+  async getTeacherGradingQueue(teacherId: string): Promise<any[]> {
+    return apiClient.get(`/tests/grading-queue/teacher/${teacherId}`);
+  },
+
   async gradeSubmission(
     teacherId: string,
     submissionId: string,
+    answers: { answer_id: string; marks_awarded: number }[],
     totalMarksObtained?: number,
   ): Promise<{ message: string }> {
     return apiClient.post(`/tests/submissions/grade/${teacherId}`, {
       submission_id: submissionId,
+      answers,
       total_marks_obtained: totalMarksObtained,
     });
   },
@@ -159,5 +165,13 @@ export const testApi = {
 
   async getStudentSubmission(submissionId: string, studentId: string): Promise<any> {
     return apiClient.get(`/tests/submissions/${submissionId}/student/${studentId}`);
+  },
+
+  async getStudentGradedTests(studentId: string): Promise<any[]> {
+    return apiClient.get(`/tests/student/${studentId}/graded`);
+  },
+
+  async getSubmissionByTestAndStudent(testId: string, studentId: string): Promise<any> {
+    return apiClient.get(`/tests/${testId}/submission/student/${studentId}`);
   },
 };

@@ -1,6 +1,8 @@
 // Class, grade, subject, and file category services
-import { supabase, GradeSubjectOption, FileCategoryOption } from "./types";
+import { GradeSubjectOption, FileCategoryOption } from "./types";
 import { NestedClass, FlattenedClass } from "@/schemas/academic";
+import { academicService } from "./academicApiService";
+import { logger } from '@/lib/logger';
 
 interface RawSubjectData {
   subject_master_id: string;
@@ -25,29 +27,15 @@ interface GradeSubjectRow {
 }
 
 export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> => {
-  const { data: rawData, error } = await supabase.from("classes").select(`
-    id,
-    name,
-    grade_levels (
-      id,
-      name
-    )
-  `)
-  .eq("school_id", schoolId);
+  try {
+    const classes = await academicService.getClasses();
 
-  if (error) {
-    throw new Error("Failed to load class data.");
-  }
+    if (!classes || !Array.isArray(classes)) {
+      return [];
+    }
 
-  if (!rawData) {
-    return [];
-  }
-
-  const flattenedClasses: FlattenedClass[] = rawData.map(
-    (item: NestedClass) => {
-      const gradeData = Array.isArray(item.grade_levels)
-        ? item.grade_levels[0]
-        : item.grade_levels;
+    const flattenedClasses: FlattenedClass[] = classes.map((item) => {
+      const gradeData = item.grade_levels;
 
       return {
         class_id: item.id,
@@ -55,22 +43,26 @@ export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> =>
         grade_id: gradeData ? gradeData.id : 0,
         grade_name: gradeData ? gradeData.name : "Unknown Grade",
       };
-    }
-  );
+    });
 
-  return flattenedClasses;
+    return flattenedClasses;
+  } catch (error) {
+    console.error("Error fetching classes:", error);
+    throw new Error("Failed to load class data.");
+  }
 };
 
 export const getExamTypes = async (schoolId: string): Promise<string[]> => {
-  const { data, error } = await supabase.from("exam_types").select("name")
-    .eq("school_id", schoolId);
-  if (error) {
+  try {
+    const examTypes = await academicService.getExamTypes();
+    if (!examTypes || !Array.isArray(examTypes)) {
+      return [];
+    }
+    return examTypes.map((item) => item.name);
+  } catch (error) {
+    console.error("Error fetching exam types:", error);
     throw new Error("Failed to load exam types.");
   }
-  if (!data) {
-    return [];
-  }
-  return data.map((item) => item.name);
 };
 
 // Exam type with category information
@@ -120,7 +112,7 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
     const { apiClient } = await import('@/lib/apiClient');
     const gradeSubjects = await apiClient.get<any[]>(`/academic/grade-subjects/grade/${gradeLevelId}`);
     
-    console.log('getSubjects: Raw response for grade', gradeLevelId, gradeSubjects);
+    logger.log('getSubjects: Raw response for grade', gradeLevelId, gradeSubjects);
     
     if (!gradeSubjects || !Array.isArray(gradeSubjects)) {
       console.warn('getSubjects: Invalid response format', gradeSubjects);
@@ -143,7 +135,7 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
       })
       .filter((name: any): name is string => typeof name === 'string' && name.length > 0);
 
-    console.log('getSubjects: Extracted', subjectNames.length, 'subject names:', subjectNames);
+    logger.log('getSubjects: Extracted', subjectNames.length, 'subject names:', subjectNames);
     return subjectNames;
   } catch (error: any) {
     console.error('Error fetching subjects:', error);
@@ -179,7 +171,7 @@ export const getTeacherClasses = async (
   const { academicService } = await import('./academicApiService');
   const teacherClasses = await academicService.getClassesByTeacher(teacherId);
   
-  console.log('getTeacherClasses: Raw response', teacherClasses);
+  logger.log('getTeacherClasses: Raw response', teacherClasses);
   
   // Transform to FlattenedClass format
   const flattenedClasses: FlattenedClass[] = teacherClasses.map((tc: any) => {
@@ -199,8 +191,49 @@ export const getTeacherClasses = async (
     };
   });
 
-  console.log('getTeacherClasses: Mapped classes', flattenedClasses);
+  logger.log('getTeacherClasses: Mapped classes', flattenedClasses);
   return flattenedClasses;
+};
+
+/**
+ * Get all classes where a teacher teaches (both as class teacher and subject teacher)
+ * Returns classes with relationship information
+ */
+export const getAllTeachingClasses = async (
+  teacherId: string,
+  schoolId: string
+): Promise<import('@/schemas/academic').TeacherClassWithRelationship[]> => {
+  try {
+    const { academicService } = await import('./academicApiService');
+    const allClasses = await academicService.getAllTeachingClassesByTeacher(teacherId);
+    
+    logger.log('getAllTeachingClasses: Raw response', allClasses);
+    
+    // Transform to TeacherClassWithRelationship format
+    const transformedClasses = allClasses.map((cls: any) => {
+      const gradeId = cls.grade_level_id || cls.grade_levels?.id || 0;
+      const gradeName = cls.grade_levels?.name || 'Unknown Grade';
+      
+      if (!gradeId || gradeId === 0) {
+        console.warn('getAllTeachingClasses: Missing grade_id for class', cls);
+      }
+      
+      return {
+        class_id: cls.id || '',
+        class_name: cls.name || 'Unknown Class',
+        grade_id: gradeId,
+        grade_name: gradeName,
+        isClassTeacher: cls.isClassTeacher || false,
+        isSubjectTeacher: cls.isSubjectTeacher || false,
+      };
+    });
+
+    logger.log('getAllTeachingClasses: Mapped classes', transformedClasses);
+    return transformedClasses;
+  } catch (error: any) {
+    console.error('Error fetching all teaching classes:', error);
+    throw new Error(error.message || "Failed to load teaching classes.");
+  }
 };
 
 /**
@@ -226,7 +259,7 @@ export const getTeacherSubjectsForClass = async (
       return [];
     }
 
-    console.log(`getTeacherSubjectsForClass: Found ${gradeSubjectsForGrade.length} grade subjects for grade ${gradeId}`);
+    logger.log(`getTeacherSubjectsForClass: Found ${gradeSubjectsForGrade.length} grade subjects for grade ${gradeId}`);
 
     // Step 2: Get teacher's assigned subjects
     const teacherSubjects = await academicService.getSubjectsByTeacher(teacherId);
@@ -241,7 +274,7 @@ export const getTeacherSubjectsForClass = async (
       teacherSubjects.map((ts: any) => ts.grade_subject_id)
     );
 
-    console.log(`getTeacherSubjectsForClass: Teacher has ${teacherGradeSubjectIds.size} assigned grade subjects`);
+    logger.log(`getTeacherSubjectsForClass: Teacher has ${teacherGradeSubjectIds.size} assigned grade subjects`);
 
     // Step 4: Filter grade_subjects to only include those assigned to the teacher
     // This matches admin panel logic: filter by grade_level_id, then check teacher assignment
@@ -264,7 +297,7 @@ export const getTeacherSubjectsForClass = async (
       })
       .filter((option): option is GradeSubjectOption => option !== null);
 
-    console.log(`getTeacherSubjectsForClass: Final result - ${filteredSubjects.length} subjects for teacher ${teacherId}, class ${classId}, grade ${gradeId}`);
+    logger.log(`getTeacherSubjectsForClass: Final result - ${filteredSubjects.length} subjects for teacher ${teacherId}, class ${classId}, grade ${gradeId}`);
     return filteredSubjects;
   } catch (error: any) {
     console.error('Error fetching teacher subjects for class:', error);
@@ -280,7 +313,7 @@ export const getGradeSubjectsDetailed = async (
     const { apiClient } = await import('@/lib/apiClient');
     const gradeSubjects = await apiClient.get<any[]>(`/academic/grade-subjects/grade/${gradeLevelId}`);
     
-    console.log('getGradeSubjectsDetailed: Raw response for grade', gradeLevelId, gradeSubjects);
+    logger.log('getGradeSubjectsDetailed: Raw response for grade', gradeLevelId, gradeSubjects);
     
     if (!gradeSubjects || !Array.isArray(gradeSubjects)) {
       console.warn('getGradeSubjectsDetailed: Invalid response format', gradeSubjects);
@@ -315,12 +348,28 @@ export const getGradeSubjectsDetailed = async (
       })
       .filter((option): option is GradeSubjectOption => option !== null);
 
-    console.log('getGradeSubjectsDetailed: Successfully mapped', mapped.length, 'subjects');
+    logger.log('getGradeSubjectsDetailed: Successfully mapped', mapped.length, 'subjects');
     return mapped;
   } catch (error: any) {
     console.error('Error fetching grade subjects:', error);
     console.error('Error details:', error.message, error.response?.data || error.data);
     throw new Error(error.message || "Failed to load subjects.");
+  }
+};
+
+/**
+ * Get ALL subjects assigned to a teacher across ALL grades
+ * Used for the redesigned file upload flow
+ */
+export const getTeacherAllSubjectsDetailed = async (
+  teacherId: string
+): Promise<any[]> => {
+  try {
+    const { academicService } = await import('./academicApiService');
+    return await academicService.getAllSubjectsByTeacher(teacherId);
+  } catch (error: any) {
+    console.error('Error fetching all teacher subjects:', error);
+    throw new Error(error.message || "Failed to load all subjects.");
   }
 };
 

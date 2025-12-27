@@ -30,6 +30,7 @@ import {
   UpdateExamTypeDto,
   CreatePeriodDto,
   UpdatePeriodDto,
+  SaveManualMarksDto,
 } from "./dto";
 
 
@@ -137,7 +138,7 @@ export class AcademicController {
   }
 
   @Get("grade-subjects/grade/:gradeId")
-  @Roles("school_admin", "teacher", "super_admin")
+  @Roles("school_admin", "teacher", "super_admin", "student")
   getSubjectsByGrade(
     @Param("gradeId", ParseIntPipe) gradeId: number,
     @Tenant() schoolId: string
@@ -176,6 +177,15 @@ export class AcademicController {
     return this.academicService.getClassesByTeacher(teacherId, schoolId);
   }
 
+  @Get("teacher-classes/teacher/:teacherId/all")
+  @Roles("school_admin", "teacher", "super_admin")
+  getAllTeachingClassesByTeacher(
+    @Param("teacherId") teacherId: string,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.getAllTeachingClassesByTeacher(teacherId, schoolId);
+  }
+
   @Delete("teacher-classes/:id")
   @Roles("school_admin", "super_admin")
   deleteTeacherClass(@Param("id") id: string, @Tenant() schoolId: string) {
@@ -205,6 +215,15 @@ export class AcademicController {
     @Tenant() schoolId: string
   ) {
     return this.academicService.getSubjectsByTeacher(teacherId, schoolId);
+  }
+
+  @Get("teacher-subjects/teacher/:teacherId/all")
+  @Roles("teacher", "super_admin")
+  getAllSubjectsByTeacher(
+    @Param("teacherId") teacherId: string,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.getAllSubjectsByTeacher(teacherId, schoolId);
   }
 
   @Delete("teacher-subjects/:id")
@@ -282,7 +301,7 @@ export class AcademicController {
 
   // ==================== TIMETABLE ====================
   @Get("timetable/class/:classId")
-  @Roles("school_admin", "teacher", "super_admin")
+  @Roles("school_admin", "teacher", "super_admin", "student")
   getWeeklyTimetable(
     @Param("classId") classId: string,
     @Tenant() schoolId: string
@@ -318,25 +337,46 @@ export class AcademicController {
   // ==================== HELPER ENDPOINTS ====================
   
   @Get('helper/grade-subject/:classId/:subjectName')
-  getGradeSubjectIdByDetails(
+  async getGradeSubjectIdByDetails(
     @Param('classId') classId: string,
     @Param('subjectName') subjectName: string,
     @Tenant() schoolId: string,
   ) {
-    return this.academicService.getGradeSubjectIdByDetails(
+    const gradeSubjectId = await this.academicService.getGradeSubjectIdByDetails(
       classId,
       subjectName,
       schoolId,
     );
+    // Return as JSON object to avoid JSON parsing issues
+    return { id: gradeSubjectId };
   }
 
   @Get('helper/exam-type/:examTypeName')
-  getExamTypeIdByName(
+  async getExamTypeIdByName(
     @Param('examTypeName') examTypeName: string,
     @Tenant() schoolId: string,
   ) {
-    return this.academicService.getExamTypeIdByName(examTypeName, schoolId);
+    const examTypeId = await this.academicService.getExamTypeIdByName(examTypeName, schoolId);
+    // Return as JSON object to avoid JSON parsing issues
+    return { id: examTypeId };
   }
 
-  
+  @Post("manual-marks")
+  @Roles("teacher")
+  saveManualMarks(
+    @Body() dto: SaveManualMarksDto,
+    @CurrentUser() user: any,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.saveManualMarks(dto, user.id, schoolId);
+  }
+
+  @Get("classes/:classId/students")
+  @Roles("teacher", "school_admin")
+  getStudentsByClassId(
+    @Param("classId") classId: string,
+    @Tenant() schoolId: string
+  ) {
+    return this.academicService.getStudentsByClassId(classId, schoolId);
+  }
 }

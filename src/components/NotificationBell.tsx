@@ -59,8 +59,8 @@ const NotificationBell = () => {
 
   const handleNotificationClick = async (notification: Notification) => {
     // Mark as read
-    if (!notification.is_read) {
-      await markNotificationAsRead(notification.id);
+    if (!notification.is_read && profile?.id) {
+      await markNotificationAsRead(notification.id, profile.id);
       setNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
       );

@@ -4,9 +4,12 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  Inject,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from "../prisma/prisma.service";
 import * as bcrypt from "bcrypt";
 import { RegisterSuperAdminDto } from "./dto/register-super-admin.dto";
@@ -19,7 +22,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private configService: ConfigService
+    private configService: ConfigService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async registerSuperAdmin(dto: RegisterSuperAdminDto) {
@@ -78,17 +82,20 @@ export class AuthService {
   }
 
   async registerUser(dto: RegisterUserDto, createdBySchoolId?: string) {
-    // Check if email already exists
-    const existingUser = await this.prisma.profiles.findUnique({
-      where: { email: dto.email },
+    // Determine school_id: use from DTO if present, otherwise from creator's context
+    const schoolId = dto.school_id || createdBySchoolId;
+    
+    // Check if email already exists in the SAME school (allow same email in different schools)
+    const existingUser = await this.prisma.profiles.findFirst({
+      where: { 
+        email: dto.email,
+        school_id: schoolId 
+      },
     });
 
     if (existingUser) {
-      throw new ConflictException("Email already registered");
+      throw new ConflictException("Email already registered in this school");
     }
-
-    // Determine school_id: use from DTO if present, otherwise from creator's context
-    const schoolId = dto.school_id || createdBySchoolId;
 
     if (!schoolId && dto.role_id !== 1) {
       throw new ForbiddenException(
@@ -115,6 +122,9 @@ export class AuthService {
       },
     });
 
+    // Invalidate user caches
+    await this.invalidateUserCaches(schoolId);
+
     return {
       id: user.id,
       email: user.email,
@@ -128,8 +138,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, expectedRole?: string) {
-    // Validate user credentials
-    const user = await this.validateUser(dto.email, dto.password);
+    // Validate user credentials with school_id if provided
+    const user = await this.validateUser(dto.email, dto.password, dto.school_id);
 
     if (!user) {
       throw new UnauthorizedException("Invalid credentials");
@@ -159,7 +169,8 @@ export class AuthService {
     }
 
     // Check if first-time login - AFTER role validation
-    if ((user as any).is_first_login) {
+    // Skip password reset requirement for super_admin
+    if ((user as any).is_first_login && userRole !== 'super_admin') {
       throw new ForbiddenException({
         statusCode: 403,
         message: "Password reset required",
@@ -245,9 +256,15 @@ export class AuthService {
     }
   }
 
-  private async validateUser(email: string, password: string) {
-    const user = await this.prisma.profiles.findUnique({
-      where: { email },
+  private async validateUser(email: string, password: string, schoolId?: string) {
+    // If school_id is provided, find user by email and school_id
+    // Otherwise, find by email only (for backward compatibility and super_admin)
+    const whereClause = schoolId 
+      ? { email, school_id: schoolId }
+      : { email };
+
+    const user = await this.prisma.profiles.findFirst({
+      where: whereClause,
       include: {
         user_roles: true,
       },
@@ -335,5 +352,19 @@ export class AuthService {
         message: "Invalid session",
       };
     }
+  }
+
+  // Helper method to invalidate all user-related caches
+  private async invalidateUserCaches(schoolId?: string) {
+    // Clear all user cache variations for this school
+    const patterns = [
+      `users:school:${schoolId || 'all'}:role:all:admin:false`,
+      `users:school:${schoolId || 'all'}:role:all:admin:true`,
+      `users:school:${schoolId || 'all'}:role:3:admin:false`, // Teachers
+      `users:school:${schoolId || 'all'}:role:4:admin:false`, // Students
+      `users:school:all:role:all:admin:true`, // Super admin view
+    ];
+    
+    await Promise.all(patterns.map(key => this.cacheManager.del(key)));
   }
 }

@@ -21,3 +21,9 @@ export interface FlattenedClass {
   grade_name: string;
 }
 
+// Extended interface for teacher classes with relationship information
+export interface TeacherClassWithRelationship extends FlattenedClass {
+  isClassTeacher: boolean;
+  isSubjectTeacher: boolean;
+}
+

@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+
 import { motion } from "framer-motion";
-import { CheckSquare, AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { CheckSquare, AlertCircle, ArrowRight, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,34 +10,23 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherGradingQueue, GradingQueueItem } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 const TeacherTasks = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
-    const [gradingTasks, setGradingTasks] = useState<GradingQueueItem[]>([]);
-    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchGradingQueue = async () => {
-            if (profileLoading) return;
-            if (!profile) {
-                setLoading(false);
-                return;
-            }
-
-            try {
-                const queue = await getTeacherGradingQueue(profile.id);
-                setGradingTasks(queue);
-            } catch (error: any) {
-                console.error("Error fetching grading queue:", error);
-                toast.error("Failed to load grading queue");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchGradingQueue();
-    }, [profile, profileLoading]);
+    // Fetch grading queue using React Query
+    const { data: gradingTasks = [], isLoading: loading } = useQuery({
+        queryKey: ['teacher-grading-queue', profile?.id ?? ''],
+        queryFn: async () => {
+            if (!profile?.id) return [];
+            return await getTeacherGradingQueue(profile.id);
+        },
+        enabled: !!profile?.id,
+        staleTime: 2 * 60 * 1000, // 2 minutes
+    });
 
     const getUrgencyBadge = (pendingCount: number) => {
         if (pendingCount > 20) {
@@ -59,20 +48,25 @@ const TeacherTasks = () => {
     }
 
     return (
-        <div className="min-h-screen p-6">
+        <div className="min-h-screen p-6 pt-20">
             <div className="max-w-7xl mx-auto space-y-8">
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between"
+                    className="flex items-center gap-2 sm:gap-4"
                 >
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => navigate("/teacher")}
+                        className="shrink-0"
+                    >
+                        <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </Button>
                     <div>
                         <h1 className="text-4xl font-bold neon-text mb-2">My Tasks 📝</h1>
                         <p className="text-muted-foreground">Manage your grading queue</p>
                     </div>
-                    <Button variant="outline" className="glass" onClick={() => navigate("/teacher")}>
-                        Back to Dashboard
-                    </Button>
                 </motion.div>
 
                 {/* Grading Section */}

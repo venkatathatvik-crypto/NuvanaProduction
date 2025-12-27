@@ -11,75 +11,47 @@ import {
   LogOut,
   CheckSquare,
   AlertCircle,
+  MessageSquare,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
 import NotificationBell from "@/components/NotificationBell";
-import { supabase } from "@/lib/mockBackend";
+import { getNotifications, type Notification } from "@/services/notificationService";
 import { formatDistanceToNow } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
   const { logout, profile } = useAuth();
-  const [classes, setClasses] = useState<FlattenedClass[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(true);
 
-  useEffect(() => {
-    const fetchClasses = async () => {
-      if (!profile?.id) {
-        setLoading(false);
-        return;
-      }
+  // Fetch teacher's classes using React Query
+  const { data: classes = [], isLoading: loadingClasses } = useQuery({
+    queryKey: queryKeys.teacher.classes(profile?.id ?? '', profile?.school_id ?? ''),
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      return await getTeacherClasses(profile.id, profile.school_id);
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-      try {
-        const teacherClasses = await getTeacherClasses(profile.id, profile.school_id);
-        setClasses(teacherClasses);
-      } catch (error) {
-        console.error("Error fetching teacher classes:", error);
-        setClasses([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchClasses();
-  }, [profile?.id]);
-
-  useEffect(() => {
-    const fetchRecentNotifications = async () => {
-      if (!profile?.id) {
-        setLoadingNotifications(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('recipient_id', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (error) throw error;
-        setNotifications(data || []);
-      } catch (error) {
-        console.error('Error fetching notifications:', error);
-        setNotifications([]);
-      } finally {
-        setLoadingNotifications(false);
-      }
-    };
-
-    fetchRecentNotifications();
-  }, [profile?.id]);
+  // Fetch recent notifications using React Query
+  const { data: notifications = [], isLoading: loadingNotifications } = useQuery({
+    queryKey: queryKeys.teacher.notifications(profile?.id ?? '', 5),
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      return await getNotifications(profile.id, 5);
+    },
+    enabled: !!profile?.id,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -93,10 +65,11 @@ const TeacherDashboard = () => {
     { label: "Manage Tests", icon: FileText, color: "text-green-500", path: "/teacher/tests" },
     { label: "Analytics", icon: BarChart2, color: "text-blue-500", path: "/teacher/analytics" },
     { label: "Voice Upload", icon: Mic, color: "text-green-500", path: "/teacher/voice-upload" },
-    { label: "My Tasks", icon: CheckSquare, color: "text-green-500", path: "/teacher/tasks" },
+    { label: "My Tasks", icon: CheckSquare, color: "text-blue-500", path: "/teacher/tasks" },
+    { label: "Communication", icon: MessageSquare, color: "text-green-500", path: "/teacher/communication" },
   ];
 
-  const handleNotificationClick = (notification: any) => {
+  const handleNotificationClick = (notification: Notification) => {
     if (notification.target_url) {
       navigate(notification.target_url);
     }
@@ -114,7 +87,7 @@ const TeacherDashboard = () => {
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2 truncate">Welcome, {profile?.name || "Teacher"}! 📚</h1>
+            <h1 className="text-2xl sm:text-2xl font-bold neon-text mb-1 sm:mb-2 truncate">Welcome, {profile?.name || "Teacher"}!</h1>
             <p className="text-muted-foreground text-sm sm:text-base">Manage your classes and students efficiently</p>
           </div>
           <div className="flex gap-2 sm:gap-4 shrink-0">
@@ -149,12 +122,12 @@ const TeacherDashboard = () => {
                 <h2 className="text-xl sm:text-2xl font-semibold">Class Overview</h2>
               </div>
               <div className="space-y-4">
-                {loading ? (
+                {loadingClasses ? (
                   <p className="text-muted-foreground text-center py-8">
                     Loading classes...
                   </p>
                 ) : null}
-                {!loading && classes.length > 0 ? (
+                {!loadingClasses && classes.length > 0 ? (
                   <div className="space-y-4">
                     {classes.map((cls) => (
                       <div
@@ -183,7 +156,7 @@ const TeacherDashboard = () => {
                     ))}
                   </div>
                 ) : null}
-                {!loading && classes.length === 0 ? (
+                {!loadingClasses && classes.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No classes assigned yet.
                   </p>

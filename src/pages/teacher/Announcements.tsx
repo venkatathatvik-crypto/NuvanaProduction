@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   getTeacherClasses,
   getTeacherAnnouncements,
@@ -27,71 +30,37 @@ import { useAuth } from "@/auth/AuthContext";
 const TeacherAnnouncements = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
+  const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-  const [classes, setClasses] = useState<FlattenedClass[]>([]);
-  const [loadingClasses, setLoadingClasses] = useState(true);
-  const [announcements, setAnnouncements] = useState<TeacherAnnouncement[]>([]);
-  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [announcementToDelete, setAnnouncementToDelete] = useState<{ id: string; title: string } | null>(null);
 
-  // Load teacher's classes dynamically using teacher_classes mapping
-  useEffect(() => {
-    const fetchClasses = async () => {
-      if (profileLoading) return;
+  // Fetch teacher's classes using React Query
+  const { data: classes = [], isLoading: loadingClasses } = useQuery({
+    queryKey: queryKeys.teacher.classes(profile?.id ?? '', profile?.school_id ?? ''),
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      return await getTeacherClasses(profile.id, profile.school_id);
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-      if (!profile) {
-        setClasses([]);
-        setLoadingClasses(false);
-        return;
-      }
-
-      try {
-        const classResponse = await getTeacherClasses(profile.id, profile.school_id);
-        if (classResponse && classResponse.length > 0) {
-          setClasses(classResponse);
-        } else {
-          setClasses([]);
-        }
-      } catch (error) {
-        console.error("Error fetching classes for announcements:", error);
-        toast.error("Failed to load classes for announcements.");
-        setClasses([]);
-      } finally {
-        setLoadingClasses(false);
-      }
-    };
-
-    fetchClasses();
-  }, [profile, profileLoading]);
-
-  useEffect(() => {
-    const fetchAnnouncements = async () => {
-      if (profileLoading) return;
-
-      if (!profile) {
-        setAnnouncements([]);
-        setAnnouncementsLoading(false);
-        return;
-      }
-
-      try {
-        const data = await getTeacherAnnouncements(profile.id, profile.school_id);
-        setAnnouncements(data);
-      } catch (error) {
-        console.error("Error fetching announcements:", error);
-        toast.error("Failed to load announcements.");
-        setAnnouncements([]);
-      } finally {
-        setAnnouncementsLoading(false);
-      }
-    };
-
-    fetchAnnouncements();
-  }, [profile, profileLoading]);
+  // Fetch teacher's announcements using React Query
+  const { data: announcements = [], isLoading: announcementsLoading } = useQuery({
+    queryKey: queryKeys.teacher.announcements(profile?.id ?? '', profile?.school_id ?? ''),
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      return await getTeacherAnnouncements(profile.id, profile.school_id);
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 
   const classNames = classes.map((c) => c.class_name);
 
@@ -129,7 +98,7 @@ const TeacherAnnouncements = () => {
 
     setSending(true);
     try {
-      const newAnnouncement = await createTeacherAnnouncement({
+      await createTeacherAnnouncement({
         title,
         message,
         isUrgent,
@@ -137,7 +106,6 @@ const TeacherAnnouncements = () => {
         teacherId: profile.id,
         schoolId: profile.school_id,
       });
-      setAnnouncements((prev) => [newAnnouncement, ...prev]);
       toast.success("Announcement sent successfully!");
 
       // Send notifications to students in all selected classes
@@ -177,6 +145,12 @@ const TeacherAnnouncements = () => {
       setMessage("");
       setIsUrgent(false);
       setSelectedClasses([]);
+
+      // Invalidate caches so students see the announcement immediately
+      queryClient.invalidateQueries({ queryKey: ['student-announcements'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacher.announcements(profile.id, profile.school_id) });
     } catch (error) {
       console.error("Announcement send error:", error);
       toast.error(
@@ -187,11 +161,30 @@ const TeacherAnnouncements = () => {
     }
   };
 
-  const deleteAnnouncement = async (id: string) => {
+  const handleDeleteClick = (id: string, title: string) => {
+    setAnnouncementToDelete({ id, title });
+    setDeleteDialogOpen(true);
+  };
+
+  const deleteAnnouncement = async () => {
+    if (!announcementToDelete) return;
+
     try {
-      await deleteTeacherAnnouncement(id, selectedClasses[0]);
-      setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+      await deleteTeacherAnnouncement(announcementToDelete.id, selectedClasses[0]);
       toast.success("Announcement deleted successfully.");
+
+      // Invalidate caches so students see the update immediately
+      queryClient.invalidateQueries({ queryKey: ['student-announcements'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.teacher.announcements(profile?.id ?? '', profile?.school_id ?? '') 
+      });
+      
+      // Refetch to update UI immediately
+      await queryClient.refetchQueries({ 
+        queryKey: queryKeys.teacher.announcements(profile?.id ?? '', profile?.school_id ?? '') 
+      });
     } catch (error) {
       console.error("Delete error:", error);
       const message =
@@ -199,6 +192,8 @@ const TeacherAnnouncements = () => {
           ? error.message
           : "Failed to delete announcement.";
       toast.error(message);
+    } finally {
+      setAnnouncementToDelete(null);
     }
   };
 
@@ -433,7 +428,7 @@ const TeacherAnnouncements = () => {
                       variant="ghost"
                       size="icon"
                       className="text-destructive"
-                      onClick={() => deleteAnnouncement(announcement.id)}
+                      onClick={() => handleDeleteClick(announcement.id, announcement.title)}
                     >
                       <Trash2 className="w-5 h-5" />
                     </Button>
@@ -444,6 +439,22 @@ const TeacherAnnouncements = () => {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={deleteAnnouncement}
+        title="Delete Announcement"
+        description={
+          announcementToDelete
+            ? `Are you sure you want to delete "${announcementToDelete.title}"? This action cannot be undone and students will no longer see this announcement.`
+            : "Are you sure you want to delete this announcement?"
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+      />
     </div>
   );
 };

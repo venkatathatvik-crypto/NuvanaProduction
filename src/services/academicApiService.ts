@@ -221,6 +221,10 @@ export const academicService = {
     return apiClient.get(`/academic/teacher-classes/teacher/${teacherId}`);
   },
 
+  async getAllTeachingClassesByTeacher(teacherId: string): Promise<any[]> {
+    return apiClient.get(`/academic/teacher-classes/teacher/${teacherId}/all`);
+  },
+
   async deleteTeacherClass(id: string): Promise<{ message: string }> {
     return apiClient.delete(`/academic/teacher-classes/${id}`);
   },
@@ -242,6 +246,10 @@ export const academicService = {
 
   async getSubjectsByTeacher(teacherId: string): Promise<TeacherSubject[]> {
     return apiClient.get(`/academic/teacher-subjects/teacher/${teacherId}`);
+  },
+
+  async getAllSubjectsByTeacher(teacherId: string): Promise<any[]> {
+    return apiClient.get(`/academic/teacher-subjects/teacher/${teacherId}/all`);
   },
 
   async deleteTeacherSubject(id: string): Promise<{ message: string }> {

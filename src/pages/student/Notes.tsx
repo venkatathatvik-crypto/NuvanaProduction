@@ -15,6 +15,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface VoiceNoteWithPlayState extends StudentVoiceNote {
   isPlaying?: boolean;
@@ -29,38 +30,26 @@ interface SubjectNotes {
 const Notes = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
-  const [voiceNotes, setVoiceNotes] = useState<VoiceNoteWithPlayState[]>([]);
-  const [loadingNotes, setLoadingNotes] = useState(true);
+  const queryClient = useQueryClient();
+
+  // Fetch student class data first
+  const { data: studentData } = useQuery({
+    queryKey: ["student-data", profile?.id],
+    queryFn: () => getStudentData(profile!.id),
+    enabled: !!profile,
+  });
+
+  // Fetch voice notes using the class_id from studentData
+  const { data: voiceNotesData = [], isLoading: loadingNotes } = useQuery({
+    queryKey: ["student-voice-notes", studentData?.class_id, profile?.school_id],
+    queryFn: () => getStudentVoiceNotes(studentData!.class_id, profile!.school_id),
+    enabled: !!studentData?.class_id && !!profile,
+  });
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchStudentNotes = async () => {
-      if (profileLoading) return;
-
-      if (!profile) {
-        setLoadingNotes(false);
-        return;
-      }
-
-      try {
-        // Get student data to get class_id
-        const studentData = await getStudentData(profile.id);
-        if (studentData?.class_id) {
-          // Fetch voice notes for this class
-          const notesData = await getStudentVoiceNotes(studentData.class_id, profile.school_id);
-          setVoiceNotes(notesData);
-        }
-      } catch (error) {
-        console.error("Error fetching student voice notes:", error);
-        toast.error("Failed to load voice notes.");
-      } finally {
-        setLoadingNotes(false);
-      }
-    };
-
-    fetchStudentNotes();
-  }, [profile, profileLoading]);
+  const voiceNotes = voiceNotesData as VoiceNoteWithPlayState[];
 
   const subjectColors: Record<string, string> = {
     Mathematics: "neon-cyan",
@@ -112,18 +101,12 @@ const Notes = () => {
         if (audioRef.current.paused) {
           try {
             await audioRef.current.play();
-            setVoiceNotes((prev) =>
-              prev.map((n) => (n.id === note.id ? { ...n, isPlaying: true } : n))
-            );
           } catch (error) {
             console.error("Resume error:", error);
             toast.error("Playback failed.");
           }
         } else {
           audioRef.current.pause();
-          setVoiceNotes((prev) =>
-            prev.map((n) => (n.id === note.id ? { ...n, isPlaying: false } : n))
-          );
         }
       }
     } else {
@@ -136,20 +119,14 @@ const Notes = () => {
           await audioRef.current.play();
           
           setCurrentPlayingId(note.id);
-          setVoiceNotes((prev) =>
-            prev.map((n) =>
-              n.id === note.id
-                ? { ...n, isPlaying: true }
-                : { ...n, isPlaying: false }
-            )
-          );
+          // Note: We don't update state here anymore for isPlaying, 
+          // but we can track currentPlayingId to show UI change.
+          // Since voiceNotes is coming from useQuery, we can't easily mutate it.
+          // But we can check note.id === currentPlayingId in the render.
         } catch (error) {
           console.error("Playback error:", error);
           toast.error("Cannot play this audio format. Please download it instead.");
           setCurrentPlayingId(null);
-          setVoiceNotes((prev) =>
-            prev.map((n) => ({ ...n, isPlaying: false }))
-          );
         }
       }
     }
@@ -201,9 +178,6 @@ const Notes = () => {
           ref={audioRef}
           onEnded={() => {
             setCurrentPlayingId(null);
-            setVoiceNotes((prev) =>
-              prev.map((n) => ({ ...n, isPlaying: false }))
-            );
           }}
         />
 
@@ -313,10 +287,12 @@ const Notes = () => {
                                 </Badge>
                               </div>
                               <p className="text-xs text-muted-foreground mt-2">
-                                {formatDistanceToNow(
-                                  new Date(note.uploadDate),
-                                  { addSuffix: true }
-                                )}
+                                {note.uploadDate
+                                  ? formatDistanceToNow(
+                                      new Date(note.uploadDate),
+                                      { addSuffix: true }
+                                    )
+                                  : "Recently"}
                               </p>
                             </div>
                           </div>
@@ -327,7 +303,7 @@ const Notes = () => {
                               className="glass"
                               onClick={() => handlePlayPause(note)}
                             >
-                              {note.isPlaying ? (
+                              {currentPlayingId === note.id && !audioRef.current?.paused ? (
                                 <>
                                   <Pause className="w-4 h-4 mr-2" />
                                   Pause

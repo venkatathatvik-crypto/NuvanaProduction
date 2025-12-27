@@ -1,8 +1,9 @@
+import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { UserRole } from "@/lib/auth";
-import { ReactNode } from "react";
-import LoadingSpinner from "./LoadingSpinner";
+import { logger } from "@/lib/logger";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -35,7 +36,7 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
   // If role is required but profile doesn't exist or role doesn't match
   if (role) {
     if (!profile) {
-      console.log('[ProtectedRoute] Profile is null, redirecting to login');
+      logger.log('[ProtectedRoute] Profile is null, redirecting to login');
       // Profile failed to load, redirect to appropriate login
       if (role === "super_admin") {
         return <Navigate to="/super-admin-login" />;
@@ -47,14 +48,14 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
     }
     
     // Debug logging
-    console.log('[ProtectedRoute] Role check:', {
+    logger.log('[ProtectedRoute] Role check:', {
       requiredRole: role,
       profileRole: profile.role,
       match: profile.role === role
     });
     
     if (profile.role !== role) {
-      console.warn('[ProtectedRoute] Role mismatch! Required:', role, 'Got:', profile.role);
+      logger.warn('[ProtectedRoute] Role mismatch! Required:', role, 'Got:', profile.role);
       return <Navigate to="/not-found" replace />;
     }
   }
@@ -63,4 +64,3 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
 };
 
 export default ProtectedRoute;
-

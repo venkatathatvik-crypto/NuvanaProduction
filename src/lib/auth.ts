@@ -31,13 +31,14 @@ const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
 export const authService = {
   /**
-   * Login user with email, password, and optional expected role
+   * Login user with email, password, optional school_id, and optional expected role
    * Uses backend API for authentication with role validation
    */
   async login(
     email: string,
     password: string,
-    expectedRole?: UserRole
+    expectedRole?: UserRole,
+    schoolId?: string
   ): Promise<AuthenticatedUser | null> {
     try {
       // Call backend API for authentication
@@ -45,7 +46,7 @@ export const authService = {
         user: any;
         access_token: string;
         refresh_token: string;
-      }>("/auth/login", { email, password, expectedRole }, { skipAuth: true });
+      }>("/auth/login", { email, password, expectedRole, school_id: schoolId }, { skipAuth: true });
 
       // Store JWT tokens in localStorage
       localStorage.setItem("access_token", data.access_token);

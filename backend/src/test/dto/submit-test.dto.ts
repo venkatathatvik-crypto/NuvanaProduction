@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsInt,
   IsString,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -14,6 +15,8 @@ export class StudentAnswerDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0) // Allow 0 as valid option index
+  @Type(() => Number)
   student_selected_option_index?: number;
 
   @IsOptional()

@@ -173,7 +173,7 @@ const Events = () => {
             </TabsTrigger>
             <TabsTrigger value="deadlines" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Deadlines</TabsTrigger>
             <TabsTrigger value="past" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
-              <span className="hidden sm:inline">Past Events</span>
+              <span className="hidden sm:inline">Past Assignments</span>
               <span className="sm:hidden">Past</span>
             </TabsTrigger>
           </TabsList>
@@ -323,7 +323,17 @@ const Events = () => {
 
 
           <TabsContent value="deadlines" className="space-y-4 mt-6">
-            {deadlines.map((deadline, index) => (
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <LoadingSpinner />
+              </div>
+            ) : deadlines.length === 0 ? (
+              <div className="text-center py-12">
+                <Calendar className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">No deadlines available.</p>
+              </div>
+            ) : (
+              deadlines.map((deadline, index) => (
               <motion.div
                 key={deadline.testId || index}
                 initial={{ opacity: 0, x: -20 }}
@@ -382,7 +392,8 @@ const Events = () => {
                   </div>
                 </Card>
               </motion.div>
-            ))}
+            ))
+            )}
           </TabsContent>
 
           <TabsContent value="past" className="space-y-4 mt-6">
