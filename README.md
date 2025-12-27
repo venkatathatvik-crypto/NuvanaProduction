@@ -58,7 +58,7 @@ Create a `.env` file in the root directory:
 
 ```env
 # Backend API URL
-VITE_BACKEND_URL=http://localhost:3000
+VITE_BACKEND_URL=https://nuvana360server.onrender.com
 
 # Supabase Configuration (Optional - for file storage)
 # VITE_SUPABASE_URL=your_supabase_project_url
@@ -122,7 +122,7 @@ npm run dev
 
 The application will be available at:
 - Frontend: http://localhost:5173 (or http://localhost:8080)
-- Backend API: http://localhost:3000
+- Backend API: https://nuvana360server.onrender.com
 
 ## 📝 How to Edit This Code
 

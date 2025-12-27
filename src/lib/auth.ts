@@ -27,7 +27,7 @@ export interface AuthenticatedUser {
 }
 
 // Get backend URL from environment variable
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_BACKEND_URL || "https://nuvana360server.onrender.com";
 
 export const authService = {
   /**

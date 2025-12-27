@@ -2,7 +2,7 @@
  * Centralized API client with automatic token refresh and retry logic
  */
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://nuvana360server.onrender.com';
 
 interface ApiClientOptions extends RequestInit {
   skipAuth?: boolean;
