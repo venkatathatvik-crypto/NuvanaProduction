@@ -18,3 +18,6 @@ export * from './exam-type.dto';
 
 // Timetable DTOs
 export * from './timetable.dto';
+
+// Manual Marks DTOs
+export * from './manual-marks.dto';

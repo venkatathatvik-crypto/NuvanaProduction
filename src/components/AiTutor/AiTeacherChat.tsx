@@ -1,15 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Brain, BookOpen, PenTool, LayoutTemplate, Briefcase, FileCode, Users, Lightbulb, Loader2, Camera, Upload, X, Image as ImageIcon, Mic, Headphones } from 'lucide-react';
+import { Send, Sparkles, Brain, BookOpen, PenTool, LayoutTemplate, Briefcase, FileCode, Users, Lightbulb, Loader2, Camera, Upload, X, Image as ImageIcon, Mic, Headphones, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { aiService } from '@/services/aiService';
 import { MessageBubble } from '@/components/AiTutor/MessageBubble';
 import { useAuth } from '@/auth/AuthContext';
 import { toast } from 'sonner';
 import VoiceModeOverlay from './VoiceModeOverlay';
 import { academicService } from '@/services/academicApiService';
+import { GradingApprovalModal } from './GradingApprovalModal';
 
 const TEACHER_ACTION_MODES = [
     { id: 'start', label: 'Ask Assistant', icon: Sparkles, color: 'text-neon-purple', desc: 'General help' },
@@ -26,6 +28,7 @@ const AiTeacherChat = () => {
     const [messages, setMessages] = useState<any[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isContextLoading, setIsContextLoading] = useState(false);
     const [activeMode, setActiveMode] = useState<string>('start');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
@@ -33,10 +36,46 @@ const AiTeacherChat = () => {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceTranscription, setVoiceTranscription] = useState('');
     const [viewImageModal, setViewImageModal] = useState<string | null>(null);
+    const [gradingApprovalOpen, setGradingApprovalOpen] = useState(false);
+    const [lastGradingData, setLastGradingData] = useState<any>(null);
 
-    // Subject Selection
-    const [subjects, setSubjects] = useState<string[]>([]);
-    const [selectedSubject, setSelectedSubject] = useState<string>('');
+    // Subject & Class Selection
+    const [allSubjectsData, setAllSubjectsData] = useState<any[]>([]);
+    const [selectedSubject, setSelectedSubject] = useState<string>('all');
+    const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
+    const [selectedClassId, setSelectedClassId] = useState<string>('all');
+
+    // Derived subjects list based on selected class
+    const subjects = useMemo(() => {
+        if (selectedClassId === 'all') {
+            return Array.from(new Set(
+                allSubjectsData
+                    .map(ts => ts.grade_subjects?.subjects_master?.name)
+                    .filter((name): name is string => !!name)
+            ));
+        }
+
+        // Find the grade_id for the selected class
+        const selectedClass = teacherClasses.find(c => c.class_id === selectedClassId);
+        if (!selectedClass) return [];
+
+        const gradeId = selectedClass.grade_id;
+
+        // Filter subjects that belong to this grade level
+        return Array.from(new Set(
+            allSubjectsData
+                .filter(ts => ts.grade_subjects?.grade_level_id === gradeId)
+                .map(ts => ts.grade_subjects?.subjects_master?.name)
+                .filter((name): name is string => !!name)
+        ));
+    }, [allSubjectsData, selectedClassId, teacherClasses]);
+
+    // Reset subject if it's no longer available for the selected class
+    useEffect(() => {
+        if (selectedSubject !== 'all' && !subjects.includes(selectedSubject)) {
+            setSelectedSubject('all');
+        }
+    }, [selectedClassId, subjects, selectedSubject]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,25 +89,33 @@ const AiTeacherChat = () => {
         scrollToBottom();
     }, [messages]);
 
-    // Load Teacher Subjects
+    // Load Teacher Context (Subjects & Classes)
     useEffect(() => {
-        const loadSubjects = async () => {
+        const loadTeacherContext = async () => {
             if (profile?.id) {
+                setIsContextLoading(true);
                 try {
-                    const teacherSubjects = await academicService.getSubjectsByTeacher(profile.id);
-                    // Extract unique subject names
-                    const uniqueSubjects = Array.from(new Set(
-                        teacherSubjects
-                            .map(ts => ts.grade_subjects?.subjects_master?.name)
-                            .filter((name): name is string => !!name)
-                    ));
-                    setSubjects(uniqueSubjects);
+                    // 1. Load Subjects
+                    const subjectsData = await academicService.getSubjectsByTeacher(profile.id);
+                    setAllSubjectsData(subjectsData);
+
+                    // 2. Load ALL teaching classes (both assigned and subject-based)
+                    const { getAllTeachingClasses } = await import('@/services/academic');
+                    const classesData = await getAllTeachingClasses(profile.id, profile.school_id);
+                    setTeacherClasses(classesData);
+                    
+                    // Auto-select first class if available
+                    if (classesData.length > 0) {
+                        setSelectedClassId(classesData[0].class_id);
+                    }
                 } catch (error) {
-                    console.error("Failed to load teacher subjects", error);
+                    console.error("Failed to load teacher context", error);
+                } finally {
+                    setIsContextLoading(false);
                 }
             }
         };
-        loadSubjects();
+        loadTeacherContext();
     }, [profile]);
 
     // Initialize Speech Recognition
@@ -237,7 +284,8 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                 taskType: taskType as any,
                 query: query,
                 studentId: profile?.id,
-                subject: selectedSubject || undefined,
+                classId: selectedClassId && selectedClassId !== 'all' ? selectedClassId : undefined,
+                subject: selectedSubject && selectedSubject !== 'all' ? selectedSubject : undefined,
                 additionalContext: additionalContext
             });
 
@@ -250,6 +298,18 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
             // Flatten response for speech
             let speakableText = aiResponseEncoded.explanation || "Output generated.";
             if (aiResponseEncoded.title) speakableText = `${aiResponseEncoded.title}. ${speakableText}`;
+
+            // Parse marks from grading response if it's a grading task
+            if (activeMode === 'grade_paper') {
+                const marksMatch = aiResponseEncoded.explanation?.match(/\*\*Marks Awarded:\*\*\s*(\d+)\/(\d+)/);
+                if (marksMatch) {
+                    setLastGradingData({
+                        marksObtained: parseInt(marksMatch[1]),
+                        totalMarks: parseInt(marksMatch[2]),
+                        aiFeedback: aiResponseEncoded.explanation || '',
+                    });
+                }
+            }
 
             setMessages((prev) => [
                 ...prev,
@@ -309,21 +369,39 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Subject Selector - Always visible */}
-                        <select
-                            value={selectedSubject}
-                            onChange={(e) => setSelectedSubject(e.target.value)}
-                            className="h-8 max-w-[120px] rounded-md border border-border bg-background/50 px-2 text-xs focus:outline-none focus:border-primary transition-colors truncate"
-                        >
-                            <option value="">General Subject</option>
-                            {subjects.length > 0 ? (
-                                subjects.map(sub => (
-                                    <option key={sub} value={sub}>{sub}</option>
-                                ))
-                            ) : (
-                                <option disabled>No subjects found</option>
-                            )}
-                        </select>
+                        {/* Class Selector */}
+                        <Select value={selectedClassId} onValueChange={setSelectedClassId} disabled={isContextLoading}>
+                            <SelectTrigger className="h-8 w-[120px] text-xs">
+                                {isContextLoading ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : null}
+                                <SelectValue placeholder="All Classes" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Classes</SelectItem>
+                                {teacherClasses.map(tc => (
+                                    <SelectItem key={tc.class_id} value={tc.class_id}>
+                                        {tc.class_name || 'Class'}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        {/* Subject Selector */}
+                        <Select value={selectedSubject} onValueChange={setSelectedSubject} disabled={isContextLoading}>
+                            <SelectTrigger className="h-8 w-[120px] text-xs">
+                                {isContextLoading ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : null}
+                                <SelectValue placeholder="All Subjects" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Subjects</SelectItem>
+                                {subjects.length > 0 ? (
+                                    subjects.map(sub => (
+                                        <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                                    ))
+                                ) : (
+                                    <SelectItem value="none" disabled>No subjects</SelectItem>
+                                )}
+                            </SelectContent>
+                        </Select>
 
                         {/* Voice Mode Toggle */}
                         <Button
@@ -370,6 +448,19 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                                     content={msg.content}
                                     timestamp={msg.timestamp}
                                 />
+                                {/* Show Save to Marks button after grading response */}
+                                {msg.sender === 'ai' && index === messages.length - 1 && activeMode === 'grade_paper' && lastGradingData && (
+                                    <div className="flex justify-start ml-12 mt-2">
+                                        <Button
+                                            onClick={() => setGradingApprovalOpen(true)}
+                                            className="bg-green-600 hover:bg-green-700 text-white"
+                                            size="sm"
+                                        >
+                                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                                            Save to Marks
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                         {isLoading && (
@@ -490,6 +581,45 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                     </div>
                 </div>
             </Card>
+
+            {/* Full Image Preview Modal */}
+            {viewImageModal && (
+                <div 
+                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+                    onClick={() => setViewImageModal(null)}
+                >
+                    <div className="relative max-w-4xl max-h-[90vh] w-full">
+                        <button
+                            onClick={() => setViewImageModal(null)}
+                            className="absolute -top-12 right-0 text-white hover:text-primary transition-colors"
+                        >
+                            <X className="w-8 h-8" />
+                        </button>
+                        <img 
+                            src={viewImageModal} 
+                            alt="Full size preview" 
+                            className="w-full h-full object-contain rounded-lg"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
+                            <p className="text-white text-sm text-center">Click outside to close</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Grading Approval Modal */}
+            {gradingApprovalOpen && lastGradingData && profile && (
+                <GradingApprovalModal
+                    isOpen={gradingApprovalOpen}
+                    onClose={() => setGradingApprovalOpen(false)}
+                    gradingData={lastGradingData}
+                    teacherId={profile.id}
+                    schoolId={profile.school_id || ''}
+                    selectedClassId={selectedClassId}
+                    selectedSubject={selectedSubject}
+                />
+            )}
         </div>
     );
 };

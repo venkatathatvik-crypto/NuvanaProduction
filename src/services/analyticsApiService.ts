@@ -48,6 +48,12 @@ export interface TopicPerformance {
   mastery: number;
 }
 
+export interface AttendancePercentage {
+  percentage: number;
+  totalDays: number;
+  presentDays: number;
+}
+
 export interface StudentChapterTopicAnalytics {
   chapters: ChapterPerformance[];
   topics: TopicPerformance[];
@@ -103,6 +109,9 @@ export interface StudentAnalyticsForTeacher {
   }>;
   strengths: StrengthWeaknessItem[];
   weaknesses: StrengthWeaknessItem[];
+  progress?: ProgressTrendPoint[];
+  attendance?: AttendancePercentage;
+  chapterTopic?: StudentChapterTopicAnalytics;
 }
 
 // ==================== ANALYTICS API SERVICE ====================

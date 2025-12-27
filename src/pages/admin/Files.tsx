@@ -9,6 +9,16 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { BackToDashboardButton } from "@/components/BackToDashboardButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminFiles() {
   const { profile } = useAuth();
@@ -18,6 +28,8 @@ export default function AdminFiles() {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
   const { data: fileCategories = [], isLoading: loading } = useQuery({
     queryKey: ['file-categories'],
@@ -43,14 +55,22 @@ export default function AdminFiles() {
     }
   };
 
-  const deleteItem = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this file category? This action cannot be undone.")) return;
+  const deleteItem = (id: number) => {
+    setItemToDelete(id);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (itemToDelete === null) return;
     try {
-      await academicService.deleteFileCategory(id);
+      await academicService.deleteFileCategory(itemToDelete);
       toast.success("File category deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['file-categories'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete file category");
+    } finally {
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
     }
   };
 
@@ -191,6 +211,23 @@ export default function AdminFiles() {
           </div>
         </Card>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the file category.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

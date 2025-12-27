@@ -4,6 +4,7 @@ import { Send, Sparkles, Brain, BookOpen, Calculator, HelpCircle, GraduationCap,
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { aiService, AiRequestDto } from '@/services/aiService';
 import { MessageBubble } from './MessageBubble';
 import { useAuth } from '@/auth/AuthContext';
@@ -27,6 +28,7 @@ const AiTutorChat = () => {
     const [messages, setMessages] = useState<any[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isContextLoading, setIsContextLoading] = useState(false);
     const [activeMode, setActiveMode] = useState<string>('start');
     const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
     const [isListening, setIsListening] = useState(false);
@@ -35,7 +37,7 @@ const AiTutorChat = () => {
     const [studentData, setStudentData] = useState<StudentData | null>(null);
     // Subject Selection State
     const [subjects, setSubjects] = useState<string[]>([]);
-    const [selectedSubject, setSelectedSubject] = useState<string>('');
+    const [selectedSubject, setSelectedSubject] = useState<string>('all');
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
@@ -44,6 +46,7 @@ const AiTutorChat = () => {
     useEffect(() => {
         const loadStudentDataAndSubjects = async () => {
             if (profile?.id && profile?.role === 'student') {
+                setIsContextLoading(true);
                 console.log('[AiTutorChat] Loading student data...');
                 try {
                     const data = await getStudentData(profile.id);
@@ -67,6 +70,8 @@ const AiTutorChat = () => {
                     }
                 } catch (error) {
                     console.error('[AiTutorChat] Failed to load student data:', error);
+                } finally {
+                    setIsContextLoading(false);
                 }
             }
         };
@@ -196,7 +201,7 @@ const AiTutorChat = () => {
 
             // Build AI request - only include subject if it's a non-empty string
             // Note: classBand is now auto-determined in backend from student's grade
-            const subjectToSend = selectedSubject && selectedSubject.trim() !== '' ? selectedSubject.trim() : undefined;
+            const subjectToSend = selectedSubject && selectedSubject !== 'all' ? selectedSubject.trim() : undefined;
             console.log('[AiTutorChat] Subject to send:', subjectToSend);
 
             const aiRequest: AiRequestDto = {
@@ -276,24 +281,25 @@ const AiTutorChat = () => {
 
                     <div className="flex items-center gap-2">
                         {/* Subject Selector - Always visible */}
-                        <select
-                            value={selectedSubject}
-                            onChange={(e) => {
-                                console.log('[AiTutorChat] Subject changed to:', e.target.value);
-                                setSelectedSubject(e.target.value);
-                            }}
-                            className="h-8 max-w-[150px] rounded-md border border-border bg-background/50 px-2 text-xs focus:outline-none focus:border-primary transition-colors truncate"
-                            title={selectedSubject || "Select a subject"}
-                        >
-                            <option value="">All Subjects</option>
-                            {subjects.length > 0 ? (
-                                subjects.map(sub => (
-                                    <option key={sub} value={sub}>{sub}</option>
-                                ))
-                            ) : (
-                                <option disabled>Loading subjects...</option>
-                            )}
-                        </select>
+                        <Select value={selectedSubject} onValueChange={(value) => {
+                            console.log('[AiTutorChat] Subject changed to:', value);
+                            setSelectedSubject(value);
+                        }} disabled={isContextLoading}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                                {isContextLoading ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : null}
+                                <SelectValue placeholder="All Subjects" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Subjects</SelectItem>
+                                {subjects.length > 0 ? (
+                                    subjects.map(sub => (
+                                        <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                                    ))
+                                ) : (
+                                    <SelectItem value="loading" disabled>Loading subjects...</SelectItem>
+                                )}
+                            </SelectContent>
+                        </Select>
 
                         {/* Voice Mode Toggle */}
                         <Button

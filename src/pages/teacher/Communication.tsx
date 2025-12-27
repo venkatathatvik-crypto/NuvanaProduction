@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MessageSquare, Send, Users, Shield, Smartphone, ArrowLeft, Loader2 } from 'lucide-react';
+import { Mail, MessageSquare, Send, Users, Shield, Smartphone, ArrowLeft, Loader2, Clock, History, Check, CheckCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,19 +13,63 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/auth/AuthContext";
 import { getTeacherClasses } from "@/services/classService";
 import { FlattenedClass } from "@/schemas/academic";
+import { messagesService, type Message } from "@/services/messagesService";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { userService } from "@/services/userService";
+import { formatDistanceToNow } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 const TeacherCommunication = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
+    const queryClient = useQueryClient();
     const [loading, setLoading] = useState(false);
     const [classes, setClasses] = useState<FlattenedClass[]>([]);
     const [classesLoading, setClassesLoading] = useState(true);
+    const [adminId, setAdminId] = useState<string>('');
 
     // Form states
     const [adminSubject, setAdminSubject] = useState('');
     const [adminMessage, setAdminMessage] = useState('');
     const [parentClass, setParentClass] = useState('');
     const [parentMessage, setParentMessage] = useState('');
+
+    // Simulated WhatsApp Broadcast History
+    const [parentBroadcastHistory, setParentBroadcastHistory] = useState<any[]>(() => {
+        const saved = localStorage.getItem('parent_broadcast_history');
+        return saved ? JSON.parse(saved) : [
+            { id: '1', className: 'Class 10A', message: 'Annual Sports Day scheduled for next Friday.', date: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'read' },
+            { id: '2', className: 'Science 10A', message: 'Reminder: Lab reports due tomorrow.', date: new Date(Date.now() - 3600000).toISOString(), status: 'delivered' }
+        ];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('parent_broadcast_history', JSON.stringify(parentBroadcastHistory));
+    }, [parentBroadcastHistory]);
+
+    // Fetch admin ID
+    useEffect(() => {
+        const fetchAdmin = async () => {
+            if (!profile?.school_id) return;
+            try {
+                const users = await userService.getUsers();
+                const admin = users.find((u: any) => u.role_id === 2 && u.school_id === profile.school_id);
+                if (admin) {
+                    setAdminId(admin.id);
+                }
+            } catch (error) {
+                console.error("Error fetching admin:", error);
+            }
+        };
+        fetchAdmin();
+    }, [profile]);
+
+    // Fetch conversation with admin
+    const { data: conversation, isLoading: conversationLoading } = useQuery({
+        queryKey: ['messages-conversation', adminId],
+        queryFn: () => adminId ? messagesService.getConversation(adminId) : null,
+        enabled: !!adminId,
+    });
 
     // Fetch teacher classes
     useEffect(() => {
@@ -51,13 +96,34 @@ const TeacherCommunication = () => {
 
     const handleSendToAdmin = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!adminId) {
+            toast.error("Admin not found");
+            return;
+        }
+
         setLoading(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        toast.success("Message sent to Admin successfully!");
-        setAdminSubject('');
-        setAdminMessage('');
-        setLoading(false);
+        try {
+            await messagesService.sendMessage({
+                recipientId: adminId,
+                subject: adminSubject,
+                message: adminMessage,
+                isUrgent: false,
+            });
+            
+            toast.success("Message sent to Admin successfully!");
+            setAdminSubject('');
+            setAdminMessage('');
+            
+            // Invalidate queries to refresh conversation
+            queryClient.invalidateQueries({ queryKey: ['messages-conversation', adminId] });
+            queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
+        } catch (error: any) {
+            console.error("Error sending message:", error);
+            toast.error(error.message || "Failed to send message");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSendToParents = async (e: React.FormEvent) => {
@@ -67,10 +133,30 @@ const TeacherCommunication = () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
         const selectedClass = classes.find(c => c.class_id === parentClass);
         const className = selectedClass ? selectedClass.class_name : parentClass;
+        
+        const newMessage = {
+            id: Date.now().toString(),
+            className,
+            message: parentMessage,
+            date: new Date().toISOString(),
+            status: 'sent'
+        };
+        
+        setParentBroadcastHistory([newMessage, ...parentBroadcastHistory]);
+        
         toast.success(`WhatsApp message scheduled for parents of ${className}`);
         setParentClass('');
         setParentMessage('');
         setLoading(false);
+
+        // Simulate delivery/read status updates
+        setTimeout(() => {
+            setParentBroadcastHistory(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'delivered' } : m));
+        }, 5000);
+        
+        setTimeout(() => {
+            setParentBroadcastHistory(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'read' } : m));
+        }, 12000);
     };
 
     return (
@@ -103,17 +189,21 @@ const TeacherCommunication = () => {
                     </div>
                 </div>
 
-                <Tabs defaultValue="admin" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mb-8">
-                        <TabsTrigger value="admin" className="gap-2">
-                            <Shield className="w-4 h-4" /> Admin Support
+                <Tabs defaultValue="send" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3 lg:w-[600px] mb-8">
+                        <TabsTrigger value="send" className="gap-2">
+                            <Shield className="w-4 h-4" /> Send Message
+                        </TabsTrigger>
+                        <TabsTrigger value="history" className="gap-2">
+                            <Clock className="w-4 h-4" /> Message History
                         </TabsTrigger>
                         <TabsTrigger value="parents" className="gap-2">
                             <Users className="w-4 h-4" /> Parent Connect
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="admin">
+                    {/* Send Message Tab */}
+                    <TabsContent value="send">
                         <Card className="glass-card border-primary/20">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
@@ -146,7 +236,7 @@ const TeacherCommunication = () => {
                                             required
                                         />
                                     </div>
-                                    <Button type="submit" disabled={loading} className="w-full sm:w-auto">
+                                    <Button type="submit" disabled={loading || !adminId} className="w-full sm:w-auto">
                                         {loading ? "Sending..." : (
                                             <>
                                                 <Send className="w-4 h-4 mr-2" /> Send Message
@@ -158,6 +248,68 @@ const TeacherCommunication = () => {
                         </Card>
                     </TabsContent>
 
+                    {/* Message History Tab */}
+                    <TabsContent value="history">
+                        <Card className="glass-card border-primary/20">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <MessageSquare className="w-5 h-5 text-primary" />
+                                    Conversation with Admin
+                                </CardTitle>
+                                <CardDescription>
+                                    View your message history and admin replies
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {conversationLoading ? (
+                                    <div className="flex justify-center py-12">
+                                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                    </div>
+                                ) : !conversation || conversation.messages.length === 0 ? (
+                                    <div className="text-center py-12 text-muted-foreground">
+                                        <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                                        <p>No messages yet</p>
+                                        <p className="text-sm">Send your first message to admin</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                                        {conversation.messages.map((msg: Message) => (
+                                            <div
+                                                key={msg.id}
+                                                className={`p-4 rounded-lg border ${
+                                                    msg.isFromMe
+                                                        ? 'bg-primary/10 border-primary/20 ml-8'
+                                                        : 'bg-secondary/20 border-border/50 mr-8'
+                                                }`}
+                                            >
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div>
+                                                        <p className="font-semibold text-sm">
+                                                            {msg.isFromMe ? 'You' : conversation.otherUser.name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {formatDistanceToNow(new Date(msg.sentAt), { addSuffix: true })}
+                                                        </p>
+                                                    </div>
+                                                    {msg.isUrgent && (
+                                                        <span className="text-xs bg-red-500/20 text-red-500 px-2 py-1 rounded">
+                                                            Urgent
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="font-medium text-sm mb-1">{msg.subject}</p>
+                                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                                                    {msg.message}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Parent Connect Tab */}
                     <TabsContent value="parents">
                         <Card className="glass-card border-green-500/20">
                             <CardHeader>
@@ -214,7 +366,7 @@ const TeacherCommunication = () => {
                                             * This message will be sent to all verified parent numbers for the selected class.
                                         </p>
                                     </div>
-                                    <Button type="submit" disabled={loading} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white">
+                                    <Button type="submit" disabled={loading} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20">
                                         {loading ? "Processing..." : (
                                             <>
                                                 <Send className="w-4 h-4 mr-2" /> Broadcast via WhatsApp
@@ -222,6 +374,73 @@ const TeacherCommunication = () => {
                                         )}
                                     </Button>
                                 </form>
+
+                                {/* Broadcast History */}
+                                {parentBroadcastHistory.length > 0 && (
+                                    <div className="mt-12 space-y-6">
+                                        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                                <History className="w-6 h-6 text-primary" />
+                                                Broadcast History
+                                            </h3>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                onClick={() => {
+                                                    setParentBroadcastHistory([]);
+                                                    localStorage.removeItem('parent_broadcast_history');
+                                                }}
+                                                className="text-muted-foreground hover:text-destructive"
+                                            >
+                                                Clear History
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                            {parentBroadcastHistory.map((item) => (
+                                                <motion.div 
+                                                    key={item.id} 
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl relative group overflow-hidden"
+                                                >
+                                                    <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    <div className="relative z-10">
+                                                        <div className="flex items-start justify-between mb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold uppercase text-[10px]">
+                                                                        {item.className}
+                                                                    </Badge>
+                                                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                                                                        {formatDistanceToNow(new Date(item.date), { addSuffix: true })}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {item.status === 'sent' && (
+                                                                    <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                        <Check className="w-3 h-3" /> Sent
+                                                                    </Badge>
+                                                                )}
+                                                                {item.status === 'delivered' && (
+                                                                    <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                        <CheckCheck className="w-3 h-3" /> Delivered
+                                                                    </Badge>
+                                                                )}
+                                                                {item.status === 'read' && (
+                                                                    <Badge variant="outline" className="bg-blue-400/10 text-blue-400 border-blue-400/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                        <CheckCheck className="w-3 h-3" /> Read
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message}</p>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>

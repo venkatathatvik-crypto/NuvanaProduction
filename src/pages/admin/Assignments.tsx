@@ -12,6 +12,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { userService } from "@/services/userService";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -462,11 +463,11 @@ export default function AdminAssignments() {
       const skippedCombinations: Array<{subjectName: string, gradeName: string, reason: string}> = [];
 
       for (const subjectMasterId of selectedSubjectsForTeacher) {
-        const subject = subjects.find(s => s.id === Number(subjectMasterId));
+        const subject = subjects.find(s => s.id === subjectMasterId);
         for (const gradeLevelId of selectedGradeLevels) {
           const gradeLevel = gradeLevels.find(g => g.id === Number(gradeLevelId));
           const matchingGradeSubjects = gradeSubjects.filter(
-            (gs) => gs.subject_master_id === Number(subjectMasterId) && gs.grade_level_id === Number(gradeLevelId)
+            (gs) => gs.subject_master_id === subjectMasterId && gs.grade_level_id === Number(gradeLevelId)
           );
           
           if (matchingGradeSubjects.length > 0) {
@@ -1390,6 +1391,41 @@ export default function AdminAssignments() {
                         </ScrollArea>
                       </SelectContent>
                     </Select>
+
+                    {selectedTeacherForSubject && (
+                      <div className="mt-4 p-4 rounded-xl bg-secondary/20 border border-border">
+                        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-primary" /> Current Subject Assignments
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {teacherSubjects
+                            .filter(ts => ts.teacher_id === selectedTeacherForSubject)
+                            .map((ts, idx) => (
+                              <Badge key={idx} variant="secondary" className="px-2 py-1 flex items-center gap-2 group">
+                                <span>{ts.grade_subjects?.subjects_master?.name} ({ts.grade_subjects?.grade_levels?.name})</span>
+                                <Trash2 
+                                  className="w-3 h-3 text-muted-foreground hover:text-destructive cursor-pointer transition-colors"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if(confirm(`Are you sure you want to remove ${ts.grade_subjects?.subjects_master?.name} assignment?`)) {
+                                      try {
+                                        await academicService.deleteTeacherSubject(ts.id);
+                                        toast.success("Assignment removed");
+                                        queryClient.invalidateQueries({ queryKey: ['assignments-teacherSubjects'] });
+                                      } catch (err) {
+                                        toast.error("Failed to remove assignment");
+                                      }
+                                    }
+                                  }}
+                                />
+                              </Badge>
+                            ))}
+                          {teacherSubjects.filter(ts => ts.teacher_id === selectedTeacherForSubject).length === 0 && (
+                            <p className="text-xs text-muted-foreground italic">No subjects assigned yet.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1623,23 +1659,22 @@ export default function AdminAssignments() {
                 </div>
 
                 {filteredVmStudents.length > 0 && (
-                  <div className="flex items-center justify-between p-2 bg-secondary/10 rounded-lg mb-4">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  <div className="flex items-center justify-between p-3 glass border border-primary/20 rounded-xl mb-6 shadow-lg shadow-primary/5">
+                    <div className="flex items-center gap-4">
+                      <Checkbox
+                        id="select-all-students"
                         checked={selectedVmStudents.length === filteredVmStudents.length && filteredVmStudents.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
+                        onCheckedChange={(checked) => {
+                          if (checked) {
                             setSelectedVmStudents(filteredVmStudents.map(s => s.id));
                           } else {
                             setSelectedVmStudents([]);
                           }
                         }}
                       />
-                      <span className="text-sm font-medium">
-                        {selectedVmStudents.length} selected
-                      </span>
+                      <Label htmlFor="select-all-students" className="text-sm font-semibold cursor-pointer select-none">
+                        {selectedVmStudents.length} of {filteredVmStudents.length} selected
+                      </Label>
                     </div>
                     <div className="flex gap-2">
                        {selectedVmStudents.length > 0 && (
@@ -1674,31 +1709,37 @@ export default function AdminAssignments() {
                 <ScrollArea className="h-96">
                   <div className="space-y-2">
                     {filteredVmStudents.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Users className="w-16 h-16 mx-auto mb-3 opacity-30" />
-                        <p className="text-sm">
-                          {vmStudentSearch || vmStudentClassFilter !== "all" 
-                            ? "No matching student assignments found" 
-                            : "No student assignments found"}
-                        </p>
+                      <div className="text-center py-16 glass-card border-dashed border-2 border-border/50">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        >
+                          <Users className="w-16 h-16 mx-auto mb-4 text-primary/30" />
+                          <p className="text-base font-medium">No student assignments found</p>
+                          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
+                            {vmStudentSearch || vmStudentClassFilter !== "all" 
+                              ? "Try adjusting your filters or search terms" 
+                              : "Get started by assigning students to classes in the 'Student-Class' tab"}
+                          </p>
+                        </motion.div>
                       </div>
                     ) : (
                       filteredVmStudents.map((student) => (
-                          <Card key={student.id} className={`p-3 border transition-colors ${selectedVmStudents.includes(student.id) ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                          <Card key={student.id} className={`group p-3 border transition-all duration-300 ${selectedVmStudents.includes(student.id) ? 'border-primary ring-1 ring-primary/20 bg-primary/10' : 'border-border/50 hover:border-primary/40 hover:bg-secondary/20'}`}>
                             <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-start gap-3 flex-1 min-w-0">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                  checked={selectedVmStudents.includes(student.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedVmStudents([...selectedVmStudents, student.id]);
-                                    } else {
-                                      setSelectedVmStudents(selectedVmStudents.filter(id => id !== student.id));
-                                    }
-                                  }}
-                                />
+                              <div className="flex items-start gap-4 flex-1 min-w-0">
+                                <div className="mt-1">
+                                  <Checkbox
+                                    checked={selectedVmStudents.includes(student.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedVmStudents([...selectedVmStudents, student.id]);
+                                      } else {
+                                        setSelectedVmStudents(selectedVmStudents.filter(id => id !== student.id));
+                                      }
+                                    }}
+                                  />
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-sm truncate">{student.name}</p>
                                   <p className="text-xs text-muted-foreground truncate">{student.email}</p>
@@ -1770,23 +1811,22 @@ export default function AdminAssignments() {
                 </div>
 
                 {filteredVmTeacherClasses.length > 0 && (
-                  <div className="flex items-center justify-between p-2 bg-secondary/10 rounded-lg mb-4">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  <div className="flex items-center justify-between p-3 glass border border-primary/20 rounded-xl mb-6 shadow-lg shadow-primary/5">
+                    <div className="flex items-center gap-4">
+                      <Checkbox
+                        id="select-all-tc"
                         checked={selectedVmTeacherClasses.length === filteredVmTeacherClasses.length && filteredVmTeacherClasses.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
+                        onCheckedChange={(checked) => {
+                          if (checked) {
                             setSelectedVmTeacherClasses(filteredVmTeacherClasses.map(tc => tc.id));
                           } else {
                             setSelectedVmTeacherClasses([]);
                           }
                         }}
                       />
-                      <span className="text-sm font-medium">
-                        {selectedVmTeacherClasses.length} selected
-                      </span>
+                      <Label htmlFor="select-all-tc" className="text-sm font-semibold cursor-pointer select-none">
+                        {selectedVmTeacherClasses.length} of {filteredVmTeacherClasses.length} selected
+                      </Label>
                     </div>
                     <div className="flex gap-2">
                        {selectedVmTeacherClasses.length > 0 && (
@@ -1821,31 +1861,37 @@ export default function AdminAssignments() {
                 <ScrollArea className="h-96">
                   <div className="space-y-2">
                     {filteredVmTeacherClasses.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Users className="w-16 h-16 mx-auto mb-3 opacity-30" />
-                        <p className="text-sm">
-                          {vmTeacherClassSearch || vmTeacherClassFilter !== "all" 
-                            ? "No matching teacher-class assignments found" 
-                            : "No teacher-class assignments found"}
-                        </p>
+                      <div className="text-center py-16 glass-card border-dashed border-2 border-border/50">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        >
+                          <Users className="w-16 h-16 mx-auto mb-4 text-primary/30" />
+                          <p className="text-base font-medium">No teacher-class assignments found</p>
+                          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
+                            {vmTeacherClassSearch || vmTeacherClassFilter !== "all" 
+                              ? "Try adjusting your filters or search terms" 
+                              : "Get started by assigning teachers to classes in the 'Teacher-Class' tab"}
+                          </p>
+                        </motion.div>
                       </div>
                     ) : (
                       filteredVmTeacherClasses.map((tc) => (
-                          <Card key={tc.id} className={`p-3 border transition-colors ${selectedVmTeacherClasses.includes(tc.id) ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                          <Card key={tc.id} className={`group p-3 border transition-all duration-300 ${selectedVmTeacherClasses.includes(tc.id) ? 'border-primary ring-1 ring-primary/20 bg-primary/10' : 'border-border/50 hover:border-primary/40 hover:bg-secondary/20'}`}>
                             <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-start gap-3 flex-1 min-w-0">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                  checked={selectedVmTeacherClasses.includes(tc.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedVmTeacherClasses([...selectedVmTeacherClasses, tc.id]);
-                                    } else {
-                                      setSelectedVmTeacherClasses(selectedVmTeacherClasses.filter(id => id !== tc.id));
-                                    }
-                                  }}
-                                />
+                              <div className="flex items-start gap-4 flex-1 min-w-0">
+                                <div className="mt-1">
+                                  <Checkbox
+                                    checked={selectedVmTeacherClasses.includes(tc.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedVmTeacherClasses([...selectedVmTeacherClasses, tc.id]);
+                                      } else {
+                                        setSelectedVmTeacherClasses(selectedVmTeacherClasses.filter(id => id !== tc.id));
+                                      }
+                                    }}
+                                  />
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-sm truncate">{tc.profiles?.name || 'Unknown Teacher'}</p>
                                   <p className="text-xs text-muted-foreground truncate">{tc.profiles?.email}</p>
@@ -1917,23 +1963,22 @@ export default function AdminAssignments() {
                 </div>
 
                 {filteredVmTeacherSubjects.length > 0 && (
-                  <div className="flex items-center justify-between p-2 bg-secondary/10 rounded-lg mb-4">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  <div className="flex items-center justify-between p-3 glass border border-primary/20 rounded-xl mb-6 shadow-lg shadow-primary/5">
+                    <div className="flex items-center gap-4">
+                      <Checkbox
+                        id="select-all-ts"
                         checked={selectedVmTeacherSubjects.length === filteredVmTeacherSubjects.length && filteredVmTeacherSubjects.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
+                        onCheckedChange={(checked) => {
+                          if (checked) {
                             setSelectedVmTeacherSubjects(filteredVmTeacherSubjects.map((ts: any) => ts.id));
                           } else {
                             setSelectedVmTeacherSubjects([]);
                           }
                         }}
                       />
-                      <span className="text-sm font-medium">
-                        {selectedVmTeacherSubjects.length} selected
-                      </span>
+                      <Label htmlFor="select-all-ts" className="text-sm font-semibold cursor-pointer select-none">
+                        {selectedVmTeacherSubjects.length} of {filteredVmTeacherSubjects.length} selected
+                      </Label>
                     </div>
                     <div className="flex gap-2">
                        {selectedVmTeacherSubjects.length > 0 && (
@@ -1968,33 +2013,39 @@ export default function AdminAssignments() {
                 <ScrollArea className="h-96">
                   <div className="space-y-2">
                     {filteredVmTeacherSubjects.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <BookOpen className="w-16 h-16 mx-auto mb-3 opacity-30" />
-                        <p className="text-sm">
-                          {vmTeacherSubjectSearch || vmTeacherSubjectGradeFilter !== "all" 
-                            ? "No matching teacher-subject assignments found" 
-                            : "No teacher-subject assignments found"}
-                        </p>
+                      <div className="text-center py-16 glass-card border-dashed border-2 border-border/50">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        >
+                          <BookOpen className="w-16 h-16 mx-auto mb-4 text-primary/30" />
+                          <p className="text-base font-medium">No teacher-subject assignments found</p>
+                          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
+                            {vmTeacherSubjectSearch || vmTeacherSubjectGradeFilter !== "all" 
+                              ? "Try adjusting your filters or search terms" 
+                              : "Get started by assigning subjects to teachers in the 'Teacher-Subject' tab"}
+                          </p>
+                        </motion.div>
                       </div>
                     ) : (
                       filteredVmTeacherSubjects.map((ts: any) => {
                         const teacher = teachers.find(t => t.id === ts.teacher_id);
                         return (
-                          <Card key={ts.id} className={`p-3 border transition-colors ${selectedVmTeacherSubjects.includes(ts.id) ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                          <Card key={ts.id} className={`group p-3 border transition-all duration-300 ${selectedVmTeacherSubjects.includes(ts.id) ? 'border-primary ring-1 ring-primary/20 bg-primary/10' : 'border-border/50 hover:border-primary/40 hover:bg-secondary/20'}`}>
                             <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-start gap-3 flex-1 min-w-0">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                  checked={selectedVmTeacherSubjects.includes(ts.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedVmTeacherSubjects([...selectedVmTeacherSubjects, ts.id]);
-                                    } else {
-                                      setSelectedVmTeacherSubjects(selectedVmTeacherSubjects.filter(id => id !== ts.id));
-                                    }
-                                  }}
-                                />
+                              <div className="flex items-start gap-4 flex-1 min-w-0">
+                                <div className="mt-1">
+                                  <Checkbox
+                                    checked={selectedVmTeacherSubjects.includes(ts.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedVmTeacherSubjects([...selectedVmTeacherSubjects, ts.id]);
+                                      } else {
+                                        setSelectedVmTeacherSubjects(selectedVmTeacherSubjects.filter(id => id !== ts.id));
+                                      }
+                                    }}
+                                  />
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-sm truncate">{teacher?.name || 'Unknown Teacher'}</p>
                                   <p className="text-xs text-muted-foreground truncate">{teacher?.email}</p>

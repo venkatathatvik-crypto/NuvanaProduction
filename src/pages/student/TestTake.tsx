@@ -17,12 +17,14 @@ import {
     StudentSubmission,
 } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useQueryClient } from "@tanstack/react-query";
 import { StudentTestPlayer } from "@/components/mcq/StudentTestPlayer";
 
 const TestTake = () => {
     const { testId } = useParams();
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
+    const queryClient = useQueryClient();
     const [test, setTest] = useState<StudentTestWithQuestions | null>(null);
     const [result, setResult] = useState<TestResult | null>(null);
     const [pendingSubmission, setPendingSubmission] = useState<StudentSubmission | null>(null);
@@ -125,6 +127,14 @@ const TestTake = () => {
             // Show pending submission screen (not graded yet)
             setPendingSubmission(submission);
             setTest(null);
+
+            // Invalidate queries to reflect the new submission
+            queryClient.invalidateQueries({ queryKey: ["test-submissions"] });
+            queryClient.invalidateQueries({ queryKey: ["teacher-test-details"] });
+            queryClient.invalidateQueries({ queryKey: ["student-tests"] });
+            queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
+            queryClient.invalidateQueries({ queryKey: ["teacher-grading-queue"] });
+
             toast.success("Test submitted successfully! Awaiting teacher grading.");
         } catch (error: any) {
             console.error("Error submitting test:", error);
@@ -198,11 +208,8 @@ const TestTake = () => {
 
     // Show results if test was graded
     if (result) {
-        const { test: testInfo, submission, questions } = result;
-        const percentage = submission.totalMarks > 0 
-            ? Math.round((submission.totalMarksObtained / submission.totalMarks) * 100) 
-            : 0;
-        const correctCount = questions.filter(q => q.selectedOptionIndex === q.correctOptionIndex).length;
+        const { testTitle, marksObtained, totalMarks, percentage, questions } = result;
+        const correctCount = questions.filter(q => q.studentAnswer === q.correctAnswer).length;
 
         return (
             <div className="min-h-screen p-6 space-y-8">
@@ -218,7 +225,7 @@ const TestTake = () => {
                     <Card className="glass-card mb-8">
                         <CardHeader className="text-center pb-2">
                             <CardTitle className="text-3xl neon-text">{isInternalAssessment ? "Assessment Results" : "Test Results"}</CardTitle>
-                            <p className="text-muted-foreground">{testInfo.title}</p>
+                            <p className="text-muted-foreground">{testTitle}</p>
                         </CardHeader>
                         <CardContent className="space-y-8">
                             <div className="flex flex-col items-center justify-center py-8">
@@ -247,7 +254,7 @@ const TestTake = () => {
                                     </svg>
                                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                                         <span className="text-4xl font-bold">{percentage}%</span>
-                                        <span className="text-sm text-muted-foreground">{submission.totalMarksObtained} / {submission.totalMarks}</span>
+                                        <span className="text-sm text-muted-foreground">{marksObtained} / {totalMarks}</span>
                                     </div>
                                 </div>
                             </div>
@@ -270,11 +277,12 @@ const TestTake = () => {
                             <div className="space-y-4 mt-8">
                                 <h3 className="text-xl font-bold">Detailed Analysis</h3>
                                 {questions.map((q, idx) => {
-                                    const isCorrect = q.selectedOptionIndex === q.correctOptionIndex;
-                                    const isSkipped = q.selectedOptionIndex === null;
+                                    const isCorrect = q.studentAnswer === q.correctAnswer;
+                                    const isSkipped = q.studentAnswer === null;
+                                    const isMCQ = q.questionType === 'MCQ';
 
                                     return (
-                                        <div key={q.id} className={`p-4 rounded-lg border ${isCorrect ? 'border-green-500/30 bg-green-500/5' : isSkipped ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+                                        <div key={q.questionId} className={`p-4 rounded-lg border ${isCorrect ? 'border-green-500/30 bg-green-500/5' : isSkipped ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
                                             <div className="flex gap-3">
                                                 <div className="mt-1">
                                                     {isCorrect ? (
@@ -286,13 +294,17 @@ const TestTake = () => {
                                                     )}
                                                 </div>
                                                 <div className="flex-1 space-y-2">
-                                                    <p className="font-medium">Q{idx + 1}. {q.text}</p>
+                                                    <p className="font-medium">Q{idx + 1}. {q.questionText}</p>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                                                         <div className={`p-2 rounded ${isCorrect ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                                                            Your Answer: {q.selectedOptionIndex !== null ? q.options[q.selectedOptionIndex] : 'Skipped'}
+                                                            Your Answer: {isMCQ && q.studentAnswer !== null && q.options 
+                                                                ? q.options[q.studentAnswer as number] 
+                                                                : (q.studentAnswer ?? 'Skipped')}
                                                         </div>
                                                         <div className="p-2 rounded bg-green-500/20 text-green-500">
-                                                            Correct Answer: {q.options[q.correctOptionIndex]}
+                                                            Correct Answer: {isMCQ && q.correctAnswer !== null && q.options 
+                                                                ? q.options[q.correctAnswer as number] 
+                                                                : q.correctAnswer}
                                                         </div>
                                                     </div>
                                                 </div>

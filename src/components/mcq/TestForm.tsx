@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -31,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 
 import { Test } from "@/lib/mcq-store";
-import { getTeacherClasses, getExamTypesWithCategory, ExamTypeWithCategory, getSubjects, FlattenedClass } from "@/services/academic";
+import { getAllTeachingClasses, getExamTypesWithCategory, ExamTypeWithCategory, getSubjects, FlattenedClass, getTeacherAllSubjectsDetailed } from "@/services/academic";
 import { getTeacherSubjectsForClass } from "@/services/classService";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -73,8 +73,9 @@ const formSchema = z.object({
         .number()
         .min(1, "Duration must be at least 1 minute"),
     isPublished: z.boolean().default(false),
-    classId: z.string().min(1, "Class is required"),
+    classIds: z.array(z.string()).min(1, "At least one class is required"),
     subject: z.string().min(1, "Subject is required"),
+    gradeSubjectId: z.string().min(1, "Grade subject ID is required"),
     examType: z.string().min(1, "Exam type is required"),
     dueDate: z.string().optional(),
     questions: z.array(questionSchema),
@@ -92,6 +93,8 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
     const [allExamTypes, setAllExamTypes] = useState<ExamTypeWithCategory[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<"Internal Assessment" | "School Exam">("School Exam");
     const [subjects, setSubjects] = useState<string[]>([]);
+    const [allTeacherSubjects, setAllTeacherSubjects] = useState<any[]>([]);
+    const [selectedGradeSubjectId, setSelectedGradeSubjectId] = useState<string>("");
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -100,8 +103,9 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
             description: "",
             durationMinutes: 30,
             isPublished: false,
-            classId: "",
+            classIds: [],
             subject: "",
+            gradeSubjectId: "",
             examType: defaultExamType || "",
             dueDate: "",
             questions: [],
@@ -112,6 +116,16 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
         control: form.control,
         name: "questions",
     });
+
+    // Filter classes based on selected subject's grade level
+    const filteredClassesForSubject = useMemo(() => {
+        if (!selectedGradeSubjectId || !classes.length) return [];
+        
+        const selectedSubject = allTeacherSubjects.find(s => s.grade_subject_id === selectedGradeSubjectId);
+        if (!selectedSubject) return [];
+        
+        return classes.filter(cls => cls.grade_id === selectedSubject.grade_id);
+    }, [selectedGradeSubjectId, classes, allTeacherSubjects]);
 
     // Load classes & exam types and hydrate form with initialData
     useEffect(() => {
@@ -124,13 +138,15 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
             }
 
             try {
-                const [classesData, examTypesData] = await Promise.all([
-                    getTeacherClasses(profile.id, profile.school_id),
+                const [classesData, examTypesData, allSubjectsData] = await Promise.all([
+                    getAllTeachingClasses(profile.id, profile.school_id),
                     getExamTypesWithCategory(profile.school_id),
+                    getTeacherAllSubjectsDetailed(profile.id),
                 ]);
 
                 setClasses(classesData || []);
                 setAllExamTypes(examTypesData || []);
+                setAllTeacherSubjects(allSubjectsData || []);
 
                 // Determine initial category based on defaultExamType
                 if (defaultExamType && examTypesData) {
@@ -141,7 +157,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                 }
 
                 if (initialData) {
-                    const initialClassId = (initialData as any).classId || "";
+                    const initialClassIds = (initialData as any).classIds || [];
                     const initialSubject = (initialData as any).subject || "";
                     const initialExamType = (initialData as any).examType || "";
 
@@ -150,7 +166,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                         description: initialData.description || "",
                         durationMinutes: initialData.durationMinutes || 30,
                         isPublished: initialData.isPublished || false,
-                        classId: initialClassId,
+                        classIds: initialClassIds,
                         subject: initialSubject,
                         examType: initialExamType,
                         questions:
@@ -166,49 +182,19 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                 negativeMarks: (q as any).negativeMarks ?? 0,
                             })) || [],
                     });
-
-                    // Preload subjects when editing
-                    if (initialClassId && classesData && profile) {
-                        const selectedClass = classesData.find(
-                            (c) => c.class_id === initialClassId
-                        );
-                        if (selectedClass) {
-                            try {
-                                const subjectOptions = await getTeacherSubjectsForClass(
-                                    profile.id,
-                                    selectedClass.class_id,
-                                    selectedClass.grade_id
-                                );
-                                const subjectsData = subjectOptions.map(sub => sub.name);
-                                setSubjects(subjectsData || []);
-                            } catch (error) {
-                                // Failed to fetch subjects for initial class
-                                console.error("Error fetching subjects for initial class:", error);
-                            }
-                        }
-                    }
-                } else {
-                    // Defaults in create mode
-                    if (
-                        classesData &&
-                        classesData.length > 0 &&
-                        !form.getValues("classId")
-                    ) {
-                        form.setValue("classId", classesData[0].class_id);
-                    }
-
-                    // Set default exam type if provided
-                    if (defaultExamType) {
-                        form.setValue("examType", defaultExamType);
-                    } else {
-                        // Set first exam type from selected category
-                        const categoryTypes = (examTypesData || []).filter(et => et.type === "School Exam");
-                        if (categoryTypes.length > 0 && !form.getValues("examType")) {
-                            form.setValue("examType", categoryTypes[0].name);
-                        }
-                    }
-
                 }
+
+                // Set default exam type if provided
+                if (defaultExamType) {
+                    form.setValue("examType", defaultExamType);
+                } else {
+                    // Set first exam type from selected category
+                    const categoryTypes = (examTypesData || []).filter(et => et.type === "School Exam");
+                    if (categoryTypes.length > 0 && !form.getValues("examType")) {
+                        form.setValue("examType", categoryTypes[0].name);
+                    }
+                }
+
             } catch (error) {
                 toast.error("Failed to load form data");
             }
@@ -217,65 +203,6 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
         fetchInitialData();
     }, [profile, profileLoading, initialData, form, defaultExamType]);
 
-    const selectedClassId = form.watch("classId");
-
-    // Load subjects when class changes
-    useEffect(() => {
-        const fetchSubjectsForClass = async () => {
-            if (!selectedClassId) {
-                setSubjects([]);
-                return;
-            }
-
-            const selectedClass = classes.find(
-                (c) => c.class_id === selectedClassId
-            );
-
-            if (!selectedClass) {
-                setSubjects([]);
-                return;
-            }
-
-            try {
-                if (!profile) {
-                    setSubjects([]);
-                    return;
-                }
-                
-                // Get teacher's assigned subjects for this class
-                const subjectOptions = await getTeacherSubjectsForClass(
-                    profile.id,
-                    selectedClass.class_id,
-                    selectedClass.grade_id
-                );
-                
-                // Extract subject names for the dropdown
-                const subjectsData = subjectOptions.map(sub => sub.name);
-                setSubjects(subjectsData || []);
-
-                if (initialData && (initialData as any).subject) {
-                    const initialSubject = (initialData as any).subject;
-                    if (subjectsData && subjectsData.includes(initialSubject)) {
-                        form.setValue("subject", initialSubject);
-                    } else if (subjectsData && subjectsData.length > 0) {
-                        form.setValue("subject", subjectsData[0]);
-                    }
-                } else if (
-                    subjectsData &&
-                    subjectsData.length > 0 &&
-                    !form.getValues("subject")
-                ) {
-                    form.setValue("subject", subjectsData[0]);
-                }
-            } catch (error) {
-                console.error("Error fetching subjects:", error);
-                toast.error("Failed to load subjects");
-                setSubjects([]);
-            }
-        };
-
-        fetchSubjectsForClass();
-    }, [selectedClassId, classes, initialData, form, profile]);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -402,67 +329,84 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                     )}
                                 />
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="classId"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Class</FormLabel>
-                                                <Select
-                                                    onValueChange={field.onChange}
-                                                    defaultValue={field.value}
-                                                >
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select Class" />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {classes.map((cls) => (
-                                                            <SelectItem
-                                                                key={cls.class_id}
-                                                                value={cls.class_id}
-                                                            >
-                                                                {cls.class_name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
 
-                                    <FormField
-                                        control={form.control}
-                                        name="subject"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Subject</FormLabel>
-                                                <Select
-                                                    onValueChange={field.onChange}
-                                                    defaultValue={field.value}
-                                                    disabled={!selectedClassId}
-                                                >
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select Subject" />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {subjects.map((subject) => (
-                                                            <SelectItem key={subject} value={subject}>
-                                                                {subject}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
+                                {/* Subject Selection */}
+                                <div className="mb-4">
+                                    <label className="text-sm font-medium mb-2 block">Subject *</label>
+                                    <Select
+                                        value={selectedGradeSubjectId}
+                                        onValueChange={(value) => {
+                                            setSelectedGradeSubjectId(value);
+                                            form.setValue('classIds', []); // Reset classes when subject changes
+                                            // Find and set the subject name and ID in form
+                                            const subject = allTeacherSubjects.find(s => s.grade_subject_id === value);
+                                            form.setValue('subject', subject?.subject_name || '');
+                                            form.setValue('gradeSubjectId', value);
+                                        }}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Subject" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {allTeacherSubjects.map((subject) => (
+                                                <SelectItem key={subject.grade_subject_id} value={subject.grade_subject_id}>
+                                                    {subject.subject_name} ({subject.grade_name})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+
+                                {/* Multi-Class Selection */}
+                                <FormField
+                                    control={form.control}
+                                    name="classIds"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Select Classes * (at least one required)</FormLabel>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-border rounded-lg bg-secondary/5">
+                                                {filteredClassesForSubject.length > 0 ? (
+                                                    filteredClassesForSubject.map((cls) => {
+                                                        const isSelected = field.value.includes(cls.class_id);
+                                                        return (
+                                                            <div
+                                                                key={cls.class_id}
+                                                                className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer ${
+                                                                    isSelected
+                                                                        ? 'bg-primary/10 border-primary text-primary shadow-sm'
+                                                                        : 'bg-muted border-border hover:border-primary/50 text-muted-foreground'
+                                                                }`}
+                                                                onClick={() => {
+                                                                    const newValue = isSelected
+                                                                        ? field.value.filter(id => id !== cls.class_id)
+                                                                        : [...field.value, cls.class_id];
+                                                                    field.onChange(newValue);
+                                                                }}
+                                                            >
+                                                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                                                                    isSelected ? 'bg-primary border-primary' : 'border-muted-foreground'
+                                                                }`}>
+                                                                    {isSelected && (
+                                                                        <svg className="w-2 h-2 text-white fill-current" viewBox="0 0 20 20">
+                                                                            <path d="M0 11l2-2 5 5L18 3l2 2L7 18z"/>
+                                                                        </svg>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-sm font-medium">{cls.class_name}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <p className="col-span-full text-center py-2 text-xs text-amber-500 italic">
+                                                        {selectedGradeSubjectId ? "No classes found for this subject's grade level." : "Please select a subject first."}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
 
                                 {/* Exam Type Category and Exam Type */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

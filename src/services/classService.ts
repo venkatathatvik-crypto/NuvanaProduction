@@ -196,6 +196,47 @@ export const getTeacherClasses = async (
 };
 
 /**
+ * Get all classes where a teacher teaches (both as class teacher and subject teacher)
+ * Returns classes with relationship information
+ */
+export const getAllTeachingClasses = async (
+  teacherId: string,
+  schoolId: string
+): Promise<import('@/schemas/academic').TeacherClassWithRelationship[]> => {
+  try {
+    const { academicService } = await import('./academicApiService');
+    const allClasses = await academicService.getAllTeachingClassesByTeacher(teacherId);
+    
+    logger.log('getAllTeachingClasses: Raw response', allClasses);
+    
+    // Transform to TeacherClassWithRelationship format
+    const transformedClasses = allClasses.map((cls: any) => {
+      const gradeId = cls.grade_level_id || cls.grade_levels?.id || 0;
+      const gradeName = cls.grade_levels?.name || 'Unknown Grade';
+      
+      if (!gradeId || gradeId === 0) {
+        console.warn('getAllTeachingClasses: Missing grade_id for class', cls);
+      }
+      
+      return {
+        class_id: cls.id || '',
+        class_name: cls.name || 'Unknown Class',
+        grade_id: gradeId,
+        grade_name: gradeName,
+        isClassTeacher: cls.isClassTeacher || false,
+        isSubjectTeacher: cls.isSubjectTeacher || false,
+      };
+    });
+
+    logger.log('getAllTeachingClasses: Mapped classes', transformedClasses);
+    return transformedClasses;
+  } catch (error: any) {
+    console.error('Error fetching all teaching classes:', error);
+    throw new Error(error.message || "Failed to load teaching classes.");
+  }
+};
+
+/**
  * Get subjects assigned to a teacher for a specific class
  * This follows the admin panel logic exactly:
  * 1. Get all grade_subjects for the class's grade level (from grade_subjects table)
@@ -313,6 +354,22 @@ export const getGradeSubjectsDetailed = async (
     console.error('Error fetching grade subjects:', error);
     console.error('Error details:', error.message, error.response?.data || error.data);
     throw new Error(error.message || "Failed to load subjects.");
+  }
+};
+
+/**
+ * Get ALL subjects assigned to a teacher across ALL grades
+ * Used for the redesigned file upload flow
+ */
+export const getTeacherAllSubjectsDetailed = async (
+  teacherId: string
+): Promise<any[]> => {
+  try {
+    const { academicService } = await import('./academicApiService');
+    return await academicService.getAllSubjectsByTeacher(teacherId);
+  } catch (error: any) {
+    console.error('Error fetching all teacher subjects:', error);
+    throw new Error(error.message || "Failed to load all subjects.");
   }
 };
 

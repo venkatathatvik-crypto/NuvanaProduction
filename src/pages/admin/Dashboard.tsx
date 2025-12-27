@@ -12,6 +12,7 @@ import {
   LogOut,
   ClipboardList,
   MessageSquare,
+  User,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,14 +57,14 @@ const AdminDashboard = () => {
 
   const quickActions = [
     { 
-      label: "Academic Management", 
+      label: "Academic Setup", 
       icon: School, 
       color: "text-blue-500", 
       path: "/admin/academic",
       description: "Manage grades, classes, and subjects"
     },
     { 
-      label: "Manage Members", 
+      label: "Members", 
       icon: UserPlus, 
       color: "text-orange-500", 
       path: "/admin/members",
@@ -77,7 +78,7 @@ const AdminDashboard = () => {
       description: "Assign students and teachers to classes"
     },
     { 
-      label: "Settings", 
+      label: "Exam & File Settings", 
       icon: Settings, 
       color: "text-indigo-500", 
       path: "/admin/settings",
@@ -91,11 +92,18 @@ const AdminDashboard = () => {
       description: "Manage class timetables"
     },
     { 
-      label: "Profile", 
-      icon: Settings, 
+      label: "Messages", 
+      icon: MessageSquare, 
+      color: "text-green-500", 
+      path: "/admin/messages",
+      description: "View and reply to teacher messages"
+    },
+    { 
+      label: "My Profile", 
+      icon: User, 
       color: "text-gray-500", 
       path: "/admin/profile",
-      description: "View and edit profile"
+      description: "View and edit your profile"
     },
   ];
 

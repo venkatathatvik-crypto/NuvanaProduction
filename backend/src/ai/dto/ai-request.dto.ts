@@ -28,6 +28,10 @@ export class AiRequestDto {
 
     @IsString()
     @IsOptional()
+    classId?: string;
+
+    @IsString()
+    @IsOptional()
     subject?: string;
 
     @IsString()

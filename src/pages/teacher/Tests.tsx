@@ -24,9 +24,10 @@ import {
   sendTestPublishedEmail,
   TeacherTest,
 } from "@/services/academic";
-import { getTeacherClasses, FlattenedClass } from "@/services/academic";
+import { getTeacherClasses, FlattenedClass, getAllTeachingClasses } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const TeacherTests = () => {
   const navigate = useNavigate();
@@ -34,6 +35,8 @@ const TeacherTests = () => {
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<"Internal Assessment" | "School Exam">("School Exam");
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [testToDelete, setTestToDelete] = useState<{ id: string; title: string } | null>(null);
 
   const { data: tests = [], isLoading: testsLoading } = useQuery({
     queryKey: ['teacher-tests', profile?.id],
@@ -42,9 +45,10 @@ const TeacherTests = () => {
   });
 
   const { data: classes = [], isLoading: classesLoading } = useQuery({
-    queryKey: ['teacher-classes', profile?.id],
-    queryFn: () => getTeacherClasses(profile!.id, profile!.school_id),
-    enabled: !!profile?.id && !profileLoading,
+    queryKey: ['teacher-all-teaching-classes', profile?.id, profile?.school_id],
+    queryFn: () => getAllTeachingClasses(profile!.id, profile!.school_id),
+    enabled: !!profile?.id && !!profile?.school_id && !profileLoading,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   const loading = testsLoading || classesLoading;
@@ -70,18 +74,28 @@ const TeacherTests = () => {
     return filtered;
   }, [tests, selectedTab, selectedClassId]);
 
-  const handleDelete = async (id: string) => {
-    if (!profile) return;
+  const handleDeleteClick = (id: string, title: string) => {
+    setTestToDelete({ id, title });
+    setDeleteDialogOpen(true);
+  };
 
-    if (confirm("Are you sure you want to delete this test?")) {
-      try {
-        await deleteTeacherTest(id, profile.id);
-        queryClient.invalidateQueries({ queryKey: ['teacher-tests'] });
-        toast.success("Test deleted successfully");
-      } catch (error: any) {
-        console.error("Error deleting test:", error);
-        toast.error(error.message || "Failed to delete test");
-      }
+  const handleDelete = async () => {
+    if (!profile || !testToDelete) return;
+
+    try {
+      await deleteTeacherTest(testToDelete.id, profile.id);
+      
+      // Invalidate caches
+      queryClient.invalidateQueries({ queryKey: ['teacher-tests'] });
+      queryClient.invalidateQueries({ queryKey: ['student-tests'] });
+      
+      toast.success("Test deleted successfully");
+    } catch (error: any) {
+      console.error("Error deleting test:", error);
+      toast.error(error.message || "Failed to delete test");
+    } finally {
+      setTestToDelete(null);
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -268,7 +282,7 @@ const TeacherTests = () => {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDelete(test.id)}
+                        onClick={() => handleDeleteClick(test.id, test.title)}
                       >
                         <Trash2 className="w-4 h-4 mr-2" /> Delete
                       </Button>
@@ -300,6 +314,22 @@ const TeacherTests = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDelete}
+        title="Delete Test"
+        description={
+          testToDelete
+            ? `Are you sure you want to delete "${testToDelete.title}"? This action cannot be undone and students will no longer have access to this test.`
+            : "Are you sure you want to delete this test?"
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+      />
     </div>
   );
 };

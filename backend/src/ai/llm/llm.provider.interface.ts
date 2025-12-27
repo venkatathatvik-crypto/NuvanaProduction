@@ -4,5 +4,5 @@ export interface LLMMessage {
 }
 
 export interface LLMProvider {
-    generate(messages: LLMMessage[]): Promise<string>;
+    generate(messages: LLMMessage[], modelOverride?: string): Promise<string>;
 }

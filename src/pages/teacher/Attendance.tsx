@@ -33,17 +33,18 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { attendanceApi } from "@/services/attendanceApiService";
 import { Badge } from "@/components/ui/badge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 const TeacherAttendance = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [classes, setClasses] = useState<FlattenedClass[]>([]);
   const [selectedClass, setSelectedClass] = useState<FlattenedClass | null>(
     null
   );
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
-  const [loading, setLoading] = useState(true);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,47 +61,30 @@ const TeacherAttendance = () => {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
 
+  // Fetch teacher's classes using React Query
+  const { data: classes = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.teacher.classes(profile?.id ?? '', profile?.school_id ?? ''),
+    queryFn: async () => {
+      if (!profile?.id || !profile?.school_id) return [];
+      const allClasses = await getTeacherClasses(profile.id, profile.school_id);
+      
+      if (!allClasses || allClasses.length === 0) {
+        toast.info("No classes assigned to you.");
+        return [];
+      }
 
-  // Load classes dynamically for the logged-in teacher
+      return allClasses;
+    },
+    enabled: !!profile?.id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Set the first class as selected when classes are loaded
   useEffect(() => {
-    const fetchClasses = async () => {
-      if (profileLoading) return;
-
-      if (!profile) {
-        setClasses([]);
-        setSelectedClass(null);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Get all classes for the teacher
-        const allClasses = await getTeacherClasses(profile.id, profile.school_id);
-        
-        if (!allClasses || allClasses.length === 0) {
-          setClasses([]);
-          setSelectedClass(null);
-          setLoading(false);
-          toast.info("No classes assigned to you.");
-          return;
-        }
-
-        // Show all assigned classes (not filtered by today's timetable)
-        // This allows teachers to mark attendance for any class on any date
-        setClasses(allClasses);
-        setSelectedClass(allClasses[0]);
-      } catch (error) {
-        console.error("Error fetching classes for attendance:", error);
-        toast.error("Failed to load classes for attendance.");
-        setClasses([]);
-        setSelectedClass(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchClasses();
-  }, [profile, profileLoading]);
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0]);
+    }
+  }, [classes, selectedClass]);
 
   // Load students when class is selected
   useEffect(() => {
@@ -124,10 +108,22 @@ const TeacherAttendance = () => {
         );
 
         // Merge attendance data with students
-        const mergedStudents = studentsData.map((student) => ({
-          ...student,
-          present: attendanceMap[student.id] ?? false,
-        }));
+        const mergedStudents = studentsData.map((student) => {
+          const attendanceValue = attendanceMap[student.id];
+          let status: 'present' | 'absent' | 'late' | 'excused' = 'absent';
+          
+          if (typeof attendanceValue === 'string') {
+            status = attendanceValue as any;
+          } else if (attendanceValue === true) {
+            status = 'present';
+          }
+            
+          return {
+            ...student,
+            status,
+            present: status === 'present' || (status as string) === 'late',
+          };
+        });
 
         console.log('[Teacher Attendance] Merged students:', mergedStudents);
         setStudents(mergedStudents);
@@ -155,19 +151,29 @@ const TeacherAttendance = () => {
     setStudents(
       students.map((student) =>
         student.id === studentId
-          ? { ...student, present: !student.present }
+          ? { ...student, present: !student.present, status: !student.present ? 'present' : 'absent' }
+          : student
+      )
+    );
+  };
+
+  const updateAttendanceStatus = (studentId: string, status: 'present' | 'absent' | 'late' | 'excused') => {
+    setStudents(
+      students.map((student) =>
+        student.id === studentId
+          ? { ...student, status, present: status === 'present' || status === 'late' }
           : student
       )
     );
   };
 
   const markAllPresent = () => {
-    setStudents(students.map((student) => ({ ...student, present: true })));
+    setStudents(students.map((student) => ({ ...student, present: true, status: 'present' })));
     toast.success("Marked all students present");
   };
 
   const markAllAbsent = () => {
-    setStudents(students.map((student) => ({ ...student, present: false })));
+    setStudents(students.map((student) => ({ ...student, present: false, status: 'absent' })));
     toast.success("Marked all students absent");
   };
 
@@ -321,6 +327,16 @@ const TeacherAttendance = () => {
       return;
     }
 
+    // Validate that the selected date is not a Sunday (using IST)
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+    const dateToCheck = new Date(selectedDate + 'T00:00:00');
+    const istDate = new Date(dateToCheck.getTime() + istOffset);
+    
+    if (istDate.getUTCDay() === 0) {
+      toast.error("Cannot mark attendance for Sundays. Please select a different date.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       await saveAttendance(
@@ -360,6 +376,18 @@ const TeacherAttendance = () => {
       } catch (emailError) {
         console.error("Failed to send emails:", emailError);
       }
+
+      // Invalidate all attendance-related queries
+      queryClient.invalidateQueries({ queryKey: ['student-attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-percent'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-subject'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-monthly'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher-attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics-attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['student-analytics'] });
     } catch (error) {
       console.error("Error submitting attendance:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to submit attendance. Please try again.";
@@ -396,7 +424,7 @@ const TeacherAttendance = () => {
       return;
     }
     setStudents(students.map(student =>
-      selectedStudents.has(student.id) ? { ...student, present: true } : student
+      selectedStudents.has(student.id) ? { ...student, present: true, status: 'present' } : student
     ));
     toast.success(`Marked ${selectedStudents.size} students as present`);
   };
@@ -407,7 +435,7 @@ const TeacherAttendance = () => {
       return;
     }
     setStudents(students.map(student =>
-      selectedStudents.has(student.id) ? { ...student, present: false } : student
+      selectedStudents.has(student.id) ? { ...student, present: false, status: 'absent' } : student
     ));
     toast.success(`Marked ${selectedStudents.size} students as absent`);
   };
@@ -415,6 +443,30 @@ const TeacherAttendance = () => {
   // NEW: Multi-date handlers
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
+
+    // Validate that the selected date is not a Sunday (using IST)
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+    const istDate = new Date(date.getTime() + istOffset);
+    
+    if (istDate.getUTCDay() === 0) {
+      toast.error("Cannot select Sundays for attendance");
+      return;
+    }
+
+    // Validate that the selected date is not in the future (using IST)
+    const now = new Date();
+    const istNow = new Date(now.getTime() + istOffset);
+    const istToday = new Date(Date.UTC(
+      istNow.getUTCFullYear(),
+      istNow.getUTCMonth(),
+      istNow.getUTCDate(),
+      23, 59, 59, 999
+    ));
+    
+    if (date > istToday) {
+      toast.error("Cannot select future dates");
+      return;
+    }
 
     if (isMultiDateMode) {
       const dateExists = selectedDates.some(d => 
@@ -431,10 +483,11 @@ const TeacherAttendance = () => {
         setSelectedDates([...selectedDates, date]);
       }
     } else {
-      // Single date mode - update selected date as before
-      const year = date.getFullYear();
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
+      // Single date mode - extract date components in IST timezone
+      // Use UTC methods on the IST-adjusted date to get the correct date
+      const year = istDate.getUTCFullYear();
+      const month = (istDate.getUTCMonth() + 1).toString().padStart(2, '0');
+      const day = istDate.getUTCDate().toString().padStart(2, '0');
       setSelectedDate(`${year}-${month}-${day}`);
     }
   };
@@ -532,6 +585,18 @@ const TeacherAttendance = () => {
       } catch (emailError) {
         console.error("Failed to send emails:", emailError);
       }
+
+      // Invalidate all attendance-related queries
+      queryClient.invalidateQueries({ queryKey: ['student-attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-percent'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-subject'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-monthly'] });
+      queryClient.invalidateQueries({ queryKey: ['student-attendance-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher-attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics-attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['student-analytics'] });
 
       // Clear selections after successful submit
       if (isSelectionMode) {
@@ -656,7 +721,27 @@ const TeacherAttendance = () => {
                         mode="single"
                         selected={new Date(selectedDate + 'T00:00:00')}
                         onSelect={handleDateSelect}
-                        disabled={(date) => date > new Date() || date.getDay() === 0}
+                        disabled={(date) => {
+                          // Get current date in IST (UTC+5:30)
+                          const now = new Date();
+                          const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+                          const istNow = new Date(now.getTime() + istOffset);
+                          
+                          // Create IST midnight for comparison
+                          const istToday = new Date(Date.UTC(
+                            istNow.getUTCFullYear(),
+                            istNow.getUTCMonth(),
+                            istNow.getUTCDate(),
+                            23, 59, 59, 999
+                          ));
+                          
+                          // Disable future dates (based on IST)
+                          if (date > istToday) return true;
+                          
+                          // Disable Sundays - check day of week in IST
+                          const istDate = new Date(date.getTime() + istOffset);
+                          return istDate.getUTCDay() === 0;
+                        }}
                         initialFocus
                       />
                     )}
@@ -670,7 +755,27 @@ const TeacherAttendance = () => {
                               setSelectedDates(Array.isArray(dates) ? dates : [dates]);
                             }
                           }}
-                          disabled={(date) => date > new Date() || date.getDay() === 0}
+                          disabled={(date) => {
+                            // Get current date in IST (UTC+5:30)
+                            const now = new Date();
+                            const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+                            const istNow = new Date(now.getTime() + istOffset);
+                            
+                            // Create IST midnight for comparison
+                            const istToday = new Date(Date.UTC(
+                              istNow.getUTCFullYear(),
+                              istNow.getUTCMonth(),
+                              istNow.getUTCDate(),
+                              23, 59, 59, 999
+                            ));
+                            
+                            // Disable future dates (based on IST)
+                            if (date > istToday) return true;
+                            
+                            // Disable Sundays - check day of week in IST
+                            const istDate = new Date(date.getTime() + istOffset);
+                            return istDate.getUTCDay() === 0;
+                          }}
                           initialFocus
                         />
                       </div>
@@ -900,20 +1005,42 @@ const TeacherAttendance = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 sm:gap-4">
+                        <div className="flex items-center bg-muted/30 p-1 rounded-lg border border-border/50">
+                          <Button
+                            size="sm"
+                            variant={student.status === 'present' ? "default" : "ghost"}
+                            className={`h-8 w-8 sm:w-10 p-0 ${student.status === 'present' ? "bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20" : "hover:bg-green-500/10 text-muted-foreground"}`}
+                            onClick={() => updateAttendanceStatus(student.id, 'present')}
+                          >
+                            P
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={student.status === 'late' ? "default" : "ghost"}
+                            className={`h-8 w-8 sm:w-10 p-0 ${student.status === 'late' ? "bg-yellow-500 hover:bg-yellow-600 text-white shadow-lg shadow-yellow-500/20" : "hover:bg-yellow-500/10 text-muted-foreground"}`}
+                            onClick={() => updateAttendanceStatus(student.id, 'late')}
+                          >
+                            L
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={student.status === 'absent' ? "default" : "ghost"}
+                            className={`h-8 w-8 sm:w-10 p-0 ${student.status === 'absent' ? "bg-destructive hover:bg-destructive/90 text-white shadow-lg shadow-destructive/20" : "hover:bg-destructive/10 text-muted-foreground"}`}
+                            onClick={() => updateAttendanceStatus(student.id, 'absent')}
+                          >
+                            A
+                          </Button>
+                        </div>
+                        {/* Status Label for clarity on larger screens */}
                         <span
-                          className={`text-sm font-medium ${student.present
-                              ? "text-green-500"
-                              : "text-destructive"
+                          className={`hidden md:inline text-xs font-bold uppercase tracking-wider ${student.status === 'present' ? "text-green-500" :
+                              student.status === 'late' ? "text-yellow-500" :
+                                "text-destructive"
                             }`}
                         >
-                          {student.present ? "Present" : "Absent"}
+                          {student.status || 'absent'}
                         </span>
-                        <Checkbox
-                          checked={student.present}
-                          onCheckedChange={() => toggleAttendance(student.id)}
-                          className="h-6 w-6"
-                        />
                       </div>
                     </div>
                   </motion.div>

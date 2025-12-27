@@ -97,14 +97,18 @@ export default function AdminAcademic() {
     try {
       await academicService.deleteGrade(id);
       toast.success("Grade deleted successfully");
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['academic-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['academic-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-grades'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete grade");
     }
   };
 
   const handleDeleteGradeClick = (grade: any) => {
-    setConfirmMessage(`Are you sure you want to delete "${grade.name}"? This action cannot be undone.`);
+    setConfirmMessage(`Are you sure you want to delete "${grade.name}"?\n\n⚠️ Warning: This will also delete:\n• All classes in this grade\n• All student assignments to those classes\n\nThis action cannot be undone.`);
     setConfirmAction(() => () => deleteGrade(grade.id));
     setShowConfirmDialog(true);
   };
@@ -157,15 +161,19 @@ export default function AdminAcademic() {
   const deleteClass = async (id: string) => {
     try {
       await academicService.deleteClass(id);
-      toast.success("Class deleted successfully");
+      toast.success("Class deleted successfully. All students have been unassigned.");
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['academic-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
+      queryClient.invalidateQueries({ queryKey: ['members-students'] });
     } catch (error: any) {
       toast.error(error.message || "Failed to delete class");
     }
   };
 
   const handleDeleteClassClick = (cls: any) => {
-    setConfirmMessage(`Are you sure you want to delete class "${cls.name}"? This action cannot be undone.`);
+    setConfirmMessage(`Are you sure you want to delete class "${cls.name}"?\n\n⚠️ Warning: All students assigned to this class will be unassigned.\n\nThis action cannot be undone.`);
     setConfirmAction(() => () => deleteClass(cls.id));
     setShowConfirmDialog(true);
   };
@@ -424,7 +432,7 @@ export default function AdminAcademic() {
             animate={{ opacity: 1, x: 0 }}
             className="min-w-0"
           >
-            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Academic Management</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">Academic Setup</h1>
             <p className="text-muted-foreground text-sm sm:text-base">Manage grades, classes, and subjects</p>
           </motion.div>
         </div>

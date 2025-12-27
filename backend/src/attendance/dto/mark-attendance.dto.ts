@@ -5,6 +5,7 @@ import {
   IsArray,
   ValidateNested,
   IsBoolean,
+  IsOptional,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -19,7 +20,12 @@ export class AttendanceStudentDto {
   roll_number: string;
 
   @IsBoolean()
-  present: boolean;
+  @IsOptional()
+  present?: boolean;
+
+  @IsString()
+  @IsOptional()
+  status?: string;
 }
 
 export class MarkAttendanceDto {
@@ -36,4 +42,8 @@ export class MarkAttendanceDto {
 
   @IsUUID()
   teacherId: string;
+
+  @IsUUID()
+  @IsOptional()
+  periodId?: string;
 }

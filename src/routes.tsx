@@ -53,6 +53,7 @@ const AdminMembers = lazy(() => import('@/pages/admin/Members'));
 const AdminAssignments = lazy(() => import('@/pages/admin/Assignments'));
 const AdminSettings = lazy(() => import('@/pages/admin/Settings'));
 const AdminTimetable = lazy(() => import('@/pages/admin/Timetable'));
+const AdminMessages = lazy(() => import('@/pages/admin/Messages'));
 const AdminProfile = lazy(() => import('@/pages/admin/Profile'));
 
 // Super Admin pages
@@ -110,6 +111,7 @@ export const AppRoutes = () => (
       <Route path="/admin/assignments" element={<ProtectedRoute role="school_admin"><AdminAssignments /></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute role="school_admin"><AdminSettings /></ProtectedRoute>} />
       <Route path="/admin/timetable" element={<ProtectedRoute role="school_admin"><AdminTimetable /></ProtectedRoute>} />
+      <Route path="/admin/messages" element={<ProtectedRoute role="school_admin"><AdminMessages /></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute role="school_admin"><AdminProfile /></ProtectedRoute>} />
 
       {/* Super Admin Routes */}

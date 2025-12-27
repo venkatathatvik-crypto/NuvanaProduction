@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Clock, CheckCircle, FileCheck, Eye, ArrowLeft, Calendar, Award, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,40 +10,29 @@ import { useAuth } from "@/auth/AuthContext";
 import { getStudentData, getStudentTests, StudentTest } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 
 const StudentTests = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
-    const [tests, setTests] = useState<StudentTest[]>([]);
-    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchTests = async () => {
-            if (profileLoading) return;
-            if (!profile) {
-                setLoading(false);
-                return;
-            }
-            try {
-                const studentData = await getStudentData(profile.id);
-                if (!studentData) {
-                    toast.error("Student data not found");
-                    setLoading(false);
-                    return;
-                }
-                const testsData = await getStudentTests(studentData.class_id, profile.id);
-                // Exclude internal assessments – they belong to Events page
-                const filteredTests = testsData.filter(test => test.examTypeCategory !== 'Internal Assessment');
-                setTests(filteredTests);
-            } catch (error: any) {
-                console.error("Error fetching tests:", error);
-                toast.error("Failed to load tests");
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchTests();
-    }, [profile, profileLoading]);
+    // 1. Get Student Data (for class_id)
+    const { data: studentData } = useQuery({
+        queryKey: ['student-data', profile?.id],
+        queryFn: () => getStudentData(profile!.id),
+        enabled: !!profile?.id && !profileLoading,
+    });
+
+    // 2. Get Tests
+    const { data: tests = [], isLoading: loading } = useQuery({
+        queryKey: ['student-tests', studentData?.class_id, profile?.id],
+        queryFn: async () => {
+            const testsData = await getStudentTests(studentData!.class_id, profile!.id);
+            // Exclude internal assessments – they belong to Events page
+            return testsData.filter(test => test.examTypeCategory !== 'Internal Assessment');
+        },
+        enabled: !!studentData?.class_id && !!profile?.id,
+    });
 
     const getStatusBadge = (status: StudentTest["submissionStatus"]) => {
         switch (status) {

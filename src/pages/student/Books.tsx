@@ -11,47 +11,29 @@ import { useAuth } from "@/auth/AuthContext";
 import { getStudentData, getStudentFiles, incrementFileDownload } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const Books = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
-  const [files, setFiles] = useState<any[]>([]);
-  const [loadingFiles, setLoadingFiles] = useState(true);
-  const [studentClassId, setStudentClassId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [playingVideo, setPlayingVideo] = useState<any | null>(null);
 
-  useEffect(() => {
-    const fetchStudentBooks = async () => {
-      if (profileLoading) return;
+  // 1. Get Student Data (for class_id)
+  const { data: studentData } = useQuery({
+    queryKey: ['student-data', profile?.id],
+    queryFn: () => getStudentData(profile!.id),
+    enabled: !!profile?.id && !profileLoading,
+  });
 
-      if (!profile) {
-        setLoadingFiles(false);
-        return;
-      }
+  const studentClassId = studentData?.class_id;
 
-      try {
-        // Get student data to get class_id
-        const studentData = await getStudentData(profile.id);
-        if (studentData && studentData.class_id) {
-          setStudentClassId(studentData.class_id);
-          // Fetch files for this class
-          const filesData = await getStudentFiles(studentData.class_id, profile.school_id);
-          setFiles(filesData);
-        } else {
-          console.warn("No class_id found for student:", profile.id);
-          setFiles([]);
-        }
-      } catch (error) {
-        console.error("Error fetching student books:", error);
-        toast.error("Failed to load books.");
-        setFiles([]);
-      } finally {
-        setLoadingFiles(false);
-      }
-    };
-
-    fetchStudentBooks();
-  }, [profile, profileLoading]);
+  // 2. Get Files
+  const { data: files = [], isLoading: loadingFiles } = useQuery({
+    queryKey: ['student-files', studentClassId],
+    queryFn: () => getStudentFiles(studentClassId!, profile!.school_id),
+    enabled: !!studentClassId,
+  });
 
   const subjectColors: Record<string, string> = {
     Mathematics: "neon-cyan",
@@ -140,12 +122,10 @@ const Books = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      // Update local state
-      setFiles((prevFiles) =>
-        prevFiles.map((f) =>
-          f.id === file.id ? { ...f, downloads: f.downloads + 1 } : f
-        )
-      );
+      // Update local state via invalidation
+      queryClient.invalidateQueries({
+        queryKey: ['student-files', studentClassId]
+      });
 
       toast.success("File downloaded successfully");
     } catch (error) {

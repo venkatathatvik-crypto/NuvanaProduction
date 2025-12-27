@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 export interface AiRequestDto {
     taskType: 'start' | 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
     query: string;
+    classId?: string;
     subject?: string;
     topic?: string;
     studentId?: string;

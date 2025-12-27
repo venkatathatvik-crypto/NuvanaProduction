@@ -7,6 +7,7 @@ import {
   SubmitTestDto,
   GradeSubmissionDto,
   QuestionType,
+  CreateTestFromAiGradingDto,
 } from './dto';
 
 @Injectable()
@@ -1177,6 +1178,97 @@ export class TestService {
         expected_answer_text: submission.is_graded ? ans.questions.expected_answer_text : null,
         options: ans.questions.question_options.map((opt) => opt.option_text),
       })),
+    };
+  }
+
+  // ==================== AI GRADING OPERATIONS ====================
+
+  async createFromAiGrading(dto: CreateTestFromAiGradingDto) {
+    // Default exam type ID for AI graded assignments (typically 1 for Internal Assessment)
+    const examTypeId = dto.exam_type_id || 1;
+
+    // Parse test date or use today
+    const testDate = dto.test_date ? new Date(dto.test_date) : new Date();
+
+    // Find grade_subject_id based on subject name and class
+    const gradeSubject = await this.prisma.grade_subjects.findFirst({
+      where: {
+        grade_levels: {
+          classes: {
+            some: {
+              id: dto.class_id,
+            },
+          },
+        },
+        subjects_master: {
+          name: dto.subject,
+        },
+      },
+    });
+
+    if (!gradeSubject) {
+      throw new BadRequestException(`Subject "${dto.subject}" not found for this class`);
+    }
+
+    // Create test and submission in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Create test with single essay question
+      const test = await tx.tests.create({
+        data: {
+          title: dto.test_name,
+          description: `AI Graded Assignment - ${dto.subject}`,
+          duration_minutes: 0, // Not applicable for AI graded
+          is_published: true,
+          class_id: dto.class_id,
+          grade_subject_id: gradeSubject.id,
+          exam_type_id: examTypeId,
+          teacher_id: dto.teacher_id,
+          school_id: dto.school_id,
+          due_date: testDate,
+        },
+      });
+
+      // 2. Create a single essay question to hold the marks
+      const question = await tx.questions.create({
+        data: {
+          question_text: 'AI Graded Submission',
+          marks: dto.total_marks,
+          question_type: $Enums.question_type_enum.Essay,
+          test_id: test.id,
+        },
+      });
+
+      // 3. Create submission for the student
+      const submission = await tx.test_submissions.create({
+        data: {
+          test_id: test.id,
+          student_id: dto.student_id,
+          submitted_at: new Date(),
+          is_graded: true,
+          total_marks_obtained: dto.marks_obtained,
+        },
+      });
+
+      // 4. Create answer with AI feedback
+      await tx.student_answers.create({
+        data: {
+          submission_id: submission.id,
+          question_id: question.id,
+          subjective_answer_text: dto.ai_feedback,
+          marks_awarded: dto.marks_obtained,
+        },
+      });
+
+      return { test_id: test.id, submission_id: submission.id };
+    }, {
+      timeout: 30000,
+    });
+
+    return {
+      success: true,
+      test_id: result.test_id,
+      submission_id: result.submission_id,
+      message: 'AI grading saved successfully',
     };
   }
 }
