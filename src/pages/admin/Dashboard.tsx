@@ -20,7 +20,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useEffect, useState } from "react";
 import NotificationBell from "@/components/NotificationBell";
-import { getNotifications, type Notification } from "@/services/notificationService";
+import {
+  getNotifications,
+  type Notification,
+} from "@/services/notificationService";
 import { formatDistanceToNow } from "date-fns";
 
 const AdminDashboard = () => {
@@ -40,7 +43,7 @@ const AdminDashboard = () => {
         const recentNotifications = await getNotifications(profile.id, 5);
         setNotifications(recentNotifications || []);
       } catch (error) {
-        console.error('Error fetching notifications:', error);
+        console.error("Error fetching notifications:", error);
         setNotifications([]);
       } finally {
         setLoadingNotifications(false);
@@ -56,54 +59,54 @@ const AdminDashboard = () => {
   };
 
   const quickActions = [
-    { 
-      label: "Academic Setup", 
-      icon: School, 
-      color: "text-blue-500", 
+    {
+      label: "Academic Setup",
+      icon: School,
+      color: "text-blue-500",
       path: "/admin/academic",
-      description: "Manage grades, classes, and subjects"
+      description: "Manage grades, classes, and subjects",
     },
-    { 
-      label: "Members", 
-      icon: UserPlus, 
-      color: "text-orange-500", 
+    {
+      label: "Members",
+      icon: UserPlus,
+      color: "text-orange-500",
       path: "/admin/members",
-      description: "Manage teachers and students"
+      description: "Manage teachers and students",
     },
-    { 
-      label: "Assignments", 
-      icon: ClipboardList, 
-      color: "text-yellow-500", 
+    {
+      label: "Assign Members",
+      icon: ClipboardList,
+      color: "text-yellow-500",
       path: "/admin/assignments",
-      description: "Assign students and teachers to classes"
+      description: "Assign teachers or students to classes",
     },
-    { 
-      label: "Exam & File Settings", 
-      icon: Settings, 
-      color: "text-indigo-500", 
+    {
+      label: "Exam & File Settings",
+      icon: Settings,
+      color: "text-indigo-500",
       path: "/admin/settings",
-      description: "Manage exam types and file categories"
+      description: "Manage exam types and file categories",
     },
-    { 
-      label: "Timetable", 
-      icon: Calendar, 
-      color: "text-pink-500", 
+    {
+      label: "Timetable",
+      icon: Calendar,
+      color: "text-pink-500",
       path: "/admin/timetable",
-      description: "Manage class timetables"
+      description: "Manage class timetables",
     },
-    { 
-      label: "Messages", 
-      icon: MessageSquare, 
-      color: "text-green-500", 
-      path: "/admin/messages",
-      description: "View and reply to teacher messages"
+    {
+      label: "Communication",
+      icon: MessageSquare,
+      color: "text-green-500",
+      path: "/admin/communication",
+      description: "Message teachers and broadcast to parents",
     },
-    { 
-      label: "My Profile", 
-      icon: User, 
-      color: "text-gray-500", 
+    {
+      label: "My Profile",
+      icon: User,
+      color: "text-gray-500",
       path: "/admin/profile",
-      description: "View and edit your profile"
+      description: "View and edit your profile",
     },
   ];
 
@@ -131,11 +134,7 @@ const AdminDashboard = () => {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <NotificationBell />
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleLogout}
-            >
+            <Button variant="destructive" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Logout</span>
             </Button>
@@ -165,11 +164,15 @@ const AdminDashboard = () => {
                   onClick={() => navigate(action.path)}
                 >
                   <div className="flex flex-col items-center text-center space-y-3">
-                    <div className={`p-3 rounded-full bg-primary/10 ${action.color}`}>
+                    <div
+                      className={`p-3 rounded-full bg-primary/10 ${action.color}`}
+                    >
                       <Icon className="w-6 h-6 sm:w-8 sm:h-8" />
                     </div>
                     <div className="space-y-1">
-                      <h3 className="font-semibold text-sm sm:text-base">{action.label}</h3>
+                      <h3 className="font-semibold text-sm sm:text-base">
+                        {action.label}
+                      </h3>
                       <p className="text-xs text-muted-foreground hidden sm:block">
                         {action.description}
                       </p>
@@ -212,9 +215,12 @@ const AdminDashboard = () => {
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">
-                        {formatDistanceToNow(new Date(notification.created_at), {
-                          addSuffix: true,
-                        })}
+                        {formatDistanceToNow(
+                          new Date(notification.created_at),
+                          {
+                            addSuffix: true,
+                          }
+                        )}
                       </span>
                     </div>
                   </div>
@@ -229,4 +235,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-

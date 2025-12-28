@@ -152,4 +152,17 @@ export class SchoolsService {
       throw new NotFoundException(`School with ID ${id} not found`);
     }
   }
+
+  async updateLogo(schoolId: string, logoUrl: string) {
+    try {
+      const school = await this.prisma.schools.update({
+        where: { id: schoolId },
+        data: { logo_url: logoUrl },
+      });
+
+      return school;
+    } catch (error) {
+      throw new NotFoundException(`School with ID ${schoolId} not found`);
+    }
+  }
 }

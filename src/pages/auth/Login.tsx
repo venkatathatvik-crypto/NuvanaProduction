@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ApiError } from "@/lib/apiClient";
 
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,9 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 const Login = () => {
-  const [activeTab, setActiveTab] = useState<UserRole>("student");
+  const location = useLocation();
+  const roleFromState = (location.state as { role?: UserRole })?.role;
+  const [activeTab, setActiveTab] = useState<UserRole>(roleFromState || "student");
   const navigate = useNavigate();
   const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);

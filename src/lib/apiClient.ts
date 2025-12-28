@@ -15,6 +15,9 @@ export class ApiError extends Error {
   }
 }
 
+// Custom event for session expiry
+export const SESSION_EXPIRED_EVENT = 'session-expired';
+
 class ApiClient {
   private isRefreshing = false;
   private refreshPromise: Promise<string | null> | null = null;
@@ -69,8 +72,9 @@ class ApiClient {
         // Clear tokens on refresh failure
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        // Redirect to login
-        window.location.href = '/login';
+        
+        // Emit session expired event instead of hard redirect
+        window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
         return null;
       } finally {
         this.isRefreshing = false;

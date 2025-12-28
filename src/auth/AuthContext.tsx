@@ -22,9 +22,12 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   profileLoading: boolean;
+  showSessionExpired: boolean;
   login: (email: string, password: string, role?: UserRole, schoolId?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  handleSessionExpired: () => void;
+  closeSessionExpiredModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -38,6 +41,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -103,6 +107,32 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     initializeAuth();
   }, []);
 
+  // Handle session expiry - defined before useEffect to avoid closure issues
+  const handleSessionExpired = () => {
+    setSession(null);
+    setProfile(null);
+    setShowSessionExpired(true);
+  };
+
+  // Close session expired modal
+  const closeSessionExpiredModal = () => {
+    setShowSessionExpired(false);
+  };
+
+  // Listen for session expiry events from apiClient
+  useEffect(() => {
+    const handleSessionExpiredEvent = () => {
+      handleSessionExpired();
+    };
+
+    // Import SESSION_EXPIRED_EVENT dynamically to avoid circular dependency
+    window.addEventListener('session-expired', handleSessionExpiredEvent);
+
+    return () => {
+      window.removeEventListener('session-expired', handleSessionExpiredEvent);
+    };
+  }, [handleSessionExpired]);
+
   // Login function
   const login = async (email: string, password: string, role?: UserRole, schoolId?: string) => {
     setProfileLoading(true);
@@ -151,9 +181,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         profile,
         loading,
         profileLoading,
+        showSessionExpired,
         login,
         logout,
         refreshProfile,
+        handleSessionExpired,
+        closeSessionExpiredModal,
       }}
     >
       {children}

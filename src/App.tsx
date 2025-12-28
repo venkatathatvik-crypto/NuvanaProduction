@@ -5,9 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { toast } from "sonner";
 
-import { AuthProvider } from "@/auth/AuthContext";
+import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import { ThemeProvider } from "@/components/theme-provider";
 import { InstallPWA } from "@/components/InstallPWA";
+import { SessionExpiredModal } from "@/components/SessionExpiredModal";
 import AppBackgroundLayout from "./layouts/AppBackgroundLayout";
 import { AppRoutes } from "./routes";
 
@@ -32,6 +33,31 @@ const queryClient = new QueryClient({
   },
 });
 
+// Inner component to access auth context
+const AppContent = () => {
+  const { showSessionExpired, closeSessionExpiredModal } = useAuth();
+
+  return (
+    <>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <InstallPWA />
+
+        <BrowserRouter>
+          <SessionExpiredModal 
+            isOpen={showSessionExpired} 
+            onClose={closeSessionExpiredModal} 
+          />
+          <AppBackgroundLayout>
+            <AppRoutes />
+          </AppBackgroundLayout>
+        </BrowserRouter>
+      </TooltipProvider>
+    </>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -40,17 +66,7 @@ const App = () => (
         storageKey="vite-ui-theme"
         attribute="class"
       >
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <InstallPWA />
-
-          <BrowserRouter>
-            <AppBackgroundLayout>
-              <AppRoutes />
-            </AppBackgroundLayout>
-          </BrowserRouter>
-        </TooltipProvider>
+        <AppContent />
       </ThemeProvider>
     </AuthProvider>
   </QueryClientProvider>
