@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp}"],
+        // Increase the maximum file size to cache to 5MB (default is 2MB)
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -66,16 +68,31 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // One large vendor chunk for all third-party libraries.
-          // This is the most stable approach to avoid "Cannot access before initialization"
-          // and "forwardRef undefined" errors in production.
+          // Split vendor chunks strategically to reduce bundle size
+          // while maintaining stability
           if (id.includes('node_modules')) {
+            // React core libraries
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'react-core';
+            }
+            
+            // UI libraries (Radix, Recharts, etc.)
+            if (id.includes('@radix-ui') || id.includes('recharts') || id.includes('lucide-react')) {
+              return 'ui-libs';
+            }
+            
+            // Query and state management
+            if (id.includes('@tanstack') || id.includes('zustand')) {
+              return 'state-libs';
+            }
+            
+            // All other vendor dependencies
             return 'vendor';
           }
         },
       },
     },
-    // Increase chunk size warning limit to 1000kb
-    chunkSizeWarningLimit: 1000,
+    // Increase chunk size warning limit to 1500kb to accommodate larger bundles
+    chunkSizeWarningLimit: 1500,
   },
 }));
