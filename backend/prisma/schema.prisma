@@ -212,6 +212,7 @@ model schools {
   name              String
   created_at        DateTime?           @default(now()) @db.Timestamptz(6)
   admin_profile_id  String?             @db.Uuid
+  logo_url          String?
   announcements     announcements[]
   attendance        attendance[]
   classes           classes[]

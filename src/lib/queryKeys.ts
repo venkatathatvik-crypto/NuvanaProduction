@@ -59,4 +59,10 @@ export const queryKeys = {
     categories: (schoolId: string) => 
       ['file-categories', schoolId] as const,
   },
+
+  // School-related queries
+  school: {
+    details: (schoolId: string) => 
+      ['school-details', schoolId] as const,
+  },
 } as const;

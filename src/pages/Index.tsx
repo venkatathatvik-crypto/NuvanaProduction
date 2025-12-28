@@ -46,7 +46,7 @@ const Index = () => {
         {/* Student Card */}
         <Card
           className="glass-card p-8 hover:neon-glow transition-all duration-300 cursor-pointer group"
-          onClick={() => navigate("/login")}
+          onClick={() => navigate("/login", { state: { role: "student" } })}
         >
           <div className="flex flex-col items-center text-center space-y-4">
             <BookOpen className="w-16 h-16 text-neon-purple group-hover:scale-110 transition-transform" />
@@ -64,7 +64,7 @@ const Index = () => {
         {/* Teacher Card */}
         <Card
           className="glass-card p-8 hover:neon-glow transition-all duration-300 cursor-pointer group"
-          onClick={() => navigate("/login")}
+          onClick={() => navigate("/login", { state: { role: "teacher" } })}
         >
           <div className="flex flex-col items-center text-center space-y-4">
             <Users className="w-16 h-16 text-neon-purple group-hover:scale-110 transition-transform" />
