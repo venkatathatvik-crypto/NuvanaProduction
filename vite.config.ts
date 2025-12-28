@@ -71,12 +71,7 @@ export default defineConfig(({ mode }) => ({
           // Split vendor chunks strategically to reduce bundle size
           // while maintaining stability
           if (id.includes('node_modules')) {
-            // React core libraries
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'react-core';
-            }
-            
-            // UI libraries (Radix, Recharts, etc.)
+            // UI libraries (Radix, Recharts, etc.) - separate to reduce main bundle
             if (id.includes('@radix-ui') || id.includes('recharts') || id.includes('lucide-react')) {
               return 'ui-libs';
             }
@@ -86,7 +81,8 @@ export default defineConfig(({ mode }) => ({
               return 'state-libs';
             }
             
-            // All other vendor dependencies
+            // Keep React, React-DOM, and React-Router together in vendor chunk
+            // to prevent context/hook errors from chunk splitting
             return 'vendor';
           }
         },
