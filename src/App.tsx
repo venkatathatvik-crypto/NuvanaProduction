@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
+import { AiChatProvider } from "@/contexts/AiChatContext";
 import { ThemeProvider } from "@/components/theme-provider";
 import { InstallPWA } from "@/components/InstallPWA";
 import { SessionExpiredModal } from "@/components/SessionExpiredModal";
@@ -61,13 +62,15 @@ const AppContent = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <ThemeProvider
-        defaultTheme="dark"
-        storageKey="vite-ui-theme"
-        attribute="class"
-      >
-        <AppContent />
-      </ThemeProvider>
+      <AiChatProvider>
+        <ThemeProvider
+          defaultTheme="dark"
+          storageKey="vite-ui-theme"
+          attribute="class"
+        >
+          <AppContent />
+        </ThemeProvider>
+      </AiChatProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

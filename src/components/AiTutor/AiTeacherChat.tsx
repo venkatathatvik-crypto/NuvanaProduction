@@ -33,6 +33,7 @@ import {
 import { aiService } from "@/services/aiService";
 import { MessageBubble } from "@/components/AiTutor/MessageBubble";
 import { useAuth } from "@/auth/AuthContext";
+import { useAiChat } from "@/contexts/AiChatContext";
 import { toast } from "sonner";
 import VoiceModeOverlay from "./VoiceModeOverlay";
 import { academicService } from "@/services/academicApiService";
@@ -94,25 +95,37 @@ const TEACHER_ACTION_MODES = [
 
 const AiTeacherChat = () => {
   const { profile } = useAuth();
-  const [messages, setMessages] = useState<any[]>([]);
+  
+  // Use context for persistent state
+  const {
+    messages,
+    setMessages,
+    activeMode,
+    setActiveMode,
+    selectedImage,
+    setSelectedImage,
+    selectedSubject,
+    setSelectedSubject,
+    selectedClassId,
+    setSelectedClassId,
+    lastGradingData,
+    setLastGradingData,
+  } = useAiChat();
+  
+  // Local state for UI-only concerns (not persisted)
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isContextLoading, setIsContextLoading] = useState(false);
-  const [activeMode, setActiveMode] = useState<string>("start");
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceTranscription, setVoiceTranscription] = useState("");
   const [viewImageModal, setViewImageModal] = useState<string | null>(null);
   const [gradingApprovalOpen, setGradingApprovalOpen] = useState(false);
-  const [lastGradingData, setLastGradingData] = useState<any>(null);
 
-  // Subject & Class Selection
+  // Teacher context data (not persisted in chat context)
   const [allSubjectsData, setAllSubjectsData] = useState<any[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string>("all");
   const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [schoolInfo, setSchoolInfo] = useState<any>(null);
 
   // Derived subjects list based on selected class
@@ -151,7 +164,7 @@ const AiTeacherChat = () => {
     if (selectedSubject !== "all" && !subjects.includes(selectedSubject)) {
       setSelectedSubject("all");
     }
-  }, [selectedClassId, subjects, selectedSubject]);
+  }, [selectedClassId, subjects, selectedSubject, setSelectedSubject]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -185,8 +198,8 @@ const AiTeacherChat = () => {
           );
           setTeacherClasses(classesData);
 
-          // Auto-select first class if available
-          if (classesData.length > 0) {
+          // Auto-select first class if available (only if not already set)
+          if (classesData.length > 0 && selectedClassId === "all") {
             setSelectedClassId(classesData[0].class_id);
           }
 
@@ -203,7 +216,7 @@ const AiTeacherChat = () => {
       }
     };
     loadTeacherContext();
-  }, [profile]);
+  }, [profile, selectedClassId, setSelectedClassId]);
 
   // Initialize Speech Recognition
   useEffect(() => {
