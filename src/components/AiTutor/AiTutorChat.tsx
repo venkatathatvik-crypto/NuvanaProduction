@@ -29,6 +29,7 @@ import {
 import { aiService, AiRequestDto } from "@/services/aiService";
 import { MessageBubble } from "./MessageBubble";
 import { useAuth } from "@/auth/AuthContext";
+import { useAiChat } from "@/contexts/AiChatContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import VoiceModeOverlay from "./VoiceModeOverlay";
 import { toast } from "sonner";
@@ -82,19 +83,29 @@ const ACTION_MODES = [
 
 const AiTutorChat = () => {
   const { profile } = useAuth();
-  const [messages, setMessages] = useState<any[]>([]);
+  
+  // Use context for persistent state
+  const {
+    messages,
+    setMessages,
+    activeMode,
+    setActiveMode,
+    selectedSubject,
+    setSelectedSubject,
+  } = useAiChat();
+  
+  // Local state for UI-only concerns (not persisted)
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isContextLoading, setIsContextLoading] = useState(false);
-  const [activeMode, setActiveMode] = useState<string>("start");
   const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceTranscription, setVoiceTranscription] = useState("");
   const [studentData, setStudentData] = useState<StudentData | null>(null);
-  // Subject Selection State
+  
+  // Subject list (loaded from API, not persisted in chat context)
   const [subjects, setSubjects] = useState<string[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string>("all");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
