@@ -41,6 +41,14 @@ import { GradingApprovalModal } from "./GradingApprovalModal";
 import { schoolService } from "@/services/schoolService";
 import { exportQuizPDF } from "@/lib/quizPdfExport";
 
+// Message interface (matches AiChatContext)
+interface Message {
+  sender: "user" | "ai";
+  content: any;
+  image?: string | null;
+  timestamp: Date;
+}
+
 const TEACHER_ACTION_MODES = [
   {
     id: "start",
@@ -324,8 +332,8 @@ const AiTeacherChat = () => {
     const textToSend = textOverride || input;
     if (!textToSend.trim() && !selectedImage) return;
 
-    const userMsg = {
-      sender: "user",
+    const userMsg: Message = {
+      sender: "user" as const,
       content: textToSend,
       image: selectedImage,
       timestamp: new Date(),
@@ -462,7 +470,7 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
       
       // Get class name
       const selectedClass = teacherClasses.find(c => c.class_id === selectedClassId);
-      const classDisplayName = selectedClass?.class_name || className || "All Classes";
+      const classDisplayName = selectedClass?.class_name || "All Classes";
       
       // Get subject display name
       const subjectDisplayName = selectedSubject !== "all" ? selectedSubject : "General";

@@ -36,6 +36,14 @@ import { toast } from "sonner";
 import { getStudentData, StudentData } from "@/services/studentDataService";
 import { getSubjectsWithMaterials } from "@/services/subjectService";
 
+// Message interface (matches AiChatContext)
+interface Message {
+  sender: "user" | "ai";
+  content: any;
+  image?: string | null;
+  timestamp: Date;
+}
+
 const ACTION_MODES = [
   {
     id: "start",
@@ -267,8 +275,8 @@ const AiTutorChat = () => {
     console.log("[AiTutorChat] Student Data:", studentData);
     console.log("[AiTutorChat] Selected Subject:", selectedSubject);
 
-    const userMsg = {
-      sender: "user",
+    const userMsg: Message = {
+      sender: "user" as const,
       content: textToSend,
       timestamp: new Date(),
     };

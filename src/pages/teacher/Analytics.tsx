@@ -2,7 +2,7 @@
 // ---------- START OF FILE ----------
 
 import * as React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   LineChart,
@@ -54,6 +54,8 @@ import {
   CheckCircle,
   ArrowLeft,
   Filter,
+  X,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportAnalyticsPDF } from "@/lib/pdfExport";
@@ -80,7 +82,7 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { schoolService } from "@/services/schoolService";
 
@@ -142,6 +144,7 @@ interface TopicChapterData {
 const AnalyticsDashboard = () => {
   const { profile, profileLoading } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [selectedStudent, setSelectedStudent] = useState<string>("");
 
   // State for topic/chapter analytics (class level)
@@ -151,10 +154,18 @@ const AnalyticsDashboard = () => {
   const [selectedSubjectFilter, setSelectedSubjectFilter] =
     useState<string>("all");
 
-  // State for student analysis tab
-  const [studentAnalyticsData, setStudentAnalyticsData] = useState<
-    Record<string, StudentAnalyticsData>
-  >({});
+  // State for chapter/topic filters in weak areas section
+  const [weakAreasChapterFilter, setWeakAreasChapterFilter] = useState<string>("all");
+  const [weakAreasTopicFilter, setWeakAreasTopicFilter] = useState<string>("all");
+  const [weakAreasScoreThreshold, setWeakAreasScoreThreshold] = useState<number>(60);
+
+  // State for student analysis filters
+  const [studentAnalysisChapterFilter, setStudentAnalysisChapterFilter] = useState<string>("all");
+  const [studentAnalysisTopicFilter, setStudentAnalysisTopicFilter] = useState<string>("all");
+  const [studentAnalysisScoreThreshold, setStudentAnalysisScoreThreshold] = useState<number>(60);
+
+  // Student analytics query moved after selectedClass declaration (see below)
+
   const [topicChapterData, setTopicChapterData] = useState<
     Record<string, Record<string, TopicChapterData>>
   >({});
@@ -182,6 +193,32 @@ const AnalyticsDashboard = () => {
       setSelectedClass(classes[0]);
     }
   }, [classes, selectedClass]);
+
+  // React Query for student analytics - replaces manual state management
+  const {
+    data: currentStudentData,
+    isLoading: currentStudentLoading,
+    error: studentAnalyticsError,
+    refetch: refetchStudentAnalytics
+  } = useQuery({
+    queryKey: ['student-analytics-for-teacher', selectedStudent, selectedClass?.class_id],
+    queryFn: async () => {
+      if (!selectedStudent || !selectedClass) return null;
+      return await getStudentAnalyticsForTeacher(selectedStudent, selectedClass.class_id);
+    },
+    enabled: !!selectedStudent && !!selectedClass,
+    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
+    gcTime: 10 * 60 * 1000, // 10 minutes - cache retention (formerly cacheTime)
+    retry: 1,
+  });
+
+  // Build studentAnalyticsData from query for backward compatibility
+  const studentAnalyticsData = useMemo(() => {
+    if (!selectedStudent || !currentStudentData) return {};
+    return {
+      [selectedStudent]: currentStudentData
+    };
+  }, [selectedStudent, currentStudentData]);
 
   // Fetch class insights data using React Query
   const { data: classInsightsData, isLoading: classInsightsLoading } = useQuery(
@@ -256,6 +293,110 @@ const AnalyticsDashboard = () => {
   const recentTestsData = testMetricsData?.recentTests ?? [];
   const questionTypeData = testMetricsData?.questionTypes ?? [];
 
+  // Get available topics based on selected chapter
+  const availableTopics = useMemo(() => {
+    if (weakAreasChapterFilter === "all") {
+      return analyticsData.topics;
+    }
+    // Filter topics that belong to the selected chapter
+    return analyticsData.topics.filter((t) => 
+      t.chapters.includes(weakAreasChapterFilter)
+    );
+  }, [analyticsData.topics, weakAreasChapterFilter]);
+
+  // Reset topic filter when chapter changes and selected topic is not in available topics
+  React.useEffect(() => {
+    if (weakAreasTopicFilter !== "all" && !availableTopics.some(t => t.name === weakAreasTopicFilter)) {
+      setWeakAreasTopicFilter("all");
+    }
+  }, [weakAreasChapterFilter, availableTopics, weakAreasTopicFilter]);
+
+  // Memoized filtered data for weak areas section
+  const filteredWeakChapters = useMemo(() => {
+    return analyticsData.chapters
+      .filter((c) => c.avgScore < weakAreasScoreThreshold)
+      .filter((c) => weakAreasChapterFilter === "all" || c.name === weakAreasChapterFilter)
+      .sort((a, b) => a.avgScore - b.avgScore);
+  }, [analyticsData.chapters, weakAreasChapterFilter, weakAreasScoreThreshold]);
+
+  const filteredWeakTopics = useMemo(() => {
+    return analyticsData.topics
+      .filter((t) => t.avgScore < weakAreasScoreThreshold)
+      .filter((t) => {
+        if (weakAreasTopicFilter === "all" && weakAreasChapterFilter === "all") return true;
+        if (weakAreasTopicFilter !== "all" && t.name === weakAreasTopicFilter) return true;
+        if (weakAreasChapterFilter !== "all" && t.chapters.includes(weakAreasChapterFilter)) return true;
+        return false;
+      })
+      .sort((a, b) => a.avgScore - b.avgScore);
+  }, [analyticsData.topics, weakAreasTopicFilter, weakAreasChapterFilter, weakAreasScoreThreshold]);
+
+  // Auto-reset weak areas topic filter when chapter changes
+  React.useEffect(() => {
+    if (weakAreasTopicFilter !== "all") {
+      const topicsInChapter = analyticsData.topics.filter((t) =>
+        t.chapters.includes(weakAreasChapterFilter)
+      );
+      if (weakAreasChapterFilter !== "all" && !topicsInChapter.some(t => t.name === weakAreasTopicFilter)) {
+        setWeakAreasTopicFilter("all");
+      }
+    }
+  }, [weakAreasChapterFilter, analyticsData.topics, weakAreasTopicFilter]);
+
+  // Auto-reset student analysis topic filter when chapter changes or student changes
+  React.useEffect(() => {
+    if (studentAnalysisTopicFilter !== "all" && selectedStudent && studentAnalyticsData[selectedStudent]?.chapterTopic) {
+      const availableTopics = studentAnalysisChapterFilter === "all"
+        ? studentAnalyticsData[selectedStudent].chapterTopic.topics
+        : studentAnalyticsData[selectedStudent].chapterTopic.topics.filter((t) =>
+            t.chapters.includes(studentAnalysisChapterFilter)
+          );
+      
+      if (!availableTopics.some(t => t.name === studentAnalysisTopicFilter)) {
+        setStudentAnalysisTopicFilter("all");
+      }
+    }
+  }, [studentAnalysisChapterFilter, selectedStudent, studentAnalyticsData, studentAnalysisTopicFilter]);
+
+  // Cache invalidation functions
+  const invalidateStudentAnalytics = React.useCallback((studentId?: string) => {
+    if (studentId) {
+      // Invalidate specific student's data
+      queryClient.invalidateQueries({
+        queryKey: ['student-analytics-for-teacher', studentId]
+      });
+    } else if (selectedStudent) {
+      // Invalidate current student's data
+      queryClient.invalidateQueries({
+        queryKey: ['student-analytics-for-teacher', selectedStudent, selectedClass?.class_id]
+      });
+    }
+    // Also invalidate class-level data as it may have changed
+    queryClient.invalidateQueries({
+      queryKey: ['chapter-topic-analytics', selectedClass?.class_id]
+    });
+    queryClient.invalidateQueries({
+      queryKey: ['class-students-scores', selectedClass?.class_id]
+    });
+  }, [queryClient, selectedStudent, selectedClass]);
+
+  // Manual refresh handler
+  const handleRefreshStudentData = React.useCallback(() => {
+    if (selectedStudent && selectedClass) {
+      refetchStudentAnalytics();
+      toast.success("Student data refreshed");
+    }
+  }, [selectedStudent, selectedClass, refetchStudentAnalytics]);
+
+  // Expose invalidation function globally for use after test grading/creation
+  React.useEffect(() => {
+    // Store in window for access from other components
+    (window as any).invalidateStudentAnalytics = invalidateStudentAnalytics;
+    return () => {
+      delete (window as any).invalidateStudentAnalytics;
+    };
+  }, [invalidateStudentAnalytics]);
+
   // Fetch School Info for PDF Logo/Watermark
   const { data: schoolInfo } = useQuery({
     queryKey: queryKeys.school.details(profile?.school_id ?? ""),
@@ -266,6 +407,8 @@ const AnalyticsDashboard = () => {
     enabled: !!profile?.school_id,
   });
 
+
+  /* OLD MANUAL FETCHING - NOW HANDLED BY REACT QUERY
   // Fetch individual student analytics when student selection changes (keep in useEffect due to dependency)
   useEffect(() => {
     const fetchStudentAnalytics = async () => {
@@ -297,6 +440,7 @@ const AnalyticsDashboard = () => {
 
     fetchStudentAnalytics();
   }, [selectedStudent, selectedClass, studentAnalyticsData]);
+  */
 
   const handleExportCSV = () => {
     if (!selectedClass) return;
@@ -949,6 +1093,20 @@ const AnalyticsDashboard = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  {/* Refresh Button */}
+                  {selectedStudent && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshStudentData}
+                      disabled={currentStudentLoading}
+                      className="ml-2"
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-2 ${currentStudentLoading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  )}
                 </div>
 
                 {selectedStudent && studentAnalyticsData[selectedStudent] && (
@@ -1278,39 +1436,155 @@ const AnalyticsDashboard = () => {
                               (w) => w.subject === selectedSubjectFilter
                             );
 
+                      // Get available topics based on selected chapter for this student
+                      const availableTopics = (() => {
+                        if (!studentAnalyticsData[selectedStudent]?.chapterTopic) return [];
+                        
+                        if (studentAnalysisChapterFilter === "all") {
+                          return studentAnalyticsData[selectedStudent].chapterTopic.topics;
+                        }
+                        
+                        // Filter topics belonging to selected chapter
+                        return studentAnalyticsData[selectedStudent].chapterTopic.topics.filter((t) =>
+                          t.chapters.includes(studentAnalysisChapterFilter)
+                        );
+                      })();
+
+                      // Apply all filters to strengths
+                      const fullyFilteredStrengths = (() => {
+                        let items = filteredStrengths;
+                        
+                        // Topic filter
+                        if (studentAnalysisTopicFilter !== "all") {
+                          items = items.filter((s) => s.topic === studentAnalysisTopicFilter);
+                        }
+                        
+                        // Chapter filter (check if topic belongs to chapter)
+                        if (studentAnalysisChapterFilter !== "all" && studentAnalyticsData[selectedStudent].chapterTopic) {
+                          const topicsInChapter = studentAnalyticsData[selectedStudent].chapterTopic.topics
+                            .filter((t) => t.chapters.includes(studentAnalysisChapterFilter))
+                            .map((t) => t.name);
+                          items = items.filter((s) => s.topic && topicsInChapter.includes(s.topic));
+                        }
+                        
+                        // Score threshold (for strengths, show items >= threshold)
+                        if (studentAnalysisScoreThreshold !== 60) {
+                          items = items.filter((s) => s.mastery !== undefined && s.mastery >= studentAnalysisScoreThreshold);
+                        }
+                        
+                        return items;
+                      })();
+
+                      // Apply all filters to weaknesses
+                      const fullyFilteredWeaknesses = (() => {
+                        let items = filteredWeaknesses;
+                        
+                        // Topic filter
+                        if (studentAnalysisTopicFilter !== "all") {
+                          items = items.filter((w) => w.topic === studentAnalysisTopicFilter);
+                        }
+                        
+                        // Chapter filter
+                        if (studentAnalysisChapterFilter !== "all" && studentAnalyticsData[selectedStudent].chapterTopic) {
+                          const topicsInChapter = studentAnalyticsData[selectedStudent].chapterTopic.topics
+                            .filter((t) => t.chapters.includes(studentAnalysisChapterFilter))
+                            .map((t) => t.name);
+                          items = items.filter((w) => w.topic && topicsInChapter.includes(w.topic));
+                        }
+                        
+                        // Score threshold (for weaknesses, show items < threshold)
+                        if (studentAnalysisScoreThreshold !== 60) {
+                          items = items.filter((w) => w.mastery !== undefined && w.mastery < studentAnalysisScoreThreshold);
+                        }
+                        
+                        return items;
+                      })();
+
                       return (
                         <>
-                          {uniqueSubjects.length > 0 && (
+                          {(uniqueSubjects.length > 0 || (studentAnalyticsData[selectedStudent].chapterTopic?.chapters.length ?? 0) > 0) && (
                             <Card className="border-primary/20">
                               <CardContent className="pt-6">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                  <div className="flex items-center gap-2">
-                                    <Filter className="w-5 h-5 text-primary" />
-                                    <h3 className="font-semibold text-lg">
-                                      Filter by Subject
-                                    </h3>
-                                  </div>
-                                  <Select
-                                    value={selectedSubjectFilter}
-                                    onValueChange={setSelectedSubjectFilter}
-                                  >
-                                    <SelectTrigger className="w-full sm:w-[250px] bg-background/50 border-primary/20">
-                                      <SelectValue placeholder="All Subjects" />
+                                <div className="flex items-center gap-2 mb-4">
+                                  <Filter className="w-5 h-5 text-primary" />
+                                  <h3 className="font-semibold text-lg">
+                                    Filter Strengths & Weaknesses
+                                  </h3>
+                                </div>
+                                
+                                <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
+                                  {/* Chapter Filter */}
+                                  {studentAnalyticsData[selectedStudent].chapterTopic?.chapters && (
+                                    <Select value={studentAnalysisChapterFilter} onValueChange={setStudentAnalysisChapterFilter}>
+                                      <SelectTrigger className="w-full sm:w-[180px]">
+                                        <SelectValue placeholder="Chapter" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All Chapters</SelectItem>
+                                        {studentAnalyticsData[selectedStudent].chapterTopic.chapters.map((ch) => (
+                                          <SelectItem key={ch.name} value={ch.name}>{ch.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                  
+                                  {/* Topic Filter (dynamic based on chapter) */}
+                                  {availableTopics.length > 0 && (
+                                    <Select value={studentAnalysisTopicFilter} onValueChange={setStudentAnalysisTopicFilter}>
+                                      <SelectTrigger className="w-full sm:w-[180px]">
+                                        <SelectValue placeholder="Topic" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All Topics</SelectItem>
+                                        {availableTopics.map((t) => (
+                                          <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                  
+                                  {/* Subject Filter */}
+                                  {uniqueSubjects.length > 0 && (
+                                    <Select value={selectedSubjectFilter} onValueChange={setSelectedSubjectFilter}>
+                                      <SelectTrigger className="w-full sm:w-[180px]">
+                                        <SelectValue placeholder="Subject" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All Subjects</SelectItem>
+                                        {uniqueSubjects.map((subject) => (
+                                          <SelectItem key={subject} value={subject}>{subject}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                  
+                                  {/* Score Threshold */}
+                                  <Select value={studentAnalysisScoreThreshold.toString()} onValueChange={(v) => setStudentAnalysisScoreThreshold(Number(v))}>
+                                    <SelectTrigger className="w-full sm:w-[160px]">
+                                      <SelectValue placeholder="Threshold" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="all">
-                                        All Subjects
-                                      </SelectItem>
-                                      {uniqueSubjects.map((subject) => (
-                                        <SelectItem
-                                          key={subject}
-                                          value={subject}
-                                        >
-                                          {subject}
-                                        </SelectItem>
-                                      ))}
+                                      <SelectItem value="40">Below 40%</SelectItem>
+                                      <SelectItem value="50">Below 50%</SelectItem>
+                                      <SelectItem value="60">Below 60%</SelectItem>
+                                      <SelectItem value="70">Below 70%</SelectItem>
+                                      <SelectItem value="80">Below 80%</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                  
+                                  {/* Clear Filters Button */}
+                                  {(studentAnalysisChapterFilter !== "all" || studentAnalysisTopicFilter !== "all" || selectedSubjectFilter !== "all" || studentAnalysisScoreThreshold !== 60) && (
+                                    <Button variant="outline" size="sm" onClick={() => {
+                                      setStudentAnalysisChapterFilter("all");
+                                      setStudentAnalysisTopicFilter("all");
+                                      setSelectedSubjectFilter("all");
+                                      setStudentAnalysisScoreThreshold(60);
+                                    }}>
+                                      <X className="w-4 h-4 mr-1 sm:mr-2" />
+                                      <span className="hidden sm:inline">Clear Filters</span>
+                                      <span className="sm:hidden">Clear</span>
+                                    </Button>
+                                  )}
                                 </div>
                               </CardContent>
                             </Card>
@@ -1323,25 +1597,29 @@ const AnalyticsDashboard = () => {
                                   <TrendingUp className="w-5 h-5" /> Top
                                   Strengths
                                 </CardTitle>
-                                {selectedSubjectFilter !== "all" && (
+                                {(selectedSubjectFilter !== "all" || studentAnalysisChapterFilter !== "all" || studentAnalysisTopicFilter !== "all" || studentAnalysisScoreThreshold !== 60) && (
                                   <CardDescription>
-                                    Showing strengths in {selectedSubjectFilter}
+                                    Filtered by:
+                                    {selectedSubjectFilter !== "all" && ` Subject: ${selectedSubjectFilter}`}
+                                    {studentAnalysisChapterFilter !== "all" && ` • Chapter: ${studentAnalysisChapterFilter}`}
+                                    {studentAnalysisTopicFilter !== "all" && ` • Topic: ${studentAnalysisTopicFilter}`}
+                                    {studentAnalysisScoreThreshold !== 60 && ` • Threshold: ≥${studentAnalysisScoreThreshold}%`}
                                   </CardDescription>
                                 )}
                               </CardHeader>
                               <CardContent>
                                 <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                                  {filteredStrengths.map((item, index) => (
+                                  {fullyFilteredStrengths.map((item, index) => (
                                     <div
                                       key={index}
                                       className="flex justify-between items-center p-3 bg-secondary/10 rounded-lg"
                                     >
                                       <div>
                                         <p className="font-semibold text-sm">
-                                          {item.subject}
+                                          {item.topic || item.subject}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                          {item.topic || item.desc}
+                                          {item.desc}
                                         </p>
                                       </div>
                                       {item.mastery !== undefined && (
@@ -1351,11 +1629,11 @@ const AnalyticsDashboard = () => {
                                       )}
                                     </div>
                                   ))}
-                                  {filteredStrengths.length === 0 && (
+                                  {fullyFilteredStrengths.length === 0 && (
                                     <p className="text-muted-foreground text-sm text-center py-4">
-                                      {selectedSubjectFilter === "all"
-                                        ? "No specific strengths identified yet."
-                                        : `No strengths identified in ${selectedSubjectFilter} yet.`}
+                                      {(selectedSubjectFilter !== "all" || studentAnalysisChapterFilter !== "all" || studentAnalysisTopicFilter !== "all" || studentAnalysisScoreThreshold !== 60)
+                                        ? "No strengths match the selected filters."
+                                        : "No specific strengths identified yet."}
                                     </p>
                                   )}
                                 </div>
@@ -1368,26 +1646,29 @@ const AnalyticsDashboard = () => {
                                   <AlertCircle className="w-5 h-5" /> Areas for
                                   Improvement
                                 </CardTitle>
-                                {selectedSubjectFilter !== "all" && (
+                                {(selectedSubjectFilter !== "all" || studentAnalysisChapterFilter !== "all" || studentAnalysisTopicFilter !== "all" || studentAnalysisScoreThreshold !== 60) && (
                                   <CardDescription>
-                                    Showing weaknesses in{" "}
-                                    {selectedSubjectFilter}
+                                    Filtered by:
+                                    {selectedSubjectFilter !== "all" && ` Subject: ${selectedSubjectFilter}`}
+                                    {studentAnalysisChapterFilter !== "all" && ` • Chapter: ${studentAnalysisChapterFilter}`}
+                                    {studentAnalysisTopicFilter !== "all" && ` • Topic: ${studentAnalysisTopicFilter}`}
+                                    {studentAnalysisScoreThreshold !== 60 && ` • Threshold: <${studentAnalysisScoreThreshold}%`}
                                   </CardDescription>
                                 )}
                               </CardHeader>
                               <CardContent>
                                 <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                                  {filteredWeaknesses.map((item, index) => (
+                                  {fullyFilteredWeaknesses.map((item, index) => (
                                     <div
                                       key={index}
                                       className="flex justify-between items-center p-3 bg-red-50/50 rounded-lg"
                                     >
                                       <div>
                                         <p className="font-semibold text-sm">
-                                          {item.subject}
+                                          {item.topic || item.subject}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                          {item.topic || item.desc}
+                                          {item.desc}
                                         </p>
                                       </div>
                                       {item.mastery !== undefined && (
@@ -1397,11 +1678,11 @@ const AnalyticsDashboard = () => {
                                       )}
                                     </div>
                                   ))}
-                                  {filteredWeaknesses.length === 0 && (
+                                  {fullyFilteredWeaknesses.length === 0 && (
                                     <p className="text-muted-foreground text-sm text-center py-4">
-                                      {selectedSubjectFilter === "all"
-                                        ? "No specific weaknesses identified."
-                                        : `No weaknesses identified in ${selectedSubjectFilter}.`}
+                                      {(selectedSubjectFilter !== "all" || studentAnalysisChapterFilter !== "all" || studentAnalysisTopicFilter !== "all" || studentAnalysisScoreThreshold !== 60)
+                                        ? "No weaknesses match the selected filters."
+                                        : "No specific weaknesses identified."}
                                     </p>
                                   )}
                                 </div>
@@ -2286,6 +2567,63 @@ const AnalyticsDashboard = () => {
           {!analyticsLoading &&
             (analyticsData.chapters.length > 0 ||
               analyticsData.topics.length > 0) && (
+              <>
+                {/* Filter Controls for Weak Areas */}
+                <div className="flex flex-wrap gap-2 sm:gap-3 mb-4 sm:mb-6 items-center">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Filters:</span>
+                  </div>
+                  
+                  <Select value={weakAreasChapterFilter} onValueChange={setWeakAreasChapterFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Chapter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Chapters</SelectItem>
+                      {analyticsData.chapters.map((ch) => (
+                        <SelectItem key={ch.name} value={ch.name}>{ch.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <Select value={weakAreasTopicFilter} onValueChange={setWeakAreasTopicFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Topic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Topics</SelectItem>
+                      {availableTopics.map((t) => (
+                        <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <Select value={weakAreasScoreThreshold.toString()} onValueChange={(v) => setWeakAreasScoreThreshold(Number(v))}>
+                    <SelectTrigger className="w-full sm:w-[160px]">
+                      <SelectValue placeholder="Threshold" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="40">Below 40%</SelectItem>
+                      <SelectItem value="50">Below 50%</SelectItem>
+                      <SelectItem value="60">Below 60%</SelectItem>
+                      <SelectItem value="70">Below 70%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {(weakAreasChapterFilter !== "all" || weakAreasTopicFilter !== "all" || weakAreasScoreThreshold !== 60) && (
+                    <Button variant="outline" size="sm" onClick={() => {
+                      setWeakAreasChapterFilter("all");
+                      setWeakAreasTopicFilter("all");
+                      setWeakAreasScoreThreshold(60);
+                    }}>
+                      <X className="w-4 h-4 mr-1 sm:mr-2" />
+                      <span className="hidden sm:inline">Clear Filters</span>
+                      <span className="sm:hidden">Clear</span>
+                    </Button>
+                  )}
+                </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* WEAK CHAPTERS */}
                 <Card>
@@ -2295,17 +2633,15 @@ const AnalyticsDashboard = () => {
                       Weak Chapters (Need Attention)
                     </CardTitle>
                     <CardDescription>
-                      Chapters with average score below 60%
+                      Chapters with average score below {weakAreasScoreThreshold}%
+                      {weakAreasChapterFilter !== "all" && ` • Filtered by: ${weakAreasChapterFilter}`}
+                      {filteredWeakChapters.length > 0 && ` • Showing ${filteredWeakChapters.length} of ${analyticsData.chapters.filter(c => c.avgScore < weakAreasScoreThreshold).length}`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {analyticsData.chapters.filter((c) => c.avgScore < 60)
-                      .length > 0 ? (
+                    {filteredWeakChapters.length > 0 ? (
                       <div className="space-y-3">
-                        {analyticsData.chapters
-                          .filter((c) => c.avgScore < 60)
-                          .sort((a, b) => a.avgScore - b.avgScore)
-                          .map((chapter, index) => (
+                        {filteredWeakChapters.map((chapter, index) => (
                             <div
                               key={index}
                               className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded-lg"
@@ -2329,7 +2665,9 @@ const AnalyticsDashboard = () => {
                       </div>
                     ) : (
                       <p className="text-center text-muted-foreground py-8">
-                        Great! No chapters need immediate attention.
+                        {weakAreasChapterFilter !== "all" 
+                          ? `No chapters matching filter "${weakAreasChapterFilter}" need attention.`
+                          : `Great! No chapters need immediate attention.`}
                       </p>
                     )}
                   </CardContent>
@@ -2343,17 +2681,22 @@ const AnalyticsDashboard = () => {
                       Weak Topics (Need Focus)
                     </CardTitle>
                     <CardDescription>
-                      Topics with average score below 60%
+                      Topics with average score below {weakAreasScoreThreshold}%
+                      {(weakAreasTopicFilter !== "all" || weakAreasChapterFilter !== "all") && (
+                        <span>
+                          {" • Filtered by: "}
+                          {weakAreasTopicFilter !== "all" && `Topic: ${weakAreasTopicFilter}`}
+                          {weakAreasTopicFilter !== "all" && weakAreasChapterFilter !== "all" && ", "}
+                          {weakAreasChapterFilter !== "all" && `Chapter: ${weakAreasChapterFilter}`}
+                        </span>
+                      )}
+                      {filteredWeakTopics.length > 0 && ` • Showing ${filteredWeakTopics.length} of ${analyticsData.topics.filter(t => t.avgScore < weakAreasScoreThreshold).length}`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {analyticsData.topics.filter((t) => t.avgScore < 60)
-                      .length > 0 ? (
+                    {filteredWeakTopics.length > 0 ? (
                       <div className="space-y-3">
-                        {analyticsData.topics
-                          .filter((t) => t.avgScore < 60)
-                          .sort((a, b) => a.avgScore - b.avgScore)
-                          .map((topic, index) => (
+                        {filteredWeakTopics.map((topic, index) => (
                             <div
                               key={index}
                               className="flex items-center justify-between p-3 bg-orange-50 dark: bg-orange-950/20 rounded-lg"
@@ -2378,12 +2721,15 @@ const AnalyticsDashboard = () => {
                       </div>
                     ) : (
                       <p className="text-center text-muted-foreground py-8">
-                        Excellent! All topics are performing well.
+                        {(weakAreasTopicFilter !== "all" || weakAreasChapterFilter !== "all")
+                          ? `No topics matching the selected filters need focus.`
+                          : `Excellent! All topics are performing well.`}
                       </p>
                     )}
                   </CardContent>
                 </Card>
               </div>
+              </>
             )}
         </TabsContent>
       </Tabs>
@@ -2418,7 +2764,7 @@ const AnalyticsDashboard = () => {
           <div className="text-center p-6 rounded-xl" style={{ backgroundColor: `${PROFESSIONAL_COLORS.primary}15` }}>
             <p className="text-base font-semibold uppercase tracking-wider text-gray-600 mb-2">Class Average</p>
             <p className="text-4xl font-bold" style={{ color: PROFESSIONAL_COLORS.primary }}>
-              {subjectAverageData.length > 0 ? (subjectAverageData.reduce((acc, s) => acc + s.average, 0) / subjectAverageData.length).toFixed(1) : 'N/A'}%
+              {subjectAverageData.length > 0 ? (subjectAverageData.reduce((acc, s) => acc + s.avg, 0) / subjectAverageData.length).toFixed(1) : 'N/A'}%
             </p>
           </div>
           <div className="text-center p-6 rounded-xl" style={{ backgroundColor: `${PROFESSIONAL_COLORS.secondary}15` }}>
@@ -2619,7 +2965,7 @@ const AnalyticsDashboard = () => {
               <tbody>
                 {attendanceVsMarksData.slice(0, 20).map((student, i) => (
                   <tr key={i} className="border-t-2 border-gray-100" style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f9fafb' }}>
-                    <td className="p-4 font-medium text-base">{student.name}</td>
+                    <td className="p-4 font-medium text-base">{student.studentName}</td>
                     <td className="p-4">
                       <span 
                         className="font-bold text-lg" 
@@ -2689,7 +3035,6 @@ const AnalyticsDashboard = () => {
                     dataKey="averageScore"
                     nameKey="title"
                     label={(entry) => `${entry.title}: ${entry.averageScore}%`}
-                    labelStyle={{ fontSize: '12px', fontWeight: 'bold' }}
                   >
                     {recentTestsData.map((_, index) => (
                       <Cell 

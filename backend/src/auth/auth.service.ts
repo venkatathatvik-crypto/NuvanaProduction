@@ -34,9 +34,10 @@ export class AuthService {
       throw new UnauthorizedException("Invalid super admin secret");
     }
 
-    // Check if email already exists
+    // Check if email already exists (case-insensitive)
+    const normalizedEmail = dto.email.toLowerCase();
     const existingUser = await this.prisma.profiles.findUnique({
-      where: { email: dto.email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -49,7 +50,7 @@ export class AuthService {
     // Create super admin profile (role_id: 1, school_id: null)
     const superAdmin = await this.prisma.profiles.create({
       data: {
-        email: dto.email,
+        email: normalizedEmail,
         password_hash: hashedPassword,
         name: dto.name,
         role_id: 1, // Super Admin role
@@ -86,9 +87,10 @@ export class AuthService {
     const schoolId = dto.school_id || createdBySchoolId;
     
     // Check if email already exists in the SAME school (allow same email in different schools)
+    const normalizedEmail = dto.email.toLowerCase();
     const existingUser = await this.prisma.profiles.findFirst({
       where: { 
-        email: dto.email,
+        email: normalizedEmail,
         school_id: schoolId 
       },
     });
@@ -109,7 +111,7 @@ export class AuthService {
     // Create user profile
     const user = await this.prisma.profiles.create({
       data: {
-        email: dto.email,
+        email: normalizedEmail,
         password_hash: hashedPassword,
         name: dto.name,
         role_id: dto.role_id,
@@ -138,8 +140,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, expectedRole?: string) {
-    // Validate user credentials with school_id if provided
-    const user = await this.validateUser(dto.email, dto.password, dto.school_id);
+    // Validate user credentials with school_id if provided (case-insensitive email)
+    const user = await this.validateUser(dto.email.toLowerCase(), dto.password, dto.school_id);
 
     if (!user) {
       throw new UnauthorizedException("Invalid credentials");
@@ -257,6 +259,7 @@ export class AuthService {
   }
 
   private async validateUser(email: string, password: string, schoolId?: string) {
+    // Email is already normalized to lowercase by caller
     // If school_id is provided, find user by email and school_id
     // Otherwise, find by email only (for backward compatibility and super_admin)
     const whereClause = schoolId 

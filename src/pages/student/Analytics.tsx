@@ -575,20 +575,44 @@ const StudentAnalytics = () => {
             </CardHeader>
             <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
               {filteredStrengths.length > 0 ? (
-                filteredStrengths.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-green-500/10 p-4 rounded-lg border border-green-500/20 flex justify-between items-center"
-                  >
-                    <div>
-                      <p className="font-semibold text-green-400">
-                        {item.subject}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+                filteredStrengths.map((item, idx) => {
+                  // Find chapters for this topic
+                  const topicData = chapterTopicData.topics.find(t => t.name === item.topic);
+                  const chapters = topicData?.chapters || [];
+                  
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-green-500/10 p-4 rounded-lg border border-green-500/20 flex justify-between items-start"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          {item.topic ? (
+                            <p className="font-semibold text-green-400">
+                              {item.topic}
+                            </p>
+                          ) : (
+                            <p className="font-semibold text-green-400">
+                              {item.subject}
+                            </p>
+                          )}
+                          {item.mastery !== undefined && (
+                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
+                              {item.mastery}%
+                            </span>
+                          )}
+                        </div>
+                        {chapters.length > 0 && (
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Chapter: {chapters.join(', ')}
+                          </p>
+                        )}
+                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      </div>
+                      <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-1" />
                     </div>
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-center text-muted-foreground py-4">
                   {selectedSubjectFilter === "all" 
@@ -612,18 +636,44 @@ const StudentAnalytics = () => {
             </CardHeader>
             <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
               {filteredWeaknesses.length > 0 ? (
-                filteredWeaknesses.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-red-500/10 p-4 rounded-lg border border-red-500/20 flex justify-between items-center"
-                  >
-                    <div>
-                      <p className="font-semibold text-red-400">{item.subject}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+                filteredWeaknesses.map((item, idx) => {
+                  // Find chapters for this topic
+                  const topicData = chapterTopicData.topics.find(t => t.name === item.topic);
+                  const chapters = topicData?.chapters || [];
+                  
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-red-500/10 p-4 rounded-lg border border-red-500/20 flex justify-between items-start"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          {item.topic ? (
+                            <p className="font-semibold text-red-400">
+                              {item.topic}
+                            </p>
+                          ) : (
+                            <p className="font-semibold text-red-400">
+                              {item.subject}
+                            </p>
+                          )}
+                          {item.mastery !== undefined && (
+                            <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
+                              {item.mastery}%
+                            </span>
+                          )}
+                        </div>
+                        {chapters.length > 0 && (
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Chapter: {chapters.join(', ')}
+                          </p>
+                        )}
+                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      </div>
+                      <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-1" />
                     </div>
-                    <AlertCircle className="w-5 h-5 text-red-500" />
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-center text-muted-foreground py-4">
                   {selectedSubjectFilter === "all"
