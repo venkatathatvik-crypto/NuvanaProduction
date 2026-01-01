@@ -38,6 +38,7 @@ export interface ChapterPerformance {
   avgScore: number;
   totalQuestions: number;
   mastery: number;
+  subject?: string;
 }
 
 export interface TopicPerformance {
@@ -46,6 +47,7 @@ export interface TopicPerformance {
   totalQuestions: number;
   chapters: string[];
   mastery: number;
+  subject?: string;
 }
 
 export interface AttendancePercentage {

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
 import { useAuth } from "@/auth/AuthContext";
+import { QuickReplyButton } from "@/components/AiTutor/QuickReplyButtons";
 
 // Message type
 interface Message {
@@ -7,6 +8,10 @@ interface Message {
   content: any;
   image?: string | null;
   timestamp: Date;
+  quickReplies?: QuickReplyButton[];
+  waitingForInput?: boolean;
+  inputType?: string;
+  buttonsDisabled?: boolean;
 }
 
 // Separate state for teacher and student chats
