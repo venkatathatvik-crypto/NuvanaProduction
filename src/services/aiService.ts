@@ -1,13 +1,27 @@
 import { logger } from '@/lib/logger';
 
+export interface QuickReplyButton {
+    text: string;
+    value: any;
+    payload?: any;
+    icon?: string;
+    recommended?: boolean;
+}
+
 export interface AiRequestDto {
-    taskType: 'start' | 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill';
+    taskType: 'start' | 'explain' | 'solve' | 'doubt' | 'summary' | 'expand' | 'study_plan' | 'predict' | 'mock_test' | 'life_skill' | 'teacher_grade_paper' | 'teacher_lesson_plan' | 'teacher_email_draft';
     query: string;
     classId?: string;
     subject?: string;
     topic?: string;
     studentId?: string;
     additionalContext?: any;
+    quizParams?: {
+        questionCount?: number;
+        questionTypes?: string;
+        difficulty?: string;
+        bloomLevels?: string[];
+    };
 }
 
 export interface AiResponseDto {
@@ -17,6 +31,9 @@ export interface AiResponseDto {
     personalizedFeedback?: string;
     followUpQuestion?: string;
     rawResponse?: string;
+    quickReplies?: QuickReplyButton[];
+    waitingForInput?: boolean;
+    inputType?: 'questionCount' | 'questionTypes' | 'difficulty';
 }
 
 export const aiService = {

@@ -449,13 +449,22 @@ export class AnalyticsService {
             questions: true,
           },
         },
+        tests: {
+          include: {
+            grade_subjects: {
+              include: {
+                subjects_master: true,
+              },
+            },
+          },
+        },
       },
     });
 
     // Calculate chapter mastery
     const chapterMap = new Map<
       string,
-      { earned: number; possible: number; questions: number }
+      { earned: number; possible: number; questions: number; subject: string }
     >();
 
     // Calculate topic mastery
@@ -466,10 +475,13 @@ export class AnalyticsService {
         possible: number;
         questions: number;
         chapters: Set<string>;
+        subject: string;
       }
     >();
 
     submissions.forEach((submission) => {
+      const subjectName = submission.tests.grade_subjects?.subjects_master?.name || 'Unknown';
+      
       submission.student_answers.forEach((answer) => {
         const question = answer.questions;
         const chapter = question.chapter || 'Uncategorized';
@@ -496,7 +508,7 @@ export class AnalyticsService {
 
         // Update chapter map
         if (!chapterMap.has(chapter)) {
-          chapterMap.set(chapter, { earned: 0, possible: 0, questions: 0 });
+          chapterMap.set(chapter, { earned: 0, possible: 0, questions: 0, subject: subjectName });
         }
         const chapterData = chapterMap.get(chapter)!;
         chapterData.earned += earnedPoints;
@@ -510,6 +522,7 @@ export class AnalyticsService {
             possible: 0,
             questions: 0,
             chapters: new Set(),
+            subject: subjectName,
           });
         }
         const topicData = topicMap.get(topic)!;
@@ -529,6 +542,7 @@ export class AnalyticsService {
         totalQuestions: data.questions,
         mastery:
           data.possible > 0 ? Math.round((data.earned / data.possible) * 100) : 0,
+        subject: data.subject,
       }))
       .sort((a, b) => b.avgScore - a.avgScore);
 
@@ -541,6 +555,7 @@ export class AnalyticsService {
         chapters: Array.from(data.chapters),
         mastery:
           data.possible > 0 ? Math.round((data.earned / data.possible) * 100) : 0,
+        subject: data.subject,
       }))
       .sort((a, b) => b.avgScore - a.avgScore);
 
@@ -959,6 +974,15 @@ export class AnalyticsService {
             questions: true,
           },
         },
+        tests: {
+          include: {
+            grade_subjects: {
+              include: {
+                subjects_master: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -970,6 +994,7 @@ export class AnalyticsService {
         totalPossible: number;
         questions: number;
         studentMasteries: number[];
+        subject: string;
       }
     >();
 
@@ -982,6 +1007,7 @@ export class AnalyticsService {
         questions: number;
         chapters: Set<string>;
         studentMasteries: number[];
+        subject: string;
       }
     >();
 
@@ -1047,12 +1073,28 @@ export class AnalyticsService {
       studentMastery.forEach((mastery, key) => {
         if (key.startsWith('chapter::')) {
           const chapter = key.replace('chapter::', '');
+          
+          // Find subject for this chapter from submissions
+          let subjectName = 'Unknown';
+          for (const sub of submissions) {
+            if (sub.student_id === studentId) {
+              const hasChapter = sub.student_answers.some(
+                (ans) => (ans.questions.chapter || 'Uncategorized') === chapter
+              );
+              if (hasChapter) {
+                subjectName = sub.tests.grade_subjects?.subjects_master?.name || 'Unknown';
+                break;
+              }
+            }
+          }
+          
           if (!chapterMap.has(chapter)) {
             chapterMap.set(chapter, {
               totalEarned: 0,
               totalPossible: 0,
               questions: 0,
               studentMasteries: [],
+              subject: subjectName,
             });
           }
 
@@ -1065,7 +1107,22 @@ export class AnalyticsService {
           }
         } else if (key.startsWith('topic::')) {
           const topic = key.replace('topic::', '');
-          // Find chapter for this topic from submissions
+          
+          // Find chapter and subject for this topic from submissions
+          let subjectName = 'Unknown';
+          for (const sub of submissions) {
+            if (sub.student_id === studentId) {
+              const hasTopic = sub.student_answers.some(
+                (ans) => (ans.questions.topic || 'Uncategorized') === topic
+              );
+              if (hasTopic) {
+                subjectName = sub.tests.grade_subjects?.subjects_master?.name || 'Unknown';
+                break;
+              }
+            }
+          }
+          
+          // Find chapters for this topic from submissions
           submissions.forEach((sub) => {
             sub.student_answers.forEach((ans) => {
               if (ans.questions.topic === topic) {
@@ -1077,6 +1134,7 @@ export class AnalyticsService {
                     questions: 0,
                     chapters: new Set(),
                     studentMasteries: [],
+                    subject: subjectName,
                   });
                 }
 
@@ -1109,6 +1167,7 @@ export class AnalyticsService {
           avgScore: Math.round(classMeanMastery),
           totalQuestions: data.totalPossible > 0 ? Math.ceil(data.totalPossible / (data.studentMasteries.length || 1)) : 0,
           mastery: Math.round(classMeanMastery),
+          subject: data.subject,
         };
       })
       .sort((a, b) => b.avgScore - a.avgScore);
@@ -1128,6 +1187,7 @@ export class AnalyticsService {
           totalQuestions: data.totalPossible > 0 ? Math.ceil(data.totalPossible / (data.studentMasteries.length || 1)) : 0,
           chapters: Array.from(data.chapters),
           mastery: Math.round(classMeanMastery),
+          subject: data.subject,
         };
       })
       .sort((a, b) => b.avgScore - a.avgScore);

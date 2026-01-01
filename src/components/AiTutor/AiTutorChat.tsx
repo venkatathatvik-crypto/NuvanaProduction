@@ -42,6 +42,10 @@ interface Message {
   content: any;
   image?: string | null;
   timestamp: Date;
+  quickReplies?: any[];
+  waitingForInput?: boolean;
+  inputType?: string;
+  buttonsDisabled?: boolean;
 }
 
 const ACTION_MODES = [
@@ -455,12 +459,21 @@ const AiTutorChat = () => {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth">
           <AnimatePresence>
             {messages.map((msg, index) => (
-              <MessageBubble
-                key={index}
-                sender={msg.sender}
-                content={msg.content}
-                timestamp={msg.timestamp}
-              />
+              <React.Fragment key={index}>
+                <MessageBubble
+                  sender={msg.sender}
+                  content={msg.content}
+                  timestamp={msg.timestamp}
+                />
+                {msg.sender === "ai" && 
+                  msg.content.quickReplies && 
+                  msg.content.quickReplies.length > 0 && 
+                  !msg.content.buttonsDisabled && (
+                  <div className="ml-12 mb-4">
+                    {/* QuickReplyButtons would be imported/rendered here similarly if needed */}
+                  </div>
+                )}
+              </React.Fragment>
             ))}
             {isLoading && (
               <motion.div

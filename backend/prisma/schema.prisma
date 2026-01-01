@@ -171,6 +171,7 @@ model profiles {
   notifications                              notifications[]
   user_roles                                 user_roles          @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   schools                                    schools?            @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quiz_history                               quiz_history[]
   student_details                            student_details?
   teacher_classes                            teacher_classes[]
   teacher_details                            teacher_details?
@@ -223,6 +224,7 @@ model schools {
   grade_subjects    grade_subjects[]
   notifications     notifications[]
   profiles          profiles[]
+  quiz_history      quiz_history[]
   subjects_master   subjects_master[]
   teacher_classes   teacher_classes[]
   teacher_subjects  teacher_subjects[]
@@ -377,6 +379,26 @@ model voice_notes {
   grade_subjects   grade_subjects @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   schools          schools        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   profiles         profiles       @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model quiz_history {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id      String    @db.Uuid
+  teacher_id     String    @db.Uuid
+  subject        String?   @db.VarChar(100)
+  topic          String    @db.VarChar(200)
+  difficulty     String?   @db.VarChar(20)
+  question_count Int
+  questions      Json
+  quiz_metadata  Json?
+  used_count     Int?      @default(0)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  schools        schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_quiz_history_school")
+  profiles       profiles  @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_quiz_history_teacher")
+
+  @@index([teacher_id, subject], map: "idx_quiz_history_teacher_subject")
+  @@index([school_id], map: "idx_quiz_history_tenant")
 }
 
 enum attendance_status_enum {
