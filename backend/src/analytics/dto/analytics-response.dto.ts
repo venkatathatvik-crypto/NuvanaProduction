@@ -36,6 +36,7 @@ export class ChapterPerformanceDto {
   avgScore: number;
   totalQuestions: number;
   mastery: number;
+  subject?: string;
 }
 
 export class TopicPerformanceDto {
@@ -44,6 +45,7 @@ export class TopicPerformanceDto {
   totalQuestions: number;
   chapters: string[];
   mastery: number;
+  subject?: string;
 }
 
 export class StudentChapterTopicAnalyticsDto {
