@@ -48,4 +48,17 @@ export class AiRequestDto {
 
     @IsOptional()
     additionalContext?: any;
+
+    // Quiz-specific parameters for explicit control
+    @IsOptional()
+    quizParams?: {
+        questionCount?: number;
+        difficulty?: 'Easy' | 'Medium' | 'Hard';
+        questionTypes?: {
+            mcq?: number;  // percentage (0-100)
+            shortAnswer?: number;  // percentage (0-100)
+            essay?: number;  // percentage (0-100)
+        };
+        bloomLevels?: string[];  // e.g., ['Remember', 'Understand', 'Apply']
+    };
 }

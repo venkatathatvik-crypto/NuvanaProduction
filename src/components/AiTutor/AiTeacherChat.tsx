@@ -40,6 +40,7 @@ import { academicService } from "@/services/academicApiService";
 import { GradingApprovalModal } from "./GradingApprovalModal";
 import { schoolService } from "@/services/schoolService";
 import { exportQuizPDF } from "@/lib/quizPdfExport";
+import { QuickReplyButtons } from "./QuickReplyButtons";
 
 // Message interface (matches AiChatContext)
 interface Message {
@@ -47,6 +48,10 @@ interface Message {
   content: any;
   image?: string | null;
   timestamp: Date;
+  quickReplies?: any[];
+  waitingForInput?: boolean;
+  inputType?: string;
+  buttonsDisabled?: boolean;
 }
 
 const TEACHER_ACTION_MODES = [
@@ -130,6 +135,14 @@ const AiTeacherChat = () => {
   const [voiceTranscription, setVoiceTranscription] = useState("");
   const [viewImageModal, setViewImageModal] = useState<string | null>(null);
   const [gradingApprovalOpen, setGradingApprovalOpen] = useState(false);
+  
+  // Quiz params state for quick reply flow
+  const [quizParams, setQuizParams] = useState<{
+    questionCount?: number;
+    questionTypes?: string;
+    difficulty?: string;
+  }>({});
+  const [originalQuizQuery, setOriginalQuizQuery] = useState<string>("");
 
   // Teacher context data (not persisted in chat context)
   const [allSubjectsData, setAllSubjectsData] = useState<any[]>([]);
@@ -328,6 +341,90 @@ const AiTeacherChat = () => {
     }
   };
 
+  const handleQuickReplyClick = async (
+    button: any,
+    messageIndex: number,
+    inputType: string
+  ) => {
+    // 1. Add user's selection as a message
+    const userMsg: Message = {
+      sender: "user",
+      content: button.text,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    // 2. Update quiz params based on input type
+    const updatedParams = {
+      ...quizParams,
+      [inputType]: button.value,
+    };
+    setQuizParams(updatedParams);
+
+    // 3. Disable buttons in the previous message
+    setMessages((prev) =>
+      prev.map((msg, idx) =>
+        idx === messageIndex ? { ...msg, buttonsDisabled: true } : msg
+      )
+    );
+
+    // 4. Send to backend with updated params
+    setIsLoading(true);
+    try {
+      const aiResponseEncoded = await aiService.processRequest({
+        taskType: "mock_test",
+        query: originalQuizQuery,
+        studentId: profile?.id,
+        classId:
+          selectedClassId && selectedClassId !== "all"
+            ? selectedClassId
+            : undefined,
+        subject:
+          selectedSubject && selectedSubject !== "all"
+            ? selectedSubject
+            : undefined,
+        quizParams: updatedParams,
+        additionalContext: {
+          role: "teacher",
+          mode: "create_quiz",
+        },
+      });
+
+      // 5. Add AI response (might have more buttons or final quiz)
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          content: aiResponseEncoded,
+          quickReplies: aiResponseEncoded.quickReplies,
+          waitingForInput: aiResponseEncoded.waitingForInput,
+          inputType: aiResponseEncoded.inputType,
+          timestamp: new Date(),
+        },
+      ]);
+
+      // 6. If no more buttons, reset quiz params for next quiz
+      if (!aiResponseEncoded.waitingForInput) {
+        setQuizParams({});
+        setOriginalQuizQuery("");
+      }
+    } catch (error) {
+      console.error("Error processing quick reply:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          content: {
+            explanation: "⚠️ I encountered an error. Please try again.",
+          },
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSend = async (textOverride?: string) => {
     const textToSend = textOverride || input;
     if (!textToSend.trim() && !selectedImage) return;
@@ -344,6 +441,16 @@ const AiTeacherChat = () => {
     setSelectedImage(null);
     setIsLoading(true);
 
+    // Auto-detect quiz mode if user mentions quiz or test
+    if (textToSend.toLowerCase().includes("quiz") || textToSend.toLowerCase().includes("test")) {
+      if (activeMode !== "create_quiz") {
+        setActiveMode("create_quiz");
+      }
+      if (!originalQuizQuery) {
+        setOriginalQuizQuery(textToSend);
+      }
+    }
+
     try {
       let taskType = "explain";
       let query = userMsg.content;
@@ -355,7 +462,7 @@ const AiTeacherChat = () => {
       } else if (activeMode === "email") {
         taskType = "teacher_email_draft";
         // Keep original query without prefix for better processing
-      } else if (activeMode === "create_quiz") {
+      } else if (activeMode === "create_quiz" || (textToSend.toLowerCase().includes("quiz") || textToSend.toLowerCase().includes("test"))) {
         taskType = "mock_test";
       } else if (activeMode === "simplify") {
         taskType = "explain";
@@ -441,7 +548,14 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
 
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", content: aiResponseEncoded, timestamp: new Date() },
+        {
+          sender: "ai",
+          content: aiResponseEncoded,
+          timestamp: new Date(),
+          quickReplies: aiResponseEncoded.quickReplies,
+          waitingForInput: aiResponseEncoded.waitingForInput,
+          inputType: aiResponseEncoded.inputType,
+        },
       ]);
 
       if (isVoiceModeOpen) {
@@ -630,6 +744,18 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                   content={msg.content}
                   timestamp={msg.timestamp}
                 />
+                {msg.sender === "ai" && 
+                  msg.quickReplies && 
+                  msg.quickReplies.length > 0 && 
+                  !msg.buttonsDisabled && (
+                  <div className="ml-12 mb-4">
+                    <QuickReplyButtons
+                      buttons={msg.quickReplies}
+                      onSelect={(button) => handleQuickReplyClick(button, index, msg.inputType || "")}
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
                 {/* Show Save to Marks button after grading response */}
                 {msg.sender === "ai" &&
                   index === messages.length - 1 &&

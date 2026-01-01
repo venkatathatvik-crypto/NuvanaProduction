@@ -7,6 +7,7 @@ import { RagModule } from './rag/rag.module';
 import { MasteryService } from './recommender/mastery.service';
 import { RecommendationService } from './recommender/recommendation.service';
 import { TopicsService } from './recommender/topics.service';
+import { QuizDeduplicationService } from './quiz-deduplication.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { PrismaModule } from '../prisma/prisma.module';
         MasteryService,
         RecommendationService,
         TopicsService,
+        QuizDeduplicationService, // Phase 3 & 4: Quiz history and deduplication
     ],
 })
 export class AiModule { }
