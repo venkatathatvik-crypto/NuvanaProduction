@@ -78,7 +78,9 @@ const Login = () => {
           : "An unknown error occurred during login.";
 
       // Handle specific error messages
-      if (message.includes("You are registered as")) {
+      if (error instanceof ApiError && error.status === 0) {
+        setErrorMsg("Unable to connect to the server. The server might be starting up or you may be offline. Please wait a few seconds and try again.");
+      } else if (message.includes("You are registered as")) {
         setErrorMsg(message);
       } else if (message.includes("Invalid credentials")) {
         setErrorMsg("Invalid email or password. Please check your credentials.");
