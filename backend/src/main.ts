@@ -56,7 +56,29 @@ async function bootstrap() {
     });
 
     const port = process.env.PORT || 3000;
-    await app.listen(port);
+    const server = await app.listen(port);
+
+    // Global process error handlers
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+        // Don't exit here, just log it. Let the app try to continue.
+    });
+
+    process.on('uncaughtException', (error) => {
+        console.error('❌ Uncaught Exception:', error.message, error.stack);
+        // For fatal errors, we might need to exit, but let's log first.
+        if (error.message.includes('ECONNRESET')) {
+            console.warn('⚠️  Detected ECONNRESET - usually transient, continuing...');
+        } else {
+            // Potentially fatal, but let's try to stay alive if possible
+            // process.exit(1); 
+        }
+    });
+
+    // Handle server-level errors (like EADDRINUSE)
+    server.on('error', (error: any) => {
+        console.error('❌ Server error:', error.message);
+    });
 
     // Enhanced startup logging
     console.log('\n');

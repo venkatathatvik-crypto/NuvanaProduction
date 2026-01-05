@@ -44,6 +44,28 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof Error) {
       message = exception.message;
       
+      // Handle Prisma/Database errors specifically
+      const errorName = exception.constructor.name;
+      const errorCode = (exception as any).code;
+
+      if (errorName.includes('Prisma') || errorCode?.startsWith('P')) {
+        this.logger.error(`Database error detected [${errorCode}]: ${message}`);
+        
+        // Sanitize database errors for security and better UX
+        // P1001: Can't reach database
+        // P2024: Connection pool timeout
+        if (errorCode === 'P1001' || errorCode === 'P1008' || errorCode === 'P2024') {
+          message = 'The database is temporarily unavailable. Please try again in a few moments.';
+          statusCode = HttpStatus.SERVICE_UNAVAILABLE;
+        } else if (errorCode === 'P2002') {
+          message = 'A record with this information already exists.';
+          statusCode = HttpStatus.CONFLICT;
+        } else {
+          message = 'A database error occurred. Please contact support if the problem persists.';
+          statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+      }
+
       // Log stack trace for internal errors (only in development)
       if (process.env.NODE_ENV !== 'production') {
         this.logger.error(
