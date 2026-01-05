@@ -109,10 +109,20 @@ class ApiClient {
     }
 
     // Make the request
-    let response = await fetch(`${API_URL}${endpoint}`, {
-      ...fetchOptions,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}${endpoint}`, {
+        ...fetchOptions,
+        headers,
+      });
+    } catch (error) {
+      console.error('Network error during API request:', error);
+      throw new ApiError(
+        'Unable to connect to the server. Please check your internet connection.',
+        null,
+        0
+      );
+    }
 
     // Handle 401 - token expired
     if (response.status === 401 && !skipAuth) {
@@ -122,10 +132,18 @@ class ApiClient {
       if (newToken) {
         // Retry the request with the new token
         headers['Authorization'] = `Bearer ${newToken}`;
-        response = await fetch(`${API_URL}${endpoint}`, {
-          ...fetchOptions,
-          headers,
-        });
+        try {
+          response = await fetch(`${API_URL}${endpoint}`, {
+            ...fetchOptions,
+            headers,
+          });
+        } catch (error) {
+          throw new ApiError(
+            'Connection lost after token refresh.',
+            null,
+            0
+          );
+        }
       } else {
         // Refresh failed, user will be redirected to login
         throw new Error('Authentication failed');
@@ -244,12 +262,22 @@ class ApiClient {
     }
 
     // Make the request
-    let response = await fetch(`${API_URL}${endpoint}`, {
-      ...fetchOptions,
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}${endpoint}`, {
+        ...fetchOptions,
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+    } catch (error) {
+      console.error('Network error during file upload:', error);
+      throw new ApiError(
+        'Unable to connect to the server for upload. Please check your internet connection.',
+        null,
+        0
+      );
+    }
 
     // Handle 401 - token expired
     if (response.status === 401 && !skipAuth) {
@@ -259,12 +287,20 @@ class ApiClient {
       if (newToken) {
         // Retry the request with the new token
         headers['Authorization'] = `Bearer ${newToken}`;
-        response = await fetch(`${API_URL}${endpoint}`, {
-          ...fetchOptions,
-          method: 'POST',
-          headers,
-          body: formData,
-        });
+        try {
+          response = await fetch(`${API_URL}${endpoint}`, {
+            ...fetchOptions,
+            method: 'POST',
+            headers,
+            body: formData,
+          });
+        } catch (error) {
+          throw new ApiError(
+            'Connection lost after token refresh during upload.',
+            null,
+            0
+          );
+        }
       } else {
         // Refresh failed, user will be redirected to login
         throw new Error('Authentication failed');
