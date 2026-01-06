@@ -19,59 +19,38 @@ export async function exportAnalyticsPDF({
   schoolName = "Nuvana Academy",
   watermarkOpacity = 0.05,
   watermarkWidth = 100,
-  watermarkHeight = 100,
-  marginMm = 20,
+  marginMm = 15, // Slightly reduced margins for more data space
   filename = "analytics-report.pdf",
 }: ExportOptions = {}) {
-  const element = document.getElementById(elementId);
-  if (!element) throw new Error("Analytics root element not found");
+  const rootElement = document.getElementById(elementId);
+  if (!rootElement) throw new Error("Analytics root element not found");
 
-  // Make element visible temporarily for rendering
-  element.style.display = 'block';
-  element.style.position = 'absolute';
-  element.style.left = '-9999px'; // Move off-screen but keep visible for rendering
+  // Temporarily show the root for measurement
+  rootElement.style.display = 'block';
+  rootElement.style.position = 'fixed';
+  rootElement.style.left = '-9999px';
+  rootElement.style.top = '0';
   
-  // Wait longer for charts to render (Recharts needs time)
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
-  // Render the element to canvas with improved settings for charts
-  const canvas = await html2canvas(element, {
-    scale: 3, // Increased from 2 for better quality
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: "#ffffff",
-    logging: false,
-    foreignObjectRendering: true, // Better SVG rendering
-    onclone: (clonedDoc) => {
-      const clonedElement = clonedDoc.getElementById(elementId);
-      if (clonedElement) {
-        clonedElement.style.backgroundColor = "#ffffff";
-        clonedElement.style.padding = "20px";
-        clonedElement.style.display = 'block';
-        const hiddenElements = clonedElement.querySelectorAll('.print\\:hidden');
-        hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
-        
-        // Ensure all SVG elements are visible
-        const svgElements = clonedElement.querySelectorAll('svg');
-        svgElements.forEach(svg => {
-          (svg as SVGElement).style.backgroundColor = 'transparent';
-        });
-      }
-    }
-  });
-
-  const imgData = canvas.toDataURL("image/jpeg", 0.95);
-
+  const sections = rootElement.querySelectorAll('[data-pdf-section="true"]');
+  
   const pdf = new jsPDF({
     orientation: "p",
     unit: "mm",
     format: "a4",
+    compress: true
   });
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const innerWidth = pageWidth - (marginMm * 2);
-  const innerHeight = pageHeight - (marginMm * 4); // Extra space for header/footer
+  const headerHeight = 25;
+  const footerHeight = 15;
+  const contentStartY = marginMm + headerHeight;
+  const contentMaxHeight = pageHeight - (marginMm * 2) - headerHeight - footerHeight;
+
+  let currentY = contentStartY;
 
   const logoImage = await new Promise<HTMLImageElement | null>((resolve) => {
     if (!logoUrl) return resolve(null);
@@ -82,82 +61,84 @@ export async function exportAnalyticsPDF({
     img.onerror = () => resolve(null);
   });
 
-  const addPageHeader = (doc: jsPDF) => {
-    // School Logo (larger and more prominent)
+  const drawHeadersAndFooters = (doc: jsPDF) => {
+    // Header
     if (logoImage) {
-      const iconW = 15; // Increased from 8mm to 15mm
+      const iconW = 12;
       const iconH = (logoImage.height * iconW) / logoImage.width;
-      doc.addImage(logoImage, "PNG", marginMm, marginMm - 12, iconW, iconH);
+      doc.addImage(logoImage, "PNG", marginMm, marginMm, iconW, iconH);
     }
-
-    // School Name (larger and bold)
-    doc.setFontSize(12); // Increased from 8 to 12
-    doc.setTextColor(30, 64, 175); // Professional blue color (#1e40af)
-    doc.setFont("helvetica", "bold"); // Changed to bold
     
-    if (schoolName) {
-      const xPos = logoImage ? marginMm + 18 : marginMm; // Position next to logo
-      doc.text(schoolName.toUpperCase(), xPos, marginMm - 6);
+    doc.setFontSize(14);
+    doc.setTextColor(30, 64, 175);
+    doc.setFont("helvetica", "bold");
+    doc.text(schoolName.toUpperCase(), marginMm + 15, marginMm + 6);
+    
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "normal");
+    doc.text("PROFESSIONAL ACADEMIC ANALYTICS REPORT", marginMm + 15, marginMm + 11);
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(marginMm, marginMm + 15, pageWidth - marginMm, marginMm + 15);
+
+    // Footer
+    const pageNum = doc.getNumberOfPages();
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Page ${pageNum} | Nuvana AI Intelligence Architecture`, pageWidth / 2, pageHeight - 10, { align: "center" });
+    
+    // Watermark
+    if (logoImage) {
+      const w = 60;
+      const h = (logoImage.height * w) / logoImage.width;
+      const x = (pageWidth - w) / 2;
+      const y = (pageHeight - h) / 2;
+      
+      doc.saveGraphicsState();
+      const gState = new (doc as any).GState({ opacity: watermarkOpacity });
+      doc.setGState(gState);
+      doc.addImage(logoImage, "PNG", x, y, w, h);
+      doc.restoreGraphicsState();
     }
-
-    // Separator line (thicker and darker)
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(marginMm, marginMm - 2, pageWidth - marginMm, marginMm - 2);
   };
 
-  const addPageWatermark = (doc: jsPDF) => {
-    if (!logoImage) return;
-    const w = watermarkWidth;
-    const h = (logoImage.height * w) / logoImage.width;
-    const x = (pageWidth - w) / 2;
-    const y = (pageHeight - h) / 2;
-    const gState = new (doc as any).GState({ opacity: watermarkOpacity });
-    doc.saveGraphicsState();
-    doc.setGState(gState);
-    doc.addImage(logoImage, "PNG", x, y, w, h);
-    doc.restoreGraphicsState();
-  };
+  // Pre-draw first page header
+  drawHeadersAndFooters(pdf);
 
-  let currentY = 0;
-  const totalHeight = canvas.height;
-  const canvasPageHeight = (canvas.width * innerHeight) / innerWidth;
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i] as HTMLElement;
+    
+    // Capture section
+    const canvas = await html2canvas(section, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+    });
 
-  while (currentY < totalHeight) {
-    if (currentY > 0) {
+    const imgWidth = innerWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    // Check if section fits on current page
+    if (currentY + imgHeight > contentStartY + contentMaxHeight) {
       pdf.addPage();
+      drawHeadersAndFooters(pdf);
+      currentY = contentStartY;
     }
 
-    addPageHeader(pdf);
-    addPageWatermark(pdf);
-
-    pdf.setDrawColor(240, 240, 240);
-    pdf.rect(marginMm - 1, marginMm - 1, innerWidth + 2, innerHeight + 2);
-
-    const sectionHeight = Math.min(canvasPageHeight, totalHeight - currentY);
-    const sectionCanvas = document.createElement('canvas');
-    sectionCanvas.width = canvas.width;
-    sectionCanvas.height = sectionHeight;
-    const ctx = sectionCanvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(canvas, 0, currentY, canvas.width, sectionHeight, 0, 0, canvas.width, sectionHeight);
-      const sectionData = sectionCanvas.toDataURL("image/jpeg", 0.95);
-      const displayHeight = (sectionHeight * innerWidth) / canvas.width;
-      pdf.addImage(sectionData, "JPEG", marginMm, marginMm, innerWidth, displayHeight);
-    }
-
-    currentY += canvasPageHeight;
+    // Add image to PDF
+    const imgData = canvas.toDataURL("image/png");
+    pdf.addImage(imgData, "PNG", marginMm, currentY, imgWidth, imgHeight);
     
-    pdf.setFontSize(7);
-    pdf.setTextColor(180, 180, 180);
-    const pageNumText = `Page ${pdf.getNumberOfPages()} | Generated by Nuvana Analytics`;
-    pdf.text(pageNumText, pageWidth / 2, pageHeight - 8, { align: "center" });
+    currentY += imgHeight + 5; // Add spacing between sections
   }
 
   pdf.save(filename);
   
-  // Reset element styles
-  element.style.display = 'none';
-  element.style.position = '';
-  element.style.left = '';
+  rootElement.style.display = 'none';
+  rootElement.style.position = '';
+  rootElement.style.left = '';
+  rootElement.style.top = '';
 }
