@@ -219,12 +219,17 @@ const AnalyticsDashboard = () => {
     retry: 1,
   });
 
-  // Build studentAnalyticsData from query for backward compatibility
-  const studentAnalyticsData = useMemo(() => {
-    if (!selectedStudent || !currentStudentData) return {};
-    return {
-      [selectedStudent]: currentStudentData
-    };
+  // Accumulating state for student analytics data (supports multi-student PDF export)
+  const [studentAnalyticsData, setStudentAnalyticsData] = useState<Record<string, any>>({});
+
+  // Update accumulating state when current student data is fetched
+  useEffect(() => {
+    if (selectedStudent && currentStudentData) {
+      setStudentAnalyticsData(prev => ({
+        ...prev,
+        [selectedStudent]: currentStudentData
+      }));
+    }
   }, [selectedStudent, currentStudentData]);
 
   // Fetch class insights data using React Query
@@ -485,9 +490,30 @@ const AnalyticsDashboard = () => {
     try {
       toast.info("Generating full professional report...");
       const printElement = document.getElementById("analytics-full-report");
-      if (printElement) {
-        printElement.style.display = "block";
-      }
+    if (!printElement) return;
+
+    // Prefetch top 5 students for the report if not already in state
+    // We limit to 5 to avoid heavy server load during export
+    const studentsToFetch = studentsList.slice(0, 5);
+    const fetchPromises = studentsToFetch
+      .filter(s => !studentAnalyticsData[s.id])
+      .map(async (s) => {
+        try {
+          const data = await getStudentAnalyticsForTeacher(s.id, selectedClass?.class_id || "");
+          setStudentAnalyticsData(prev => ({ ...prev, [s.id]: data }));
+        } catch (err) {
+          console.error(`Failed to fetch analytics for student ${s.id}`, err);
+        }
+      });
+
+    if (fetchPromises.length > 0) {
+      toast.info(`Fetching detailed analytics for ${fetchPromises.length} students...`);
+      await Promise.all(fetchPromises);
+      // Give React a moment to re-render the hidden PDF component with new data
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    printElement.style.display = "block";
 
       await exportAnalyticsPDF({
         elementId: "analytics-full-report",
@@ -520,8 +546,9 @@ const AnalyticsDashboard = () => {
     const sumX2 = data.reduce((sum, d) => sum + d.attendance * d.attendance, 0);
 
     // Calculate slope and intercept using least squares method
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
+  const denominator = (n * sumX2 - sumX * sumX);
+  const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
 
     // Generate line points from min to max attendance
     const minX = Math.min(...data.map((d) => d.attendance));
@@ -2982,366 +3009,235 @@ const AnalyticsDashboard = () => {
       </Tabs>
 
       {/* ---------------- FULL REPORT FOR PDF EXPORT (HIDDEN) ---------------- */}
-      <div id="analytics-full-report" className="hidden p-10 space-y-12 bg-white text-black font-sans" style={{ width: '1200px' }}>
-        {/* Professional Header with School Logo and Name */}
-        <div className="flex items-center justify-between border-b-4 pb-6 mb-8" style={{ borderColor: PROFESSIONAL_COLORS.primary }}>
-          <div className="flex items-center gap-6">
-            {schoolInfo?.logo_url && (
-              <img 
-                src={schoolInfo.logo_url} 
-                alt="School Logo" 
-                className="w-20 h-20 object-contain"
-              />
-            )}
-            <div>
-              <h1 className="text-5xl font-bold" style={{ color: PROFESSIONAL_COLORS.primary }}>
-                {schoolInfo?.name || 'School Name'}
-              </h1>
-              <p className="text-xl font-semibold text-gray-600 mt-2">Academic Analytics Report</p>
+      <div id="analytics-full-report" className="hidden p-0 bg-white" style={{ width: '1000px' }}>
+        {/* Note: The professional header is now added dynamically by the PDF tool for EVERY page for consistency */}
+
+        {/* Summary Tile Block */}
+        <div data-pdf-section="true" className="p-10 mb-0">
+          <div className="grid grid-cols-3 gap-8">
+            <div className="p-8 rounded-2xl border-2 shadow-sm" style={{ borderColor: `${PROFESSIONAL_COLORS.primary}30`, backgroundColor: `${PROFESSIONAL_COLORS.primary}05` }}>
+              <p className="text-lg font-bold uppercase tracking-widest text-gray-500 mb-4">Overall Avg Score</p>
+              <p className="text-6xl font-black" style={{ color: PROFESSIONAL_COLORS.primary }}>
+                {subjectAverageData.length > 0 ? (subjectAverageData.reduce((acc, s) => acc + s.avg, 0) / subjectAverageData.length).toFixed(1) : '0'}%
+              </p>
+            </div>
+            <div className="p-8 rounded-2xl border-2 shadow-sm" style={{ borderColor: `${PROFESSIONAL_COLORS.secondary}30`, backgroundColor: `${PROFESSIONAL_COLORS.secondary}05` }}>
+              <p className="text-lg font-bold uppercase tracking-widest text-gray-500 mb-4">Mean Attendance</p>
+              <p className="text-6xl font-black" style={{ color: PROFESSIONAL_COLORS.secondary }}>
+                {performanceTrendData.length > 0 ? performanceTrendData[performanceTrendData.length - 1].attendance : '0'}%
+              </p>
+            </div>
+            <div className="p-8 rounded-2xl border-2 shadow-sm" style={{ borderColor: `${PROFESSIONAL_COLORS.purple}30`, backgroundColor: `${PROFESSIONAL_COLORS.purple}05` }}>
+              <p className="text-lg font-bold uppercase tracking-widest text-gray-500 mb-4">Top Performing Subject</p>
+              <p className="text-4xl font-black" style={{ color: PROFESSIONAL_COLORS.purple, lineHeight: 1.2 }}>
+                {subjectAverageData.length > 0 ? [...subjectAverageData].sort((a, b) => b.avg - a.avg)[0].subject : 'N/A'}
+              </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold">{selectedClass?.class_name || 'All Classes'}</p>
-            <p className="text-base text-gray-600">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          </div>
         </div>
 
-        {/* Key Metrics Summary */}
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          <div className="text-center p-6 rounded-xl" style={{ backgroundColor: `${PROFESSIONAL_COLORS.primary}15` }}>
-            <p className="text-base font-semibold uppercase tracking-wider text-gray-600 mb-2">Class Average</p>
-            <p className="text-4xl font-bold" style={{ color: PROFESSIONAL_COLORS.primary }}>
-              {subjectAverageData.length > 0 ? (subjectAverageData.reduce((acc, s) => acc + s.avg, 0) / subjectAverageData.length).toFixed(1) : 'N/A'}%
-            </p>
-          </div>
-          <div className="text-center p-6 rounded-xl" style={{ backgroundColor: `${PROFESSIONAL_COLORS.secondary}15` }}>
-            <p className="text-base font-semibold uppercase tracking-wider text-gray-600 mb-2">Attendance</p>
-            <p className="text-4xl font-bold" style={{ color: PROFESSIONAL_COLORS.secondary }}>
-              {performanceTrendData.length > 0 ? performanceTrendData[performanceTrendData.length - 1].attendance : 'N/A'}%
-            </p>
-          </div>
-          <div className="text-center p-6 rounded-xl" style={{ backgroundColor: `${PROFESSIONAL_COLORS.purple}15` }}>
-            <p className="text-base font-semibold uppercase tracking-wider text-gray-600 mb-2">Total Students</p>
-            <p className="text-4xl font-bold" style={{ color: PROFESSIONAL_COLORS.purple }}>
-              {studentsList.length}
-            </p>
-          </div>
-          <div className="text-center p-6 rounded-xl" style={{ backgroundColor: `${PROFESSIONAL_COLORS.teal}15` }}>
-            <p className="text-base font-semibold uppercase tracking-wider text-gray-600 mb-2">Subjects</p>
-            <p className="text-4xl font-bold" style={{ color: PROFESSIONAL_COLORS.teal }}>
-              {subjectAverageData.length}
-            </p>
-          </div>
-        </div>
-
-        {/* Section 1: Class Performance */}
-        <section className="space-y-8">
-          <h2 className="text-4xl font-bold border-l-8 pl-6 py-2" style={{ borderColor: PROFESSIONAL_COLORS.primary, backgroundColor: `${PROFESSIONAL_COLORS.primary}10` }}>
-            I. Class Performance Overview
+        {/* Dashboard Header */}
+        <div data-pdf-section="true" className="px-10 py-6">
+          <h2 className="text-3xl font-bold border-l-8 pl-6 text-gray-800" style={{ borderColor: PROFESSIONAL_COLORS.primary }}>
+            Class Performance Dashboard
           </h2>
-          <div className="grid grid-cols-1 gap-10">
+        </div>
+          
+        {/* Line Chart: Score vs Attendance */}
+        <div data-pdf-section="true" className="px-10 py-6 mb-4">
+          <div className="bg-gray-50 p-8 rounded-2xl border border-gray-100">
+            <h3 className="text-2xl font-bold mb-8 text-center" style={{ color: PROFESSIONAL_COLORS.primary }}>
+              Historical Trend: Score vs Attendance (Last 6 Months)
+            </h3>
             <div className="h-[450px]">
-              <h3 className="text-2xl font-semibold mb-6 text-center" style={{ color: PROFESSIONAL_COLORS.primary }}>
-                Performance Trend (6 Months)
-              </h3>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={performanceTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="month" tick={{ fontSize: 14, fill: '#374151' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 14, fill: '#374151' }} />
-                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                  <Legend wrapperStyle={{ fontSize: '14px' }} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="avgScore" 
-                    stroke={PROFESSIONAL_COLORS.primary} 
-                    strokeWidth={4} 
-                    name="Average Score %" 
-                    dot={{ r: 6, fill: PROFESSIONAL_COLORS.primary }} 
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="attendance" 
-                    stroke={PROFESSIONAL_COLORS.secondary} 
-                    strokeWidth={4} 
-                    name="Attendance %" 
-                    dot={{ r: 6, fill: PROFESSIONAL_COLORS.secondary }} 
-                  />
+                <LineChart data={performanceTrendData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 14, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '16px', fontWeight: 600 }} />
+                  <Line type="monotone" dataKey="avgScore" stroke={PROFESSIONAL_COLORS.primary} strokeWidth={5} name="Average Score %" dot={{ r: 8, fill: PROFESSIONAL_COLORS.primary, strokeWidth: 3, stroke: '#fff' }} activeDot={{ r: 10 }} />
+                  <Line type="monotone" dataKey="attendance" stroke={PROFESSIONAL_COLORS.secondary} strokeWidth={5} name="Attendance Rate %" dot={{ r: 8, fill: PROFESSIONAL_COLORS.secondary, strokeWidth: 3, stroke: '#fff' }} activeDot={{ r: 10 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
+          </div>
+        </div>
+
+        {/* Vertical Bar Chart: Subject Comparison */}
+        <div data-pdf-section="true" className="px-10 py-6">
+          <div className="bg-gray-50 p-8 rounded-2xl border border-gray-100">
+            <h3 className="text-2xl font-bold mb-8 text-center" style={{ color: PROFESSIONAL_COLORS.primary }}>
+              Subject-wise Performance Comparison
+            </h3>
             <div className="h-[450px]">
-              <h3 className="text-2xl font-semibold mb-6 text-center" style={{ color: PROFESSIONAL_COLORS.primary }}>
-                Subject-wise Average Scores
-              </h3>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={subjectAverageData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="subject" tick={{ fontSize: 14, fill: '#374151' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 14, fill: '#374151' }} />
-                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                  <Bar dataKey="average" fill={PROFESSIONAL_COLORS.primary} radius={[8, 8, 0, 0]}>
+                <BarChart data={subjectAverageData} layout="vertical" margin={{ left: 40, right: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 600 }} axisLine={false} />
+                  <YAxis dataKey="subject" type="category" width={150} tick={{ fontSize: 14, fill: '#475569', fontWeight: 700 }} axisLine={false} />
+                  <Tooltip cursor={{ fill: 'rgba(30, 64, 175, 0.05)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="avg" name="Class Average %" fill={PROFESSIONAL_COLORS.primary} radius={[0, 10, 10, 0]} barSize={40}>
                     {subjectAverageData.map((_, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={index % 2 === 0 ? PROFESSIONAL_COLORS.primary : PROFESSIONAL_COLORS.teal} 
-                      />
+                      <Cell key={`cell-${index}`} fill={index % 2 === 0 ? PROFESSIONAL_COLORS.primary : PROFESSIONAL_COLORS.purple} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* Section 2: Chapter & Topic Insights */}
-        <section className="space-y-8 pt-12 border-t-2 border-gray-200">
-          <h2 className="text-4xl font-bold border-l-8 pl-6 py-2" style={{ borderColor: PROFESSIONAL_COLORS.accent, backgroundColor: `${PROFESSIONAL_COLORS.accent}10` }}>
-            II. Curriculum Mastery Breakdown
+        {/* Correlation Header */}
+        <div data-pdf-section="true" className="px-10 py-8 border-t-2 border-gray-100 mt-6">
+          <h2 className="text-3xl font-bold border-l-8 pl-6 text-gray-800" style={{ borderColor: PROFESSIONAL_COLORS.accent }}>
+            Attendance & Performance Correlation
           </h2>
-          <div className="grid grid-cols-2 gap-10">
-            <div className="space-y-4">
-              <h3 className="text-2xl font-semibold pb-3 border-b-2" style={{ color: PROFESSIONAL_COLORS.secondary, borderColor: PROFESSIONAL_COLORS.secondary }}>
-                Top Performing Chapters
-              </h3>
-              <div className="space-y-3">
-                {analyticsData.chapters.slice(0, 5).map((chapter, i) => (
-                  <div key={i} className="flex justify-between items-center p-4 rounded-lg" style={{ backgroundColor: `${PROFESSIONAL_COLORS.secondary}15` }}>
-                    <span className="font-semibold text-base">{chapter.name}</span>
-                    <span className="font-bold text-xl" style={{ color: PROFESSIONAL_COLORS.secondary }}>{chapter.avgScore}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-2xl font-semibold pb-3 border-b-2" style={{ color: PROFESSIONAL_COLORS.danger, borderColor: PROFESSIONAL_COLORS.danger }}>
-                Areas for Improvement (Weak Topics)
-              </h3>
-              <div className="space-y-3">
-                {analyticsData.topics.filter(t => t.avgScore < 60).slice(0, 5).map((topic, i) => (
-                  <div key={i} className="flex justify-between items-center p-4 rounded-lg" style={{ backgroundColor: `${PROFESSIONAL_COLORS.danger}15` }}>
-                    <div>
-                      <p className="font-semibold text-base">{topic.name}</p>
-                      <p className="text-sm text-gray-600">{topic.chapters[0]}</p>
-                    </div>
-                    <span className="font-bold text-xl" style={{ color: PROFESSIONAL_COLORS.danger }}>{topic.avgScore}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        </div>
 
-          {/* Complete Chapter Performance */}
-          <div className="mt-10">
-            <h3 className="text-2xl font-semibold mb-6" style={{ color: PROFESSIONAL_COLORS.primary }}>
-              Complete Chapter Performance Analysis
-            </h3>
+        {/* Correlation Scatter Plot */}
+        <div data-pdf-section="true" className="px-10 py-6">
+          <div className="bg-gray-50 p-8 rounded-2xl border border-gray-100">
             <div className="h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analyticsData.chapters} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 14, fill: '#374151' }} />
-                  <YAxis dataKey="name" type="category" width={200} tick={{ fontSize: 13, fill: '#374151' }} />
-                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                  <Bar dataKey="avgScore" radius={[0, 8, 8, 0]} barSize={30}>
-                    {analyticsData.chapters.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={
-                          entry.avgScore >= 80
-                            ? PROFESSIONAL_COLORS.secondary
-                            : entry.avgScore >= 60
-                            ? PROFESSIONAL_COLORS.primary
-                            : PROFESSIONAL_COLORS.danger
-                        }
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Complete Topic Performance */}
-          <div className="mt-10">
-            <h3 className="text-2xl font-semibold mb-6" style={{ color: PROFESSIONAL_COLORS.primary }}>
-              Complete Topic Performance Analysis
-            </h3>
-            <div className="h-[500px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analyticsData.topics} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 14, fill: '#374151' }} />
-                  <YAxis dataKey="name" type="category" width={200} tick={{ fontSize: 13, fill: '#374151' }} />
-                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                  <Bar dataKey="avgScore" radius={[0, 8, 8, 0]} barSize={30}>
-                    {analyticsData.topics.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={
-                          entry.avgScore >= 80
-                            ? PROFESSIONAL_COLORS.secondary
-                            : entry.avgScore >= 60
-                            ? PROFESSIONAL_COLORS.teal
-                            : PROFESSIONAL_COLORS.danger
-                        }
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 3: Student Performance List */}
-        <section className="space-y-8 pt-12 border-t-2 border-gray-200">
-          <h2 className="text-4xl font-bold border-l-8 pl-6 py-2" style={{ borderColor: PROFESSIONAL_COLORS.purple, backgroundColor: `${PROFESSIONAL_COLORS.purple}10` }}>
-            III. Student Performance List
-          </h2>
-          <div className="overflow-hidden rounded-xl border-2 border-gray-200">
-            <table className="w-full text-left border-collapse">
-              <thead style={{ backgroundColor: `${PROFESSIONAL_COLORS.primary}20` }}>
-                <tr>
-                  <th className="p-5 font-bold text-lg" style={{ color: PROFESSIONAL_COLORS.primary }}>Student Name</th>
-                  <th className="p-5 font-bold text-lg" style={{ color: PROFESSIONAL_COLORS.primary }}>Average Score</th>
-                  <th className="p-5 font-bold text-lg" style={{ color: PROFESSIONAL_COLORS.primary }}>Attendance</th>
-                  <th className="p-5 font-bold text-lg" style={{ color: PROFESSIONAL_COLORS.primary }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attendanceVsMarksData.slice(0, 20).map((student, i) => (
-                  <tr key={i} className="border-t-2 border-gray-100" style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f9fafb' }}>
-                    <td className="p-4 font-medium text-base">{student.studentName}</td>
-                    <td className="p-4">
-                      <span 
-                        className="font-bold text-lg" 
-                        style={{ 
-                          color: student.marks >= 80 
-                            ? PROFESSIONAL_COLORS.secondary 
-                            : student.marks >= 50 
-                            ? PROFESSIONAL_COLORS.primary 
-                            : PROFESSIONAL_COLORS.danger 
-                        }}
-                      >
-                        {student.marks}%
-                      </span>
-                    </td>
-                    <td className="p-4 text-base font-medium">{student.attendance}%</td>
-                    <td className="p-4 text-base text-gray-600">
-                      {student.marks < 60 ? 'Priority Revision' : student.attendance < 75 ? 'Attendance Concern' : 'Consistent'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-sm text-gray-500 italic font-medium mt-4">* Showing top 20 students by attendance/marks. Refer to full system for all records.</p>
-        </section>
-
-        {/* Section 4: Recent Test Performance */}
-        <section className="space-y-8 pt-12 border-t-2 border-gray-200">
-          <h2 className="text-4xl font-bold border-l-8 pl-6 py-2" style={{ borderColor: PROFESSIONAL_COLORS.teal, backgroundColor: `${PROFESSIONAL_COLORS.teal}10` }}>
-            IV. Recent Test Metrics
-          </h2>
-          <div className="grid grid-cols-2 gap-10">
-            <div className="h-[400px]">
-              <h3 className="text-2xl font-semibold mb-6 text-center" style={{ color: PROFESSIONAL_COLORS.teal }}>
-                Score Distribution by Subject
-              </h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={subjectAverageData}>
-                  <PolarGrid stroke="#e5e7eb" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fontSize: 13, fill: '#374151' }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 12, fill: '#374151' }} />
-                  <Radar 
-                    name="Class Avg" 
-                    dataKey="average" 
-                    stroke={PROFESSIONAL_COLORS.primary} 
-                    fill={PROFESSIONAL_COLORS.primary} 
-                    fillOpacity={0.5} 
-                    strokeWidth={3}
+                <ScatterChart margin={{ top: 20, right: 40, bottom: 40, left: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis 
+                    type="number" 
+                    dataKey="attendance" 
+                    name="Attendance" 
+                    unit="%" 
+                    domain={[0, 100]} 
+                    tick={{ fontSize: 14, fill: '#64748b' }} 
+                    label={{ value: 'Attendance Rate (%)', position: 'bottom', offset: 20, fontSize: 16, fontWeight: 700 }} 
                   />
-                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                </RadarChart>
+                  <YAxis 
+                    type="number" 
+                    dataKey="marks" 
+                    name="Marks" 
+                    unit="%" 
+                    domain={[0, 100]} 
+                    tick={{ fontSize: 14, fill: '#64748b' }} 
+                    label={{ value: 'Test Scores (%)', angle: -90, position: 'insideLeft', offset: -20, fontSize: 16, fontWeight: 700 }} 
+                  />
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '12px' }} />
+                  <Scatter name="Students" data={attendanceVsMarksData} fill={PROFESSIONAL_COLORS.primary} r={8} strokeWidth={2} stroke="#fff" />
+                  <Line 
+                    type="monotone" 
+                    data={calculateTrendLine(attendanceVsMarksData)} 
+                    dataKey="trendMarks" 
+                    stroke={PROFESSIONAL_COLORS.danger} 
+                    strokeWidth={4} 
+                    strokeDasharray="8 8" 
+                    dot={false} 
+                    name="Performance Trend Line" 
+                  />
+                </ScatterChart>
               </ResponsiveContainer>
             </div>
-            <div className="h-[400px]">
-              <h3 className="text-2xl font-semibold mb-6 text-center" style={{ color: PROFESSIONAL_COLORS.teal }}>
-                Recent Test Breakdown
-              </h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={recentTestsData.slice(0, 5)}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={70}
-                    outerRadius={110}
-                    paddingAngle={5}
-                    dataKey="averageScore"
-                    nameKey="title"
-                    label={(entry) => `${entry.title}: ${entry.averageScore}%`}
-                  >
-                    {recentTestsData.map((_, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={[
-                          PROFESSIONAL_COLORS.primary,
-                          PROFESSIONAL_COLORS.secondary,
-                          PROFESSIONAL_COLORS.accent,
-                          PROFESSIONAL_COLORS.purple,
-                          PROFESSIONAL_COLORS.teal
-                        ][index % 5]} 
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <p className="text-center text-gray-500 mt-8 italic text-lg">
+              * The dashed line represents the linear regression of performance relative to attendance.
+            </p>
           </div>
+        </div>
 
-          {/* Question Type Distribution */}
-          {questionTypeData.length > 0 && (
-            <div className="mt-10">
-              <h3 className="text-2xl font-semibold mb-6" style={{ color: PROFESSIONAL_COLORS.teal }}>
-                Question Type Distribution
-              </h3>
-              <div className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={questionTypeData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="type" tick={{ fontSize: 14, fill: '#374151' }} />
-                    <YAxis tick={{ fontSize: 14, fill: '#374151' }} />
-                    <Tooltip contentStyle={{ fontSize: '14px', borderRadius: '8px' }} />
-                    <Bar dataKey="count" fill={PROFESSIONAL_COLORS.accent} radius={[8, 8, 0, 0]} barSize={60}>
-                      {questionTypeData.map((_, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={[
-                            PROFESSIONAL_COLORS.primary,
-                            PROFESSIONAL_COLORS.secondary,
-                            PROFESSIONAL_COLORS.accent,
-                            PROFESSIONAL_COLORS.purple
-                          ][index % 4]} 
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+        {/* Individual Student Profiles (Detailed Pages) */}
+        <div data-pdf-section="true" className="p-10 pt-16 border-t-2 border-gray-100">
+          <h2 className="text-4xl font-black text-center text-gray-900 mb-12" style={{ color: PROFESSIONAL_COLORS.primary }}>
+            Individual Student Performance Profiles
+          </h2>
+        </div>
+
+        {studentsList.slice(0, 5).map((student) => {
+          const studentData = studentAnalyticsData[student.id];
+          if (!studentData) return null;
+
+          return (
+            <div key={student.id} data-pdf-section="true" className="p-10 mb-8">
+              <div className="p-10 rounded-3xl border-2 space-y-10 bg-white shadow-xl" style={{ borderColor: '#f1f5f9' }}>
+                <div className="flex justify-between items-center border-b-2 pb-6" style={{ borderColor: `${PROFESSIONAL_COLORS.primary}20` }}>
+                  <div>
+                    <h3 className="text-3xl font-black text-gray-800">{student.name}</h3>
+                    <p className="text-lg text-gray-500 font-bold mt-1">Student ID: {student.id}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Aggregate Mastery</p>
+                    <p className="text-4xl font-black" style={{ color: (student.avgScore || 0) >= 80 ? PROFESSIONAL_COLORS.secondary : PROFESSIONAL_COLORS.primary }}>
+                      {student.avgScore || 0}%
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-5 gap-12 pt-4">
+                  {/* Left: Radar Chart (Subject Mastery) */}
+                  <div className="col-span-2 space-y-6">
+                    <h4 className="text-xl font-bold text-gray-700 text-center">Subject Competency Radar</h4>
+                    <div className="h-[350px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={studentData.radar}>
+                          <PolarGrid stroke="#e2e8f0" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fontSize: 13, fill: '#475569', fontWeight: 700 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                          <Radar 
+                            name="Mastery" 
+                            dataKey="A" 
+                            stroke={PROFESSIONAL_COLORS.primary} 
+                            fill={PROFESSIONAL_COLORS.primary} 
+                            fillOpacity={0.4} 
+                            strokeWidth={3}
+                          />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Right: Strengths & Weaknesses */}
+                  <div className="col-span-3 grid grid-rows-2 gap-8">
+                    {/* Dominant Strengths */}
+                    <div className="p-6 rounded-2xl bg-green-50/50 border border-green-100">
+                      <h4 className="text-xl font-bold flex items-center gap-2 mb-4 text-green-700">
+                        <CheckCircle className="w-6 h-6" /> Dominant Strengths
+                      </h4>
+                      <div className="space-y-3">
+                        {studentData.strengths && studentData.strengths.slice(0, 3).map((s: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-green-50">
+                            <span className="font-bold text-gray-700">{s.subject}</span>
+                            <span className="font-black text-green-600 px-3 py-1 bg-green-50 rounded-full">{s.mastery}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Targeted Weaknesses */}
+                    <div className="p-6 rounded-2xl bg-red-50/50 border border-red-100">
+                      <h4 className="text-xl font-bold flex items-center gap-2 mb-4 text-red-700">
+                        <AlertCircle className="w-6 h-6" /> Targeted Weaknesses
+                      </h4>
+                      <div className="space-y-3">
+                        {studentData.weaknesses && studentData.weaknesses.slice(0, 3).map((w: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-red-50">
+                            <span className="font-bold text-gray-700">{w.subject}</span>
+                            <span className="font-black text-red-600 px-3 py-1 bg-red-50 rounded-full">{w.mastery}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
-        </section>
+          );
+        })}
 
-        {/* Footer */}
-        <div className="pt-12 mt-12 border-t-4 text-center text-gray-500" style={{ borderColor: PROFESSIONAL_COLORS.primary }}>
-          <p className="font-bold text-base mb-2">CONFIDENTIAL DOCUMENT • FOR ACADEMIC USE ONLY</p>
-          <p className="text-base">© {new Date().getFullYear()} {schoolInfo?.name || 'Nuvana'} • Powered by Nuvana AI Analytics</p>
+        {/* Footer info included in PDF export tool */}
+        <div className="pt-12 mt-12 border-t-4 text-center text-gray-400" style={{ borderColor: PROFESSIONAL_COLORS.primary }}>
+          <p className="font-black text-sm mb-2 tracking-[0.2em] uppercase">Confidential Academic Analysis Document</p>
+          <p className="text-lg">Generated on {new Date().toLocaleDateString()} • Powered by Nuvana AI Architecture</p>
         </div>
       </div>
     </div>
+
   );
 };
 
