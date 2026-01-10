@@ -18,6 +18,9 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
 import { TestModule } from './test/test.module';
 import { StorageModule } from './storage/storage.module';
+import { BullModule } from '@nestjs/bullmq';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
 
 @Module({
     imports: [
@@ -81,6 +84,25 @@ import { StorageModule } from './storage/storage.module';
             },
         }),
 
+        // Queue Configuration
+        BullModule.forRootAsync({
+            useFactory: () => {
+                const redisUrl = process.env.REDIS_URL;
+                if (!redisUrl) {
+                    throw new Error('REDIS_URL is required for BullModule');
+                }
+                const url = new URL(redisUrl);
+                return {
+                    connection: {
+                        host: url.hostname,
+                        port: parseInt(url.port),
+                        password: url.password,
+                        username: url.username,
+                    },
+                };
+            },
+        }),
+
         // Core modules
         PrismaModule,
         AuthModule,
@@ -96,6 +118,8 @@ import { StorageModule } from './storage/storage.module';
         FileUploadModule,
         TestModule,
         StorageModule,
+        WhatsappModule,
+        PdfAnnotationsModule,
         HealthModule,
     ],
 })
