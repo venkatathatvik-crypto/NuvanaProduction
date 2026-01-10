@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentData, getStudentFiles, incrementFileDownload } from "@/services/academic";
+import PdfViewer from "@/components/PdfViewer";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ const Books = () => {
   const { profile, profileLoading } = useAuth();
   const queryClient = useQueryClient();
   const [playingVideo, setPlayingVideo] = useState<any | null>(null);
+  const [viewingPdf, setViewingPdf] = useState<any | null>(null);
 
   // 1. Get Student Data (for class_id)
   const { data: studentData } = useQuery({
@@ -135,7 +137,7 @@ const Books = () => {
   };
 
   const handleView = (file: any) => {
-    window.open(file.storageUrl, "_blank");
+    setViewingPdf(file);
   };
 
   return (
@@ -417,6 +419,15 @@ const Books = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {viewingPdf && (
+        <PdfViewer 
+          fileId={viewingPdf.id}
+          fileUrl={viewingPdf.storageUrl}
+          isReadOnly={true}
+          onClose={() => setViewingPdf(null)}
+        />
+      )}
     </div>
   );
 };

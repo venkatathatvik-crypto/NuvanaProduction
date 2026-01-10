@@ -69,6 +69,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         if (userProfile) {
           // Session is valid, set session and profile
+          // Get the current token in case it was refreshed during validation
+          const currentToken = authService.getAccessToken();
+          
           logger.log(
             "[AuthProvider] Session valid, user:",
             userProfile.email,
@@ -80,7 +83,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               id: userProfile.id,
               email: userProfile.email || "",
             },
-            access_token: accessToken,
+            access_token: currentToken,
           });
           setProfile(userProfile);
         } else {
