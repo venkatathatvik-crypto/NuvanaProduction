@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Upload, FileText, Trash2, Download, Video } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Trash2, Download, Video, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ import {
   type GradeSubjectOption,
   type TeacherClassWithRelationship,
 } from "@/services/academic";
+import PdfViewer from "@/components/PdfViewer";
 import { getTeacherSubjectsForClass } from "@/services/classService";
 import type { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
@@ -57,6 +58,7 @@ const TeacherFiles = () => {
   const [fileTypeFilter, setFileTypeFilter] = useState<"All Types" | "pdf" | "video">("All Types");
   const [fileToDelete, setFileToDelete] = useState<TeacherFileItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [annotatingFile, setAnnotatingFile] = useState<TeacherFileItem | null>(null);
 
   // Fetch ALL classes where teacher teaches (both as class teacher and subject teacher)
   const { data: classes = [], isLoading: loadingClasses } = useQuery({
@@ -796,6 +798,17 @@ const TeacherFiles = () => {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {file.fileType === 'pdf' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="glass border-primary/30 text-primary hover:bg-primary/10"
+                          onClick={() => setAnnotatingFile(file)}
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Annotate
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -827,15 +840,24 @@ const TeacherFiles = () => {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDeleteConfirm}
         title="Delete File"
-        description={
-          fileToDelete
-            ? `Are you sure you want to delete "${fileToDelete.name}"? This action cannot be undone and students will no longer have access to this file.`
-            : "Are you sure you want to delete this file?"
-        }
+        description={`Are you sure you want to delete "${fileToDelete?.name}"? This action cannot be undone and students will no longer have access to this file.`}
         confirmText="Delete"
         cancelText="Cancel"
         variant="destructive"
       />
+
+      {annotatingFile && (
+        <PdfViewer 
+          fileId={annotatingFile.id}
+          fileUrl={annotatingFile.storageUrl}
+          onClose={() => {
+            setAnnotatingFile(null);
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.teacher.files(profile?.id ?? '', profile?.school_id ?? '') 
+            });
+          }}
+        />
+      )}
     </div>
   );
 };

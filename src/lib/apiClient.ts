@@ -65,7 +65,13 @@ class ApiClient {
           throw new Error('Token refresh failed');
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = rawData.data !== undefined ? rawData.data : rawData;
+        
+        if (!data.access_token) {
+          throw new Error('Access token missing in refresh response');
+        }
+
         localStorage.setItem('access_token', data.access_token);
         return data.access_token;
       } catch (error) {
