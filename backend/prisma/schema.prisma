@@ -91,22 +91,23 @@ model file_categories {
 }
 
 model files {
-  id               String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  school_id        String           @db.Uuid
+  id               String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id        String            @db.Uuid
   file_title       String
   category_id      Int?
-  class_id         String           @db.Uuid
-  grade_subject_id String           @db.Uuid
+  class_id         String            @db.Uuid
+  grade_subject_id String            @db.Uuid
   storage_url      String
-  teacher_id       String           @db.Uuid
-  download_count   Int?             @default(0)
-  file_type        String?          @default("pdf")
-  created_at       DateTime?        @default(now()) @db.Timestamptz(6)
-  file_categories  file_categories? @relation(fields: [category_id], references: [id], onUpdate: NoAction)
-  classes          classes          @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  grade_subjects   grade_subjects   @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  schools          schools          @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  profiles         profiles         @relation(fields: [teacher_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  teacher_id       String            @db.Uuid
+  download_count   Int?              @default(0)
+  file_type        String?           @default("pdf")
+  created_at       DateTime?         @default(now()) @db.Timestamptz(6)
+  file_categories  file_categories?  @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  classes          classes           @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects   grade_subjects    @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools          schools           @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles          @relation(fields: [teacher_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  pdf_annotations  pdf_annotations[]
 
   @@index([school_id], map: "idx_files_tenant")
 }
@@ -223,6 +224,7 @@ model schools {
   grade_levels      grade_levels[]
   grade_subjects    grade_subjects[]
   notifications     notifications[]
+  pdf_annotations   pdf_annotations[]
   profiles          profiles[]
   quiz_history      quiz_history[]
   subjects_master   subjects_master[]
@@ -399,6 +401,21 @@ model quiz_history {
 
   @@index([teacher_id, subject], map: "idx_quiz_history_teacher_subject")
   @@index([school_id], map: "idx_quiz_history_tenant")
+}
+
+model pdf_annotations {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  file_id         String    @db.Uuid
+  school_id       String    @db.Uuid
+  page_number     Int
+  annotation_data Json
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  files           files     @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools         schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([file_id], map: "idx_pdf_annotations_file")
+  @@index([school_id], map: "idx_pdf_annotations_tenant")
 }
 
 enum attendance_status_enum {
