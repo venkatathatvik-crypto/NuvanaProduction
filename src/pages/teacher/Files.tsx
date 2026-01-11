@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getFileCategories,
   getTeacherClasses,
@@ -409,11 +410,12 @@ const TeacherFiles = () => {
     });
   }, [teacherFiles, classFilter, subjectFilter, fileTypeFilter]);
 
-  if (loadingClasses || loadingFiles || loadingSubjects) {
-    return <LoadingSpinner />;
-  }
+  // No longer blocking the whole page
+  // if (loadingClasses || loadingFiles || loadingSubjects) {
+  //   return <LoadingSpinner />;
+  // }
 
-  if (classes.length === 0) {
+  if (!loadingClasses && classes.length === 0) {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">
         No classes available. You need to be assigned as a class teacher or subject teacher to upload files.
@@ -459,37 +461,59 @@ const TeacherFiles = () => {
         >
           <Card className="glass-card p-4 sm:p-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <p className="text-3xl font-bold text-primary">
-                  {teacherFiles.length}
-                </p>
-                <p className="text-sm text-muted-foreground">Total Files</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-secondary">
-                  {totalDownloads}
-                </p>
-                <p className="text-sm text-muted-foreground">Downloads</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-accent">{subjectCount}</p>
-                <p className="text-sm text-muted-foreground">Subjects</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-neon-cyan">
-                  {fileCategories.length}
-                </p>
-                <p className="text-sm text-muted-foreground">Categories</p>
-              </div>
+              {loadingFiles ? (
+                [1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <Skeleton className="h-8 w-12 mb-2" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div>
+                    <p className="text-3xl font-bold text-primary">
+                      {teacherFiles.length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Total Files</p>
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold text-secondary">
+                      {totalDownloads}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Downloads</p>
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold text-accent">{subjectCount}</p>
+                    <p className="text-sm text-muted-foreground">Subjects</p>
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold text-neon-cyan">
+                      {fileCategories.length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Categories</p>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
+        {loadingClasses || loadingSubjects ? (
+          <Card className="glass-card p-8 space-y-6">
+            <Skeleton className="h-8 w-48" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+            <Skeleton className="h-10 w-32" />
+          </Card>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            {/* Upload form content remains the same */}
           <Card className="glass-card p-8">
             <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
               <Upload className="w-6 h-6 text-primary" />
@@ -695,6 +719,7 @@ const TeacherFiles = () => {
             </div>
           </Card>
         </motion.div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-4">

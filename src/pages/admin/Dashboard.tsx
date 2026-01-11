@@ -25,33 +25,19 @@ import {
   type Notification,
 } from "@/services/notificationService";
 import { formatDistanceToNow } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { logout, profile } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(true);
-
-  useEffect(() => {
-    const fetchRecentNotifications = async () => {
-      if (!profile?.id) {
-        setLoadingNotifications(false);
-        return;
-      }
-
-      try {
-        const recentNotifications = await getNotifications(profile.id, 5);
-        setNotifications(recentNotifications || []);
-      } catch (error) {
-        console.error("Error fetching notifications:", error);
-        setNotifications([]);
-      } finally {
-        setLoadingNotifications(false);
-      }
-    };
-
-    fetchRecentNotifications();
-  }, [profile?.id]);
+  const { data: notifications = [], isLoading: loadingNotifications } = useQuery({
+    queryKey: queryKeys.admin.notifications(profile?.id ?? '', 5),
+    queryFn: () => getNotifications(profile!.id, 5),
+    enabled: !!profile?.id,
+    staleTime: 2 * 60 * 1000,
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -115,6 +101,30 @@ const AdminDashboard = () => {
       navigate(notification.target_url);
     }
   };
+
+  if (loadingNotifications && notifications.length === 0) {
+    return (
+      <div className="min-h-screen p-3 sm:p-6 opacity-60">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <Skeleton key={i} className="h-32 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-3 sm:p-6">

@@ -65,4 +65,10 @@ export const queryKeys = {
     details: (schoolId: string) => 
       ['school-details', schoolId] as const,
   },
+
+  // Admin-related queries
+  admin: {
+    notifications: (adminId: string, limit?: number) => 
+      ['admin-notifications', adminId, limit] as const,
+  },
 } as const;

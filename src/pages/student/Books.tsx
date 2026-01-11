@@ -13,6 +13,7 @@ import PdfViewer from "@/components/PdfViewer";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Books = () => {
   const navigate = useNavigate();
@@ -157,8 +158,32 @@ const Books = () => {
         </div>
 
         {loadingFiles ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <LoadingSpinner />
+          <div className="space-y-8">
+            <Card className="glass-card p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <Skeleton className="h-8 w-12 mb-2" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <div className="space-y-6">
+              <Skeleton className="h-10 w-[300px]" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} className="glass-card p-6 space-y-4">
+                    <Skeleton className="h-6 w-3/4" />
+                    <Skeleton className="h-32 w-full" />
+                    <div className="flex gap-2">
+                      <Skeleton className="h-9 w-24" />
+                      <Skeleton className="h-9 w-24" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
         ) : subjects.length === 0 && videoSubjects.length === 0 ? (
           <Card className="glass-card p-12 text-center">

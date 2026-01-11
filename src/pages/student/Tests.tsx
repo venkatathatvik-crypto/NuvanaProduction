@@ -8,9 +8,9 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentData, getStudentTests, StudentTest } from "@/services/academic";
-import LoadingSpinner from "@/components/LoadingSpinner";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const StudentTests = () => {
     const navigate = useNavigate();
@@ -72,13 +72,8 @@ const StudentTests = () => {
         }
     };
 
-    if (loading || profileLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <LoadingSpinner />
-            </div>
-        );
-    }
+    // We no longer block the entire page on 'loading'.
+    // if (loading || profileLoading) { ... }
 
     // Categorise tests
     const activeTests = tests.filter(test => test.submissionStatus === "not_started");
@@ -149,44 +144,80 @@ const StudentTests = () => {
 
                 {/* Upcoming Tests Tab */}
                 <TabsContent value="upcoming" className="space-y-4 mt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {upcomingTests.length > 0 ? (
-                            upcomingTests.map((test, index) => renderTestCard(test, index))
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {[1, 2, 3].map((i) => (
+                                <Card key={i} className="glass-card p-6 space-y-4">
+                                    <Skeleton className="h-6 w-3/4" />
+                                    <Skeleton className="h-24 w-full" />
+                                    <Skeleton className="h-10 w-full" />
+                                </Card>
+                            ))}
+                        </div>
+                    ) : (
+                        upcomingTests.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {upcomingTests.map((test, index) => renderTestCard(test, index))}
+                            </div>
                         ) : (
                             <div className="col-span-full text-center py-12">
                                 <Calendar className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
                                 <p className="text-muted-foreground">No upcoming tests scheduled.</p>
                             </div>
-                        )}
-                    </div>
+                        )
+                    )}
                 </TabsContent>
 
                 {/* Active Tests Tab */}
                 <TabsContent value="active" className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {activeTests.length > 0 ? (
-                            activeTests.map((test, index) => renderTestCard(test, index))
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {[1, 2, 3].map((i) => (
+                                <Card key={i} className="glass-card p-6 space-y-4">
+                                    <Skeleton className="h-6 w-3/4" />
+                                    <Skeleton className="h-24 w-full" />
+                                    <Skeleton className="h-10 w-full" />
+                                </Card>
+                            ))}
+                        </div>
+                    ) : (
+                        activeTests.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {activeTests.map((test, index) => renderTestCard(test, index))}
+                            </div>
                         ) : (
                             <div className="col-span-full text-center py-12">
                                 <Play className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
                                 <p className="text-muted-foreground">No active tests available to take.</p>
                             </div>
-                        )}
-                    </div>
+                        )
+                    )}
                 </TabsContent>
 
                 {/* Results Tab */}
                 <TabsContent value="results" className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {completedTests.length > 0 ? (
-                            completedTests.map((test, index) => renderTestCard(test, index))
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {[1, 2, 3].map((i) => (
+                                <Card key={i} className="glass-card p-6 space-y-4">
+                                    <Skeleton className="h-6 w-3/4" />
+                                    <Skeleton className="h-24 w-full" />
+                                    <Skeleton className="h-10 w-full" />
+                                </Card>
+                            ))}
+                        </div>
+                    ) : (
+                        completedTests.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {completedTests.map((test, index) => renderTestCard(test, index))}
+                            </div>
                         ) : (
                             <div className="col-span-full text-center py-12">
                                 <CheckCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
                                 <p className="text-muted-foreground">No completed tests yet. Start taking tests to see your results here!</p>
                             </div>
-                        )}
-                    </div>
+                        )
+                    )}
                 </TabsContent>
             </Tabs>
         </div>
