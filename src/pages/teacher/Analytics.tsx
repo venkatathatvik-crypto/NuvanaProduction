@@ -82,9 +82,10 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { schoolService } from "@/services/schoolService";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 // Professional colors optimized for white background (PDF export)
 const PROFESSIONAL_COLORS = {
@@ -560,8 +561,10 @@ const AnalyticsDashboard = () => {
     ];
   };
 
-  if (loading) return <LoadingSpinner />;
-  if (!selectedClass)
+  // We no longer block the entire page on 'loading' (classes).
+  // if (loading) return <LoadingSpinner />;
+  
+  if (!loading && !selectedClass)
     return (
       <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">
         No classes found
@@ -683,8 +686,16 @@ const AnalyticsDashboard = () => {
         {/* ---------------- CLASS LEVEL INSIGHTS ---------------- */}
         <TabsContent value="class" className="space-y-6">
           {classInsightsLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="h-[400px] flex items-center justify-center">
+                <Skeleton className="h-[80%] w-[90%]" />
+              </Card>
+              <Card className="h-[400px] flex items-center justify-center">
+                <Skeleton className="h-[80%] w-[90%]" />
+              </Card>
+              <Card className="lg:col-span-2 h-[400px] flex items-center justify-center">
+                <Skeleton className="h-[80%] w-[95%]" />
+              </Card>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1091,8 +1102,12 @@ const AnalyticsDashboard = () => {
         {/* ---------------- STUDENT LEVEL ANALYSIS ---------------- */}
         <TabsContent value="student" className="space-y-8">
           {studentAnalysisLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="space-y-6">
+              <Skeleton className="h-24 w-full rounded-xl" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Skeleton className="h-[400px] rounded-xl" />
+                <Skeleton className="h-[400px] rounded-xl" />
+              </div>
             </div>
           ) : studentsList.length === 0 ? (
             <div className="text-center py-20 text-muted-foreground">
@@ -1199,8 +1214,10 @@ const AnalyticsDashboard = () => {
                   </p>
                 </div>
               ) : !studentAnalyticsData[selectedStudent] ? (
-                <div className="flex justify-center p-20">
-                  <LoadingSpinner />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Skeleton className="h-[400px] rounded-xl" />
+                  <Skeleton className="h-[400px] rounded-xl" />
+                  <Skeleton className="h-[300px] rounded-xl lg:col-span-2" />
                 </div>
               ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1961,8 +1978,9 @@ const AnalyticsDashboard = () => {
         {/* ---------------- TEST METRICS ---------------- */}
         <TabsContent value="test" className="space-y-6">
           {testMetricsLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Skeleton className="h-[400px] rounded-xl" />
+              <Skeleton className="h-[400px] rounded-xl" />
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2309,8 +2327,12 @@ const AnalyticsDashboard = () => {
         {/* ---------------- CHAPTER & TOPIC ANALYTICS ---------------- */}
         <TabsContent value="topics" className="space-y-6">
           {analyticsLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="space-y-6">
+              <Skeleton className="h-20 w-full rounded-xl" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Skeleton className="h-[450px] rounded-xl" />
+                <Skeleton className="h-[450px] rounded-xl" />
+              </div>
             </div>
           ) : (
             <>
