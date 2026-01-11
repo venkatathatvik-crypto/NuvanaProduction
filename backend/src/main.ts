@@ -10,9 +10,17 @@ async function bootstrap() {
 
     // Enable CORS with production-ready configuration
     app.enableCors({
-        origin: process.env.NODE_ENV === 'production' 
-            ? process.env.FRONTEND_URL || 'https://your-frontend.vercel.app'
-            : ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:4173', 'https://nuvana360server.onrender.com'],
+        origin: (origin, callback) => {
+            const allowedOrigins = process.env.NODE_ENV === 'production'
+                ? process.env.FRONTEND_URL?.split(',').map(u => u.trim()) || ['https://your-frontend.vercel.app']
+                : ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:4173', 'https://nuvana360server.onrender.com'];
+            
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
