@@ -21,6 +21,7 @@ import { StorageModule } from './storage/storage.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
+import { EngagementModule } from './engagement/engagement.module';
 
 @Module({
     imports: [
@@ -51,12 +52,13 @@ import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
 
                 if (redisUrl) {
                     try {
-                        console.log('✅ Redis cache connecting...');
+                        const url = new URL(redisUrl);
+                        console.log(`✅ Redis cache connecting to host: ${url.hostname}:${url.port}...`);
                         
                         const store = createKeyv(redisUrl);
 
                         console.log('✅ Redis cache connected successfully!');
-                        console.log(`📦 Cache Type: REDIS (@keyv/redis) - ${redisUrl.split('@')[1] || 'configured'}`);
+                        console.log(`📦 Cache Type: REDIS (@keyv/redis) - ${url.hostname}`);
                         console.log('⚡ AI response caching enabled - Expecting ~70% cost reduction');
 
                         return {
@@ -65,7 +67,15 @@ import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
                         };
                     } catch (error) {
                         console.warn('⚠️  Redis connection failed, falling back to in-memory cache');
-                        console.warn('⚠️  Error:', error.message);
+                        console.warn(`⚠️  Error Code: ${error.code || 'UNKNOWN'}`);
+                        console.warn(`⚠️  Error Message: ${error.message}`);
+                        
+                        if (error.message.includes('ENOTFOUND')) {
+                            console.error('🔍 DIAGNOSIS: DNS Resolution Failure for Redis. Cannot resolve hostname.');
+                        } else if (error.message.includes('ECONNREFUSED')) {
+                            console.error('🔍 DIAGNOSIS: Connection Refused by Redis server.');
+                        }
+
                         console.log('📦 Cache Type: IN-MEMORY (limited, not recommended for production)');
 
                         return {
@@ -89,17 +99,24 @@ import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
             useFactory: () => {
                 const redisUrl = process.env.REDIS_URL;
                 if (!redisUrl) {
+                    console.error('❌ REDIS_URL is required for BullModule but not found!');
                     throw new Error('REDIS_URL is required for BullModule');
                 }
-                const url = new URL(redisUrl);
-                return {
-                    connection: {
-                        host: url.hostname,
-                        port: parseInt(url.port),
-                        password: url.password,
-                        username: url.username,
-                    },
-                };
+                try {
+                    const url = new URL(redisUrl);
+                    console.log(`✅ BullMQ connection setup for host: ${url.hostname}`);
+                    return {
+                        connection: {
+                            host: url.hostname,
+                            port: parseInt(url.port),
+                            password: url.password,
+                            username: url.username,
+                        },
+                    };
+                } catch (error) {
+                    console.error('❌ Failed to parse REDIS_URL for BullMQ:', error.message);
+                    throw error;
+                }
             },
         }),
 
@@ -120,6 +137,7 @@ import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
         StorageModule,
         WhatsappModule,
         PdfAnnotationsModule,
+        EngagementModule,
         HealthModule,
     ],
 })

@@ -30,19 +30,24 @@ export class RagService implements OnModuleInit {
         const connectionString = this.configService.get<string>('DATABASE_URL');
         if (connectionString) {
             this.pool = new Pool({ connectionString });
-            this.isConnected = true;
+            // Don't set isConnected here - wait for onModuleInit to confirm connection
         }
     }
 
     async onModuleInit() {
-        if (!this.isConnected) {
-            this.logger.warn('RAG: Database not connected. RAG disabled.');
+        if (!this.pool) {
+            this.logger.warn('RAG: No DATABASE_URL configured. RAG disabled.');
             return;
         }
 
+        this.logger.log('🚀 Initializing RAG Database connection...');
         try {
             // Test connection
+            const startTime = Date.now();
             await this.pool.query('SELECT 1');
+            const duration = Date.now() - startTime;
+            this.isConnected = true;  // Now we know connection works
+            this.logger.log(`✅ RAG Database connected successfully in ${duration}ms`);
 
             // Check if pgvector extension exists
             const extResult = await this.pool.query(
@@ -422,6 +427,22 @@ export class RagService implements OnModuleInit {
             console.error(`[RAG] ❌ Error getting subjects with materials:`, error);
             this.logger.error('Failed to get subjects with materials:', error);
             return []; // Graceful degradation
+        }
+    }
+
+    /**
+     * Health check for RAG service database connection
+     */
+    async healthCheck(): Promise<boolean> {
+        if (!this.isConnected || !this.pool) {
+            return false;
+        }
+        try {
+            await this.pool.query('SELECT 1');
+            return true;
+        } catch (error) {
+            this.logger.error('RAG health check failed:', error);
+            return false;
         }
     }
 }

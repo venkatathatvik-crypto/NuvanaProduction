@@ -12,6 +12,7 @@ import {
   CheckSquare,
   AlertCircle,
   MessageSquare,
+  Target,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -112,6 +113,7 @@ const TeacherDashboard = () => {
     { label: "Manage Tests", icon: FileText, color: "text-green-500", path: "/teacher/tests" },
     { label: "Analytics", icon: BarChart2, color: "text-blue-500", path: "/teacher/analytics" },
     { label: "Voice Upload", icon: Mic, color: "text-green-500", path: "/teacher/voice-upload" },
+    { label: "Engagement", icon: Target, color: "text-red-500", path: "/teacher/engagement" },
     { label: "My Tasks", icon: CheckSquare, color: "text-blue-500", path: "/teacher/tasks" },
     { label: "Communication", icon: MessageSquare, color: "text-green-500", path: "/teacher/communication" },
   ];
