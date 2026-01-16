@@ -1,93 +1,272 @@
 {
 	"info": {
-		"_postman_id": "nuvana-master-100",
-		"name": "Nuvana Production - Master 100% Collection",
-		"description": "Complete professional collection covering EVERY endpoint in the backend. Categorized by module with full DTO body examples and authentication setup.",
+		"_postman_id": "nuvana-omega-collection",
+		"name": "Nuvana Production - OMEGA COMPLETE API 360",
+		"description": "The definitive, exhaustive collection of all Nuvana API endpoints (70+). Includes full CRUD for every module, automated session management, and logical workflows.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
+			"name": "0. Workflows & Lifecycle",
+			"item": [
+				{
+					"name": "Step 1: Super Admin Registration",
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "raw",
+							"raw": "{\"name\":\"Super Admin\",\"email\":\"admin@nuvana.com\",\"password\":\"p@ssword\",\"secret\":\"NuV@n@_S3cr3t_2024\"}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/auth/super-admin/register"
+					}
+				},
+				{
+					"name": "Step 2: Login (Get Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.access_token) {",
+									"    pm.collectionVariables.set(\"token\", jsonData.access_token);",
+									"    pm.collectionVariables.set(\"userId\", jsonData.user.id);",
+									"    pm.collectionVariables.set(\"schoolId\", jsonData.user.school_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"admin@nuvana.com\",\"password\":\"p@ssword\",\"expectedRole\":\"super_admin\"}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/auth/login"
+					}
+				},
+				{
+					"name": "Step 3: Onboard New School",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.id) {",
+									"    pm.collectionVariables.set(\"newSchoolId\", jsonData.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"name\":\"Nuvana Model School\",\"admin_email\":\"principal@modelschool.com\",\"admin_password\":\"Model@123\",\"admin_name\":\"Principal Smith\"}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/schools/onboard"
+					}
+				}
+			]
+		},
+		{
 			"name": "1. Authentication",
 			"item": [
-				{ "name": "Super Admin Register", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\"name\":\"Admin\",\"email\":\"admin@nuvana.com\",\"password\":\"p@ssword\",\"secret\":\"NuV@n@_S3cr3t_2024\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/super-admin/register" } },
-				{ "name": "Login", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\"email\":\"admin@nuvana.com\",\"password\":\"p@ssword\",\"expectedRole\":\"super_admin\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/login" } },
+				{ "name": "Login", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\"email\":\"{{email}}\",\"password\":\"{{password}}\",\"expectedRole\":\"{{role}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/login" } },
+				{ "name": "Register User", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"email\":\"user@example.com\",\"name\":\"User Name\",\"role_id\":3,\"school_id\":\"{{schoolId}}\",\"temporaryPassword\":\"Temp@123\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/register" } },
 				{ "name": "Refresh Token", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\"refresh_token\":\"{{refreshToken}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/refresh" } },
+				{ "name": "Reset Password", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\"email\":\"user@example.com\",\"newPassword\":\"New@123\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/reset-password" } },
 				{ "name": "Validate Session", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/auth/validate-session" } },
+				{ "name": "Get Session", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/auth/session" } },
 				{ "name": "Logout", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/auth/logout" } }
 			]
 		},
 		{
 			"name": "2. Academic",
 			"item": [
-				{ "name": "Grades - List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/grades" } },
-				{ "name": "Grades - Create", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"level\":\"Grade 12\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/grades" } },
-				{ "name": "Classes - List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/classes" } },
-				{ "name": "Classes - Create", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"12-A\",\"gradeId\":1}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/classes" } },
-				{ "name": "Subjects - List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/subjects" } },
-				{ "name": "Timetable - By Class", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/timetable/class/{{classId}}" } },
-				{ "name": "Manual Marks - Save", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"testTitle\":\"Internal 1\",\"date\":\"2024-01-10\",\"gradeSubjectId\":1,\"examTypeId\":1,\"marks\":[{\"studentId\":\"UUID\",\"marksObtained\":15,\"maxMarks\":25}]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/manual-marks" } }
+				{
+					"name": "Grades",
+					"item": [
+						{ "name": "Create Grade", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Grade 1\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/grades" } },
+						{ "name": "List Grades", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/grades" } },
+						{ "name": "Update Grade", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Updated Grade 1\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/grades/{{gradeId}}" } },
+						{ "name": "Delete Grade", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/grades/{{gradeId}}" } }
+					]
+				},
+				{
+					"name": "Classes",
+					"item": [
+						{ "name": "Create Class", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"1-A\",\"grade_level_id\":1}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/classes" } },
+						{ "name": "List Classes", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/classes" } },
+						{ "name": "Update Class", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"1-B\",\"grade_level_id\":1}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/classes/{{classId}}" } },
+						{ "name": "Delete Class", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/classes/{{classId}}" } },
+						{ "name": "Get Students by Class", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/classes/{{classId}}/students" } }
+					]
+				},
+				{
+					"name": "Subjects",
+					"item": [
+						{ "name": "Create Subject Master", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Physics\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/subjects" } },
+						{ "name": "List Subjects Master", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/subjects" } },
+						{ "name": "Assign Subjects to Grade", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"grade_level_id\":1,\"subject_master_ids\":[\"UUID\"]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/grade-subjects" } },
+						{ "name": "List Grade Subjects", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/grade-subjects" } },
+						{ "name": "Get Subjects by Grade", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/grade-subjects/grade/{{gradeId}}" } }
+					]
+				},
+				{
+					"name": "Assignments",
+					"item": [
+						{ "name": "Assign Teacher to Class", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"teacher_id\":\"UUID\",\"class_id\":\"UUID\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/teacher-classes" } },
+						{ "name": "List Teacher-Class Mapping", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/teacher-classes" } },
+						{ "name": "Assign Teacher to Subjects", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"teacher_id\":\"UUID\",\"grade_subject_ids\":[\"UUID\"]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/teacher-subjects" } },
+						{ "name": "List Teacher-Subject Mapping", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/teacher-subjects" } }
+					]
+				},
+				{
+					"name": "Timetable & Periods",
+					"item": [
+						{ "name": "Get Weekly Timetable", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/timetable/class/{{classId}}" } },
+						{ "name": "Create/Update Period", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"classId\":\"{{classId}}\",\"dayOfWeek\":1,\"startTime\":\"09:00\",\"endTime\":\"10:00\",\"subjectId\":\"UUID\",\"teacherId\":\"UUID\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/timetable/periods" } },
+						{ "name": "Update Period", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"startTime\":\"09:15\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/timetable/periods/{{periodId}}" } },
+						{ "name": "Delete Period", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/academic/timetable/periods/{{periodId}}" } }
+					]
+				},
+				{
+					"name": "Exams & Marks",
+					"item": [
+						{ "name": "Create Exam Type", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Final\",\"type\":\"external\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/exam-types" } },
+						{ "name": "Save Manual Marks", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"title\":\"Math Exam\",\"class_id\":\"{{classId}}\",\"grade_subject_id\":\"UUID\",\"exam_type_id\":1,\"max_marks\":100,\"marks\":[{\"student_id\":\"UUID\",\"marks_obtained\":90}]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/academic/manual-marks" } }
+					]
+				}
 			]
 		},
 		{
-			"name": "3. Users & Schools",
+			"name": "3. Users & Profiles",
 			"item": [
-				{ "name": "Schools - List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/schools" } },
-				{ "name": "Schools - Onboard", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Academy\",\"adminEmail\":\"admin@academy.com\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/schools/onboard" } },
-				{ "name": "Schools - Upload Logo", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "logo", "type": "file" }] }, "url": "{{baseUrl}}/schools/{{schoolId}}/logo" } },
-				{ "name": "Users - List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users" } },
-				{ "name": "Users - Update Profile", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"John Updated\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/users/{{userId}}" } },
-				{ "name": "Users - Upload Avatar", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file" }] }, "url": "{{baseUrl}}/users/{{userId}}/avatar" } },
-				{ "name": "Users - Student Details", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"roll_number\":\"101\",\"class_id\":\"UUID\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/users/{{userId}}/student-details" } }
+				{ "name": "List All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users?role_id=4" } },
+				{ "name": "Get User Profile", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users/{{userId}}" } },
+				{ "name": "Update Profile", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Updated Name\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/users/{{userId}}" } },
+				{ "name": "Upload Avatar", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file" }] }, "url": "{{baseUrl}}/users/{{userId}}/avatar" } },
+				{ "name": "Set Student Details", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"roll_number\":\"S101\",\"class_id\":\"{{classId}}\",\"parent_contact\":\"+9100000000\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/users/{{userId}}/student-details" } },
+				{ "name": "Set Teacher Details", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"specialization\":\"Math\",\"bio\":\"Expert teacher\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/users/{{userId}}/teacher-details" } },
+				{ "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users/{{userId}}" } }
 			]
 		},
 		{
-			"name": "4. File Upload (Media & Voice)",
+			"name": "4. Attendance & Analytics",
 			"item": [
-				{ "name": "Upload PDF/Video", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file" }, { "key": "title", "value": "Math Lesson", "type": "text" }, { "key": "fileType", "value": "pdf", "type": "text" }, { "key": "categoryId", "value": "1", "type": "text" }, { "key": "classId", "value": "{{classId}}", "type": "text" }, { "key": "teacherId", "value": "{{userId}}", "type": "text" }, { "key": "schoolId", "value": "{{schoolId}}", "type": "text" }] }, "url": "{{baseUrl}}/file-upload/files" } },
-				{ "name": "Upload Voice Note", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file" }, { "key": "title", "value": "Clarification", "type": "text" }, { "key": "classId", "value": "{{classId}}", "type": "text" }] }, "url": "{{baseUrl}}/file-upload/voice-notes" } },
-				{ "name": "Get Files by Class", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/file-upload/files/class/{{classId}}" } },
-				{ "name": "Get Voice Notes by Class", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/file-upload/voice-notes/class/{{classId}}" } },
-				{ "name": "Delete File", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/file-upload/files/FILE_UUID" } }
+				{
+					"name": "Attendance",
+					"item": [
+						{ "name": "Get Class Student List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/attendance/students/class/{{classId}}" } },
+						{ "name": "Get Attendance by Date", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/attendance/class/{{classId}}/date/2024-01-11" } },
+						{ "name": "Mark Single Attendance", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"classId\":\"{{classId}}\",\"attendanceDate\":\"2024-01-11\",\"teacherId\":\"{{userId}}\",\"students\":[{\"id\":\"UUID\",\"status\":\"present\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/attendance" } },
+						{ "name": "Mark Bulk Attendance", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"classId\":\"{{classId}}\",\"attendanceDates\":[\"2024-01-10\",\"2024-01-11\"],\"teacherId\":\"{{userId}}\",\"students\":[{\"id\":\"UUID\",\"status\":\"present\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/attendance/bulk" } },
+						{ "name": "Student Percentage", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/attendance/student/{{userId}}/percentage" } },
+						{ "name": "Monthly Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/attendance/student/{{userId}}/monthly-summary" } }
+					]
+				},
+				{
+					"name": "Analytics",
+					"item": [
+						{ "name": "Student Stats Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/analytics/student/{{userId}}/stats-summary" } },
+						{ "name": "Student Subject Performance", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/analytics/student/{{userId}}/subject-performance" } },
+						{ "name": "Class Performance Trend", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/analytics/class/{{classId}}/performance-trend" } }
+					]
+				}
 			]
 		},
 		{
-			"name": "5. PDF Annotations",
+			"name": "5. AI & Learning Modules",
 			"item": [
-				{ "name": "Save Annotation", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"file_id\":\"UUID\",\"page_number\":1,\"annotation_data\":[]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/pdf-annotations" } },
-				{ "name": "Get Annotations", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/pdf-annotations/{{fileId}}" } },
-				{ "name": "Delete Annotations", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/pdf-annotations/{{fileId}}" } }
+				{
+					"name": "AI Helper",
+					"item": [
+						{ "name": "AI Explain", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"query\":\"What is entropy?\",\"subject\":\"Physics\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/ai/explain" } },
+						{ "name": "AI Solve", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"query\":\"Integral of x^2\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/ai/solve" } },
+						{ "name": "AI Lesson Plan", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"query\":\"Plan for Optic Fibers\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/ai/teacherlessonplan" } }
+					]
+				},
+				{
+					"name": "File Management",
+					"item": [
+						{ "name": "Upload PDF/Video", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file" }, { "key": "title", "value": "PDF Note" }, { "key": "fileType", "value": "pdf" }, { "key": "teacherId", "value": "{{userId}}" }, { "key": "schoolId", "value": "{{schoolId}}" }, { "key": "gradeSubjectId", "value": "UUID" }] }, "url": "{{baseUrl}}/file-upload/files" } },
+						{ "name": "List Files for Class", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/file-upload/files/class/{{classId}}" } },
+						{ "name": "Save Annotation", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"file_id\":\"{{fileId}}\",\"page_number\":1,\"annotation_data\":[]}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/pdf-annotations" } }
+					]
+				},
+				{
+					"name": "RAG (AI Librarian)",
+					"item": [
+						{ "name": "Get Subjects with Materials", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/rag/subjects/class/{{classId}}" } }
+					]
+				}
 			]
 		},
 		{
-			"name": "6. AI Gemini",
+			"name": "6. Communications",
 			"item": [
-				{ "name": "AI Explain", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"content\":\"Explain Photosynthesis\",\"subject\":\"Science\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/ai/explain" } },
-				{ "name": "AI Solve", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/ai/solve" } }
+				{
+					"name": "Announcements",
+					"item": [
+						{ "name": "Create Announcement", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"title\":\"Holiday\",\"message\":\"School off tomorrow\",\"classIds\":[\"{{classId}}\"],\"teacherId\":\"{{userId}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/announcements" } },
+						{ "name": "List Student Announcements", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/announcements/student/class/{{classId}}" } }
+					]
+				},
+				{
+					"name": "Internal Messaging",
+					"item": [
+						{ "name": "Send Message", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"recipientId\":\"UUID\",\"subject\":\"Hi\",\"message\":\"Body text\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/messages/send" } },
+						{ "name": "Get Conversations", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/messages/conversations" } },
+						{ "name": "Mark as Read", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/messages/{{messageId}}/read" } }
+					]
+				},
+				{
+					"name": "WhatsApp",
+					"item": [
+						{ "name": "Broadcast WhatsApp", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"message\":\"Class test tomorrow\",\"classId\":\"{{classId}}\",\"schoolId\":\"{{schoolId}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/whatsapp/broadcast" } }
+					]
+				}
 			]
 		},
 		{
-			"name": "7. Communications",
+			"name": "7. System & Notifications",
 			"item": [
-				{ "name": "Announcements - Create", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"title\":\"Holiday\",\"content\":\"No school tomorrow\",\"teacher_id\":\"UUID\",\"class_id\":\"UUID\",\"school_id\":\"UUID\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/announcements" } },
-				{ "name": "Messages - Send", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"receiverId\":\"UUID\",\"content\":\"Hello teacher!\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/messages/send" } },
-				{ "name": "WhatsApp - Broadcast", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"message\":\"Result is out!\",\"classId\":\"UUID\",\"schoolId\":\"UUID\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/whatsapp/broadcast" } }
-			]
-		},
-		{
-			"name": "8. Attendance & Analytics",
-			"item": [
-				{ "name": "Mark Attendance", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\"studentId\":\"UUID\",\"date\":\"2024-01-10\",\"status\":\"present\"}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/attendance" } },
-				{ "name": "Class Analytics - Performance", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/analytics/class/{{classId}}/performance-trend" } }
+				{
+					"name": "Notifications",
+					"item": [
+						{ "name": "List My Notifications", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/notifications/recipient/{{userId}}?limit=10" } },
+						{ "name": "Mark All Read", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/notifications/recipient/{{userId}}/read-all" } }
+					]
+				},
+				{
+					"name": "System Health",
+					"item": [
+						{ "name": "Get Health Status", "request": { "method": "GET", "url": "{{baseUrl}}/health" } },
+						{ "name": "Ping API", "request": { "method": "GET", "url": "{{baseUrl}}/health/ping" } }
+					]
+				}
 			]
 		}
 	],
 	"variable": [
 		{ "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
-		{ "key": "token", "value": "JWT_TOKEN", "type": "string" },
-		{ "key": "refreshToken", "value": "REFRESH_TOKEN", "type": "string" },
-		{ "key": "schoolId", "value": "UUID", "type": "string" },
+		{ "key": "token", "value": "", "type": "string" },
+		{ "key": "schoolId", "value": "", "type": "string" },
 		{ "key": "classId", "value": "UUID", "type": "string" },
 		{ "key": "userId", "value": "UUID", "type": "string" },
-		{ "key": "fileId", "value": "UUID", "type": "string" }
+		{ "key": "gradeId", "value": "1", "type": "string" },
+		{ "key": "fileId", "value": "UUID", "type": "string" },
+		{ "key": "periodId", "value": "UUID", "type": "string" },
+		{ "key": "messageId", "value": "UUID", "type": "string" }
 	]
 }

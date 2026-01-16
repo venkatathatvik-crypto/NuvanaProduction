@@ -13,6 +13,7 @@ import {
   ClipboardList,
   MessageSquare,
   User,
+  Target,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,13 @@ const AdminDashboard = () => {
       color: "text-green-500",
       path: "/admin/communication",
       description: "Message teachers and broadcast to parents",
+    },
+    {
+      label: "Engagement",
+      icon: Target,
+      color: "text-red-500",
+      path: "/admin/engagement",
+      description: "School-wide participation analytics",
     },
     {
       label: "My Profile",

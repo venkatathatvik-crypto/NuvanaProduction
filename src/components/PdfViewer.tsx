@@ -18,7 +18,8 @@ import {
   Type,
   Download,
   UserCircle,
-  Users
+  Users,
+  Target
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -30,6 +31,8 @@ import {
   rgb, 
   LineCapStyle
 } from 'pdf-lib';
+import { QuestionPanel } from './engagement/QuestionPanel';
+import { useAuth } from '@/auth/AuthContext';
 
 // Configure pdfjs worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -39,9 +42,21 @@ interface PdfViewerProps {
   fileUrl: string;
   onClose: () => void;
   isReadOnly?: boolean;
+  fileName?: string;
+  classId?: string;
+  sessionId?: string;
 }
 
-const PdfViewer: React.FC<PdfViewerProps> = ({ fileId, fileUrl, onClose, isReadOnly = false }) => {
+const PdfViewer: React.FC<PdfViewerProps> = ({ 
+  fileId, 
+  fileUrl, 
+  onClose, 
+  isReadOnly = false,
+  fileName,
+  classId,
+  sessionId
+}) => {
+  const { profile } = useAuth();
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
@@ -59,6 +74,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ fileId, fileUrl, onClose, isReadO
   const [isStudentMode, setIsStudentMode] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [pdfLoaded, setPdfLoaded] = useState(false);
+  const [showEngagementPanel, setShowEngagementPanel] = useState(false);
 
   // Load annotations from backend using React Query
   const { data: fetchedAnnotations = [], isLoading: isLoadingAnnotations, isSuccess } = useQuery({
@@ -369,6 +385,18 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ fileId, fileUrl, onClose, isReadO
             {isDownloading ? "Exporting..." : "Download PDF"}
           </Button>
 
+          {/* Engagement Button (Teachers only) */}
+          {!isReadOnly && sessionId && pdfLoaded && (
+            <Button 
+              size="sm" 
+              className="neon-glow bg-primary text-primary-foreground"
+              onClick={() => setShowEngagementPanel(true)}
+            >
+              <Target className="w-4 h-4 mr-2" />
+              Ask Question
+            </Button>
+          )}
+
           <div className="flex items-center gap-1 border-l pl-2 border-border ml-2">
             <Button variant="ghost" size="icon" onClick={() => setScale(s => Math.max(0.5, s - 0.1))}>
               <ZoomOut className="w-4 h-4" />
@@ -496,6 +524,16 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ fileId, fileUrl, onClose, isReadO
           </div>
         </div>
       </div>
+
+      {/* Engagement Question Panel */}
+      {showEngagementPanel && sessionId && (
+        <QuestionPanel
+          sessionId={sessionId}
+          onClose={() => setShowEngagementPanel(false)}
+          fileName={fileName}
+          pageNumber={pageNumber}
+        />
+      )}
     </div>
   );
 };

@@ -35,6 +35,8 @@ import type { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { engagementApi } from "@/services/engagementApi";
+import { engagementSocket } from "@/services/engagementSocket";
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
@@ -60,6 +62,7 @@ const TeacherFiles = () => {
   const [fileToDelete, setFileToDelete] = useState<TeacherFileItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [annotatingFile, setAnnotatingFile] = useState<TeacherFileItem | null>(null);
+  const [engagementSessionId, setEngagementSessionId] = useState<string | null>(null);
 
   // Fetch ALL classes where teacher teaches (both as class teacher and subject teacher)
   const { data: classes = [], isLoading: loadingClasses } = useQuery({
@@ -823,17 +826,47 @@ const TeacherFiles = () => {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      {file.fileType === 'pdf' && (
                         <Button
                           variant="outline"
                           size="sm"
                           className="glass border-primary/30 text-primary hover:bg-primary/10"
-                          onClick={() => setAnnotatingFile(file)}
+                          onClick={async () => {
+                            // Create engagement session when opening PDF
+                            try {
+                              const token = localStorage.getItem('access_token');
+                              if (token && profile?.school_id && profile?.id) {
+                                // Find the class_id from the file's class name
+                                const targetClass = classes.find(c => c.class_name === file.class);
+                                
+                                if (targetClass) {
+                                  const session = await engagementApi.createSession({
+                                    school_id: profile.school_id,
+                                    teacher_id: profile.id,
+                                    class_id: targetClass.class_id,
+                                    file_id: file.id,
+                                    session_name: `${file.name} - ${new Date().toLocaleString()}`
+                                  }, token);
+                                  
+                                  setEngagementSessionId(session.data?.id || session.id);
+                                  
+                                  // Connect to WebSocket
+                                  engagementSocket.connect(profile.id, 'teacher');
+                                  engagementSocket.joinSession(session.data?.id || session.id, profile.id);
+                                } else {
+                                  console.warn('Could not find class for engagement session');
+                                }
+                              }
+                            } catch (error) {
+                              console.error('Failed to create engagement session:', error);
+                              // Continue opening PDF even if session creation fails
+                            }
+                            
+                            setAnnotatingFile(file);
+                          }}
                         >
                           <Pencil className="w-4 h-4 mr-2" />
                           Annotate
                         </Button>
-                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -875,7 +908,22 @@ const TeacherFiles = () => {
         <PdfViewer 
           fileId={annotatingFile.id}
           fileUrl={annotatingFile.storageUrl}
-          onClose={() => {
+          fileName={annotatingFile.name}
+          sessionId={engagementSessionId || undefined}
+          onClose={async () => {
+            // End engagement session if exists
+            if (engagementSessionId) {
+              try {
+                const token = localStorage.getItem('access_token');
+                if (token) {
+                  await engagementApi.endSession(engagementSessionId, token);
+                }
+              } catch (error) {
+                console.error('Failed to end engagement session:', error);
+              }
+              setEngagementSessionId(null);
+            }
+            
             setAnnotatingFile(null);
             queryClient.invalidateQueries({
               queryKey: queryKeys.teacher.files(profile?.id ?? '', profile?.school_id ?? '') 

@@ -45,6 +45,7 @@ const VoiceUpload = lazy(() => import('@/pages/teacher/VoiceUpload'));
 const TeacherCommunication = lazy(() => import('@/pages/teacher/Communication'));
 const TeacherProfile = lazy(() => import('@/pages/teacher/Profile'));
 const TeacherTasks = lazy(() => import('@/pages/teacher/Tasks'));
+const TeacherEngagement = lazy(() => import('@/pages/teacher/Engagement'));
 
 // Admin pages
 const AdminDashboard = lazy(() => import('@/pages/admin/Dashboard'));
@@ -56,6 +57,7 @@ const AdminTimetable = lazy(() => import('@/pages/admin/Timetable'));
 const AdminMessages = lazy(() => import('@/pages/admin/Messages'));
 const AdminCommunication = lazy(() => import('@/pages/admin/Communication'));
 const AdminProfile = lazy(() => import('@/pages/admin/Profile'));
+const AdminEngagement = lazy(() => import('@/pages/admin/Engagement'));
 
 // Super Admin pages
 const SuperAdminDashboard = lazy(() => import('@/pages/superadmin/SuperAdminDashboard'));
@@ -104,6 +106,8 @@ export const AppRoutes = () => (
       <Route path="/teacher/voice-upload" element={<ProtectedRoute role="teacher"><VoiceUpload /></ProtectedRoute>} />
       <Route path="/teacher/profile" element={<ProtectedRoute role="teacher"><TeacherProfile /></ProtectedRoute>} />
       <Route path="/teacher/tasks" element={<ProtectedRoute role="teacher"><TeacherTasks /></ProtectedRoute>} />
+      <Route path="/teacher/engagement" element={<ProtectedRoute role="teacher"><TeacherEngagement /></ProtectedRoute>} />
+      <Route path="/teacher/engagement/:sessionId" element={<ProtectedRoute role="teacher"><TeacherEngagement /></ProtectedRoute>} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute role="school_admin"><AdminDashboard /></ProtectedRoute>} />
@@ -115,6 +119,7 @@ export const AppRoutes = () => (
       <Route path="/admin/messages" element={<ProtectedRoute role="school_admin"><AdminMessages /></ProtectedRoute>} />
       <Route path="/admin/communication" element={<ProtectedRoute role="school_admin"><AdminCommunication /></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute role="school_admin"><AdminProfile /></ProtectedRoute>} />
+      <Route path="/admin/engagement" element={<ProtectedRoute role="school_admin"><AdminEngagement /></ProtectedRoute>} />
 
       {/* Super Admin Routes */}
       <Route path="/super-admin" element={<ProtectedRoute role="super_admin"><SuperAdminDashboard /></ProtectedRoute>} />

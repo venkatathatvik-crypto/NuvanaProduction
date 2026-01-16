@@ -1,5 +1,6 @@
 import React from "react";
 import AiTutorWidget from "@/components/AiTutor/AiTutorWidget";
+import { GlobalEngagementListener } from "@/components/engagement/GlobalEngagementListener";
 
 const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
     return (
@@ -24,6 +25,9 @@ const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
 
             {/* Global AI Chatbot Widget */}
             <AiTutorWidget />
+
+            {/* Global Student Engagement Listener */}
+            <GlobalEngagementListener />
         </div>
     );
 };
