@@ -176,6 +176,19 @@ export class EngagementService {
     };
   }
 
+  // Check if a student has already responded to a specific question
+  async hasStudentResponded(questionId: string, studentId: string): Promise<boolean> {
+    const existing = await this.prisma.student_responses.findUnique({
+      where: {
+        question_id_student_id: {
+          question_id: questionId,
+          student_id: studentId,
+        },
+      },
+    });
+    return !!existing;
+  }
+
   // Get session details
   async getSession(sessionId: string) {
     const session = await this.prisma.engagement_sessions.findUnique({
@@ -307,6 +320,45 @@ export class EngagementService {
     });
 
     return summary;
+  }
+
+  // Get a student's history of engagement sessions
+  async getStudentSessionHistory(studentId: string) {
+    const history = await this.prisma.engagement_analytics.findMany({
+      where: { student_id: studentId },
+      include: {
+        engagement_sessions: {
+          include: {
+            profiles: {
+              select: {
+                name: true,
+              },
+            },
+            _count: {
+              select: { pop_questions: true },
+            },
+          },
+        },
+      },
+      orderBy: {
+        updated_at: 'desc',
+      },
+    });
+
+    return history.map((item) => ({
+      id: item.id,
+      sessionId: item.session_id,
+      sessionName: item.engagement_sessions.session_name || 'Unnamed Session',
+      teacherName: item.engagement_sessions.profiles.name,
+      startedAt: item.engagement_sessions.started_at,
+      totalQuestions: item.total_questions,
+      answeredCount: item.questions_answered,
+      correctCount: item.questions_correct,
+      pointsEarned: item.total_points_earned,
+      accuracyRate: Number(item.accuracy_rate || 0),
+      participationRate: Number(item.participation_rate || 0),
+      engagementScore: Number(item.engagement_score || 0),
+    }));
   }
 
   // Get all sessions for a school

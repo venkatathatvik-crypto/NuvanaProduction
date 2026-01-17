@@ -95,10 +95,10 @@ export const engagementApi = {
     return response.data;
   },
 
-  // Get student summary
-  getStudentSummary: async (studentId: string, token: string) => {
+  // Get student history
+  getStudentHistory: async (studentId: string, token: string) => {
     const response = await axios.get(
-      `${API_URL}/engagement/student/${studentId}/summary`,
+      `${API_URL}/engagement/student/${studentId}/history`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }

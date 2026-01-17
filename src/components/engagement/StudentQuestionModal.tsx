@@ -20,6 +20,7 @@ interface StudentQuestionModalProps {
   studentId: string;
   studentName: string;
   sessionId: string;
+  expiresAt?: string | Date;
   onClose: () => void;
 }
 
@@ -32,10 +33,21 @@ export const StudentQuestionModal: React.FC<StudentQuestionModalProps> = ({
   studentId,
   studentName,
   sessionId,
+  expiresAt,
   onClose,
 }) => {
   const [selectedOption, setSelectedOption] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState(timeLimit);
+  
+  // Calculate initial time remaining based on expiresAt for late joiners
+  const calculateInitialTime = () => {
+    if (expiresAt) {
+      const remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      return Math.min(remaining, timeLimit); // Never exceed original time limit
+    }
+    return timeLimit;
+  };
+
+  const [timeRemaining, setTimeRemaining] = useState(calculateInitialTime());
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState<{
     isCorrect: boolean;
@@ -106,6 +118,11 @@ export const StudentQuestionModal: React.FC<StudentQuestionModalProps> = ({
       student_id: studentId,
       selected_option: selectedOption,
       response_time_ms: responseTime,
+    }, (response) => {
+      if (!response.success) {
+        toast.error(`Submission failed: ${response.error || 'Unknown error'}`);
+        setSubmitted(false); // Allow them to try again if there was an error
+      }
     });
 
     setSubmitted(true);

@@ -57,6 +57,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatePresence } from "framer-motion";
+import { engagementApi } from "@/services/engagementApi";
+import { EngagementHistory } from "@/components/engagement/EngagementHistory";
 
 const NEON_COLORS = {
   primary: "#8884d8",
@@ -118,6 +120,17 @@ const StudentAnalytics = () => {
     queryKey: ["student-analytics-ct", profile?.id],
     queryFn: () => getStudentChapterTopicAnalytics(profile!.id),
     enabled: !!profile,
+  });
+
+  // Engagement History Query
+  const { data: engagementHistory = [], isLoading: engagementLoading } = useQuery({
+    queryKey: ["student-engagement-history", profile?.id],
+    queryFn: async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) return [];
+      return engagementApi.getStudentHistory(profile!.id, token);
+    },
+    enabled: !!profile?.id,
   });
 
   const strengths = swData.strengths || [];
@@ -795,9 +808,6 @@ const StudentAnalytics = () => {
           />
 
           <ExpandableChartWidget
-            title="Topic Performance"
-            description="Average scores by topic"
-            insights="Drill down into specific topics to pinpoint precisely what concepts need review."
             className="h-[400px]"
             renderSmall={() =>
               chapterTopicData.topics.length > 0 ? (
@@ -979,6 +989,14 @@ const StudentAnalytics = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Engagement History Section */}
+        <div className="mt-8">
+          <EngagementHistory 
+            history={engagementHistory} 
+            isLoading={engagementLoading} 
+          />
+        </div>
       </motion.div>
     </div>
   );
