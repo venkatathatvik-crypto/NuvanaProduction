@@ -25,6 +25,8 @@ export const GlobalEngagementListener: React.FC = () => {
 
   const classId = profile?.class_id || studentData?.class_id;
 
+  console.log('[GlobalEngagementListener] Student:', profile?.name, 'Role:', profile?.role, 'ClassID:', classId);
+
   if (!isStudent || !classId) return null;
 
   return <EngagementListener classId={classId} />;

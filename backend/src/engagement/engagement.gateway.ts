@@ -68,24 +68,37 @@ export class EngagementGateway
     // Check if there's an active session with pending questions
     const activeSession = await this.engagementService.getActiveSessionForClass(classId);
     
+    this.logger.log(`[DEBUG] activeSession for class ${classId}: ${activeSession ? activeSession.id : 'NONE'}`);
+
     if (activeSession && activeSession.pop_questions.length > 0) {
       const latestQuestion = activeSession.pop_questions[0];
+      this.logger.log(`[DEBUG] Latest question for session ${activeSession.id}: ${latestQuestion.id}, Expires At: ${latestQuestion.expires_at}`);
       
-      // Send the active question to the newly joined student
-      client.emit('question:new', {
-        questionId: latestQuestion.id,
-        questionText: latestQuestion.question_text,
-        options: {
-          A: latestQuestion.option_a,
-          B: latestQuestion.option_b,
-          C: latestQuestion.option_c,
-          D: latestQuestion.option_d,
-        },
-        timeLimit: latestQuestion.time_limit_seconds,
-        points: latestQuestion.points,
-        expiresAt: latestQuestion.expires_at,
-        sessionId: activeSession.id,
-      });
+      // DE-DUPLICATION: Only send the question if the student hasn't answered it yet
+      const hasResponded = await this.engagementService.hasStudentResponded(latestQuestion.id, studentId);
+      this.logger.log(`[DEBUG] Student ${studentName} hasResponded to ${latestQuestion.id}: ${hasResponded}`);
+      
+      if (!hasResponded) {
+        this.logger.log(`Catching up student ${studentName} with active question ${latestQuestion.id}`);
+        client.emit('question:new', {
+          questionId: latestQuestion.id,
+          questionText: latestQuestion.question_text,
+          options: {
+            A: latestQuestion.option_a,
+            B: latestQuestion.option_b,
+            C: latestQuestion.option_c,
+            D: latestQuestion.option_d,
+          },
+          timeLimit: latestQuestion.time_limit_seconds,
+          points: latestQuestion.points,
+          expiresAt: latestQuestion.expires_at,
+          sessionId: activeSession.id,
+        });
+      } else {
+        this.logger.log(`Student ${studentName} already responded to active question ${latestQuestion.id}. Skipping catch-up.`);
+      }
+    } else {
+      this.logger.log(`[DEBUG] No active question found or already expired for class ${classId}`);
     }
     
     return { success: true, message: 'Joined class room' };

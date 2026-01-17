@@ -58,6 +58,11 @@ export class EngagementController {
     return this.engagementService.getStudentSummary(studentId);
   }
 
+  @Get('student/:studentId/history')
+  async getStudentHistory(@Param('studentId') studentId: string) {
+    return this.engagementService.getStudentSessionHistory(studentId);
+  }
+
   @Get('class/:classId/active')
   async getActiveSession(@Param('classId') classId: string) {
     return this.engagementService.getActiveSessionForClass(classId);
