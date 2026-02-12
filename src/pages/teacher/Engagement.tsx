@@ -19,7 +19,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { engagementApi } from '@/services/engagementApi';
 import { EngagementStats } from '@/components/engagement/EngagementStats';
-import { LiveResponseFeed } from '@/components/engagement/LiveResponseFeed';
+import { LiveResponseFeed, Response } from '@/components/engagement/LiveResponseFeed';
 import { ReactionOverlay } from '@/components/engagement/ReactionOverlay';
 import { EngagementLeaderboard } from '@/components/engagement/EngagementLeaderboard';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
@@ -33,7 +33,7 @@ const TeacherEngagement = () => {
   const queryClient = useQueryClient();
   const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'sessions'>('overview');
-  const [sessionResponses, setSessionResponses] = useState<any[]>([]);
+  const [liveResponses, setLiveResponses] = useState<Response[]>([]);
 
   const { data: sessions = [], isLoading: loadingSessions } = useQuery({
     queryKey: ['teacher-sessions', profile?.id],
@@ -96,13 +96,20 @@ const TeacherEngagement = () => {
     if (!profile?.id) return;
     engagementSocket.connect(profile.id, 'teacher');
 
-    if (focusedSession) {
+    if (focusedSession && focusedSession.status === 'active') {
       engagementSocket.joinSession(focusedSession.id, profile.id);
     }
 
-    const handleResponse = () => {
-      queryClient.invalidateQueries({ queryKey: ['teacher-engagement-summary'] });
+    const handleResponse = (data: any) => {
+      console.log('[TeacherEngagement] New live response:', data);
+      // Capture live response immediately to avoid losing it during sub-component re-renders
+      setLiveResponses(prev => [data, ...prev]);
+      
+      // Still invalidate to get the latest historical/aggregated data
       queryClient.invalidateQueries({ queryKey: ['teacher-sessions'] });
+      if (focusedSession?.id) {
+        queryClient.invalidateQueries({ queryKey: ['session-details', focusedSession.id] });
+      }
     };
 
     engagementSocket.onResponseReceived(handleResponse);
@@ -177,7 +184,11 @@ const TeacherEngagement = () => {
                     Viewing Historical Session: {focusedSession.session_name || focusedSession.id.slice(0, 8)}
                   </Badge>
                 )}
-                <LiveResponseFeed sessionId={focusedSession.id} onResponsesUpdate={setSessionResponses} />
+                <LiveResponseFeed 
+                  sessionId={focusedSession.id} 
+                  externalLiveResponses={liveResponses}
+                  onResponsesUpdate={setLiveResponses} 
+                />
               </div>
             ) : (
               <Card className="glass-card border-dashed border-primary/50 py-12 text-center">
@@ -220,7 +231,7 @@ const TeacherEngagement = () => {
           </div>
 
           <div className="space-y-8">
-            {focusedSession && <EngagementLeaderboard responses={sessionResponses} />}
+            {focusedSession && <EngagementLeaderboard responses={liveResponses} />}
             
             <Card className="glass-card h-full">
               <CardHeader>

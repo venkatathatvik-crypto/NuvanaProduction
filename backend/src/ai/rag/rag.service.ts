@@ -213,17 +213,33 @@ export class RagService implements OnModuleInit {
      * Build metadata filter for SQL queries
      * Returns filter conditions and parameters for class_id and subject filtering
      */
-    private buildMetadataFilter(subject: string, classId?: string): {
+    private buildMetadataFilter(subject?: string, classId?: string): {
         whereClause: string;
         params: any[];
     } {
+        const isAllSubjects = !subject || subject.toLowerCase() === 'all' || subject.toLowerCase() === 'general';
+
         if (classId) {
+            if (isAllSubjects) {
+                // Filter by class_id only (any subject or NULL subject)
+                return {
+                    whereClause: `WHERE metadata->>'class_id' = $2`,
+                    params: [classId]
+                };
+            }
             // Filter by both class_id and subject (most specific)
             return {
                 whereClause: `WHERE metadata->>'class_id' = $2 AND (metadata->>'subject' = $3 OR metadata->>'subject' IS NULL)`,
                 params: [classId, subject]
             };
         } else {
+            if (isAllSubjects) {
+                // No filters (search everything)
+                return {
+                    whereClause: ``,
+                    params: []
+                };
+            }
             // Fallback: filter by subject only (if class_id not available)
             return {
                 whereClause: `WHERE metadata->>'subject' = $2 OR metadata->>'subject' IS NULL`,
@@ -270,11 +286,11 @@ export class RagService implements OnModuleInit {
      */
     async retrieve(
         query: string, 
-        subject: string, 
-        classBand: string, 
+        subject?: string, 
+        classBand?: string, 
         classId?: string
     ): Promise<string> {
-        console.log(`[RAG] Starting retrieval - Query: "${query}", Subject: "${subject}", ClassBand: "${classBand}", ClassID: "${classId || 'none'}"`);
+        console.log(`[RAG] Starting retrieval - Query: "${query}", Subject: "${subject || 'All'}", ClassBand: "${classBand || 'middle'}", ClassID: "${classId || 'none'}"`);
 
         if (!this.isConnected) {
             console.warn('[RAG] Vector DB not connected. RAG disabled.');

@@ -10,10 +10,8 @@ import {
 import { EngagementService } from './engagement.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SendQuestionDto } from './dto/send-question.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('engagement')
-@UseGuards(JwtAuthGuard)
 export class EngagementController {
   constructor(private engagementService: EngagementService) {}
 
@@ -81,5 +79,10 @@ export class EngagementController {
   @Get('school/:schoolId/sessions')
   async getSchoolSessions(@Param('schoolId') schoolId: string) {
     return this.engagementService.getSchoolSessions(schoolId);
+  }
+
+  @Get('sessions/:id/students')
+  async getSessionStudentDetails(@Param('id') sessionId: string) {
+    return this.engagementService.getSessionStudentDetails(sessionId);
   }
 }

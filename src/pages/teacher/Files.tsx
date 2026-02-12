@@ -452,7 +452,7 @@ const TeacherFiles = () => {
           >
             <h1 className="text-xl sm:text-4xl font-bold neon-text truncate">Upload Files</h1>
             <p className="text-muted-foreground text-sm sm:text-base">
-              Share books, notes, and materials
+              Share books, audio notes, and materials
             </p>
           </motion.div>
         </div>

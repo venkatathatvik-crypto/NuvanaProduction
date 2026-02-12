@@ -66,8 +66,8 @@ export const QuestionPanel: React.FC<QuestionPanelProps> = ({
         setOptionD('');
         setCorrectOption('A');
         onClose();
-        // Redirect to engagement dashboard to see results
-        navigate('/teacher/engagement');
+        // Redirect to engagement tab in analytics
+        navigate('/teacher/analytics?tab=engagement');
       } else {
         toast.error(response.error || 'Failed to send question');
       }

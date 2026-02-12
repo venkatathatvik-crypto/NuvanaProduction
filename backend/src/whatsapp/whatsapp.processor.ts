@@ -1,37 +1,71 @@
-import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
+import { Job } from 'bullmq';
 import { WhatsappService } from './whatsapp.service';
 
-@Processor('whatsapp-broadcast')
+@Processor('whatsapp-broadcast', { concurrency: 5 })
 export class WhatsappProcessor extends WorkerHost {
   private readonly logger = new Logger(WhatsappProcessor.name);
 
-  constructor(private readonly whatsappService: WhatsappService) {
+  constructor(private whatsappService: WhatsappService) {
     super();
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
-    const { to, message } = job.data;
-    
-    this.logger.log(`Processing WhatsApp message for ${to}`);
-    
+    this.logger.log(`Processing job ${job.id} of type ${job.name}`);
+
+    switch (job.name) {
+      case 'send-template':
+        return this.handleSendTemplate(job);
+      case 'send-text':
+        return this.handleSendText(job);
+      default:
+        this.logger.warn(`Unknown job name: ${job.name}`);
+        break;
+    }
+  }
+
+  private async handleSendTemplate(job: Job<any>) {
+    const { phoneNumber, templateName, languageCode, components, senderId, schoolId } = job.data;
+
     try {
-      await this.whatsappService.sendWhatsapp(to, message);
-      return { success: true };
+      this.logger.log(`Sending WhatsApp broadcast to ${phoneNumber}`);
+      
+      const result = await this.whatsappService.sendTemplateMessage({
+        phoneNumber,
+        templateName,
+        languageCode,
+        components,
+        senderId,
+        schoolId,
+      });
+
+      this.logger.log(`Successfully processed job ${job.id} for ${phoneNumber}`);
+      return result;
     } catch (error) {
-      this.logger.error(`Error processing job ${job.id}: ${error.message}`);
+      this.logger.error(`Job ${job.id} for ${phoneNumber} failed: ${error.message}`);
       throw error;
     }
   }
 
-  @OnWorkerEvent('completed')
-  onCompleted(job: Job) {
-    this.logger.log(`Job ${job.id} completed successfully`);
-  }
+  private async handleSendText(job: Job<any>) {
+    const { phoneNumber, message, senderId, schoolId } = job.data;
 
-  @OnWorkerEvent('failed')
-  onFailed(job: Job, error: Error) {
-    this.logger.error(`Job ${job.id} failed: ${error.message}`);
+    try {
+      this.logger.log(`Sending plain text WhatsApp message to ${phoneNumber}`);
+      
+      const result = await this.whatsappService.sendTextMessage({
+        phoneNumber,
+        message,
+        senderId,
+        schoolId,
+      });
+
+      this.logger.log(`Successfully processed text job ${job.id} for ${phoneNumber}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Text job ${job.id} for ${phoneNumber} failed: ${error.message}`);
+      throw error;
+    }
   }
 }

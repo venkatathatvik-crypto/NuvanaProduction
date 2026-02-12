@@ -59,7 +59,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportAnalyticsPDF } from "@/lib/pdfExport";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getTeacherClasses,
   FlattenedClass,
@@ -86,6 +86,8 @@ import { queryKeys } from "@/lib/queryKeys";
 import { schoolService } from "@/services/schoolService";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EngagementOverview } from "@/components/engagement/EngagementOverview";
+import { Target } from "lucide-react";
 
 // Professional colors optimized for white background (PDF export)
 const PROFESSIONAL_COLORS = {
@@ -145,6 +147,8 @@ interface TopicChapterData {
 const AnalyticsDashboard = () => {
   const { profile, profileLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'class';
   const queryClient = useQueryClient();
   const [selectedStudent, setSelectedStudent] = useState<string>("");
 
@@ -629,30 +633,45 @@ const AnalyticsDashboard = () => {
             <CheckCircle className="w-4 h-4 mr-2" />
             Save PDF
           </Button>
-          <div className="w-full sm:w-48 ml-0 lg:ml-2">
-            <Select
-              value={selectedClass?.class_id}
-              onValueChange={(id) =>
-                setSelectedClass(classes.find((c) => c.class_id === id))
-              }
-            >
-              <SelectTrigger className="glass w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {classes.map((cls) => (
-                  <SelectItem key={cls.class_id} value={cls.class_id}>
-                    {cls.class_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col sm:flex-row gap-3 items-center">
+            <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">
+              Active Class:
+            </span>
+            {loading ? (
+              <Skeleton className="w-[180px] h-10 rounded-xl" />
+            ) : (
+              <Select
+                value={selectedClass?.class_id}
+                onValueChange={(val) => {
+                  const cls = classes.find((c) => c.class_id === val);
+                  if (cls) setSelectedClass(cls);
+                }}
+              >
+                <SelectTrigger className="w-[180px] sm:w-[220px] h-11 bg-background/50 border-input hover:bg-background/80 transition-all rounded-xl shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    <SelectValue placeholder="Select class" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50">
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.class_id} value={cls.class_id}>
+                      {cls.class_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
       </motion.div>
 
-      <Tabs defaultValue="class" className="space-y-4 sm:space-y-6">
-        <TabsList className="grid grid-cols-4 w-full max-w-xl h-auto">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(val) => setSearchParams({ tab: val })}
+        className="space-y-4 sm:space-y-6"
+      >
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl h-auto">
           <TabsTrigger
             value="class"
             className="text-xs sm:text-sm px-1 sm:px-3 py-2"
@@ -681,6 +700,13 @@ const AnalyticsDashboard = () => {
             <span className="hidden sm:inline">Test Metrics</span>
             <span className="sm:hidden">Tests</span>
           </TabsTrigger>
+          <TabsTrigger
+            value="engagement"
+            className="text-xs sm:text-sm px-1 sm:px-3 py-2"
+          >
+            <span className="hidden sm:inline">Engagement</span>
+            <span className="sm:hidden">Engage</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* ---------------- CLASS LEVEL INSIGHTS ---------------- */}
@@ -705,6 +731,7 @@ const AnalyticsDashboard = () => {
                 title="📈 Class Performance Trend"
                 description="Average scores and attendance over the last 6 months"
                 insights="The correlation between attendance and performance is visible. Consider interventions for students with attendance below 80% to improve overall class average."
+                isLoading={classInsightsLoading}
                 renderSmall={() =>
                   performanceTrendData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -824,6 +851,7 @@ const AnalyticsDashboard = () => {
                 title="📚 Subject Averages"
                 description="Overall class performance by subject"
                 insights="Compare subject performance to identify class-wide strengths and weaknesses. A significant dip in one subject might indicate a need for curriculum review."
+                isLoading={classInsightsLoading}
                 renderSmall={() =>
                   subjectAverageData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -942,6 +970,7 @@ const AnalyticsDashboard = () => {
                 title="🔗 Attendance vs. Marks Correlation"
                 description="Does attendance impact performance? Each dot represents a student."
                 insights="Positive correlation suggests attendance drives performance. Outliers (low attendance, high marks) might be self-studies, while (high attendance, low marks) might need learning support."
+                isLoading={classInsightsLoading}
                 className="lg:col-span-2"
                 renderSmall={() =>
                   attendanceVsMarksData.length > 0 ? (
@@ -1227,6 +1256,7 @@ const AnalyticsDashboard = () => {
                       title="Individual Subject Performance"
                       description="Strengths and weaknesses across subjects"
                       insights="A balanced shape indicates consistent performance. Spikes outward indicate strengths, while dips inward show areas for improvement."
+                      isLoading={!studentAnalyticsData[selectedStudent]}
                       renderSmall={() => (
                         <ResponsiveContainer width="100%" height="100%">
                           <RadarChart
@@ -1313,6 +1343,7 @@ const AnalyticsDashboard = () => {
                       title="Performance Trend"
                       description="Score progression over the last 6 months"
                       insights="Upward trends indicate improvement. Plateaus or drops should be investigated to ensure continuous growth."
+                      isLoading={!studentAnalyticsData[selectedStudent]}
                       renderSmall={() =>
                         studentAnalyticsData[selectedStudent].progress &&
                         studentAnalyticsData[selectedStudent].progress.length >
@@ -1766,6 +1797,7 @@ const AnalyticsDashboard = () => {
                         title="Chapter Mastery"
                         description="Understanding by chapter"
                         insights="Detailed chapter breakdown helps in assigning specific revision material."
+                        isLoading={!studentAnalyticsData[selectedStudent]}
                         renderSmall={() => (
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart
@@ -1869,6 +1901,7 @@ const AnalyticsDashboard = () => {
                         title="Topic Mastery"
                         description="Understanding by specific topic"
                         insights="Granular topic analysis. Focus on topics with red bars."
+                        isLoading={!studentAnalyticsData[selectedStudent]}
                         renderSmall={() => (
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart
@@ -1988,6 +2021,7 @@ const AnalyticsDashboard = () => {
                 title="📝 Recent Test Performance"
                 description="Comparing class average vs. top performer in each test"
                 insights="Tracking the gap between class average and top scores can indicate if the teaching pace is appropriate. A widening gap might suggest some students are lagging behind."
+                isLoading={testMetricsLoading}
                 renderSmall={() =>
                   recentTestsData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2199,6 +2233,7 @@ const AnalyticsDashboard = () => {
                 title="🧠 Question Type Analysis"
                 description="Breakdown of question types used across all tests"
                 insights="A diverse mix of question types ensures comprehensive assessment. Ensure there's a good balance between objective (Recall) and subjective (Analyze/Create) questions."
+                isLoading={testMetricsLoading}
                 renderSmall={() =>
                   questionTypeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2490,6 +2525,7 @@ const AnalyticsDashboard = () => {
                 title="Chapter Performance"
                 description="Average scores by chapter (sorted by performance)"
                 insights="Identifying low-performing chapters allows for targeted revision sessions. High-performing chapters can be used as benchmarks for effective teaching strategies."
+                isLoading={analyticsLoading}
                 renderSmall={() =>
                   filteredChapters.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2633,6 +2669,7 @@ const AnalyticsDashboard = () => {
                 title="Topic Performance"
                 description="Average scores by topic (sorted by performance)"
                 insights="Topic-level analysis helps pinpoint specific concepts that students struggle with. Use this data to adjust lesson plans for the next academic year or upcoming tests."
+                isLoading={analyticsLoading}
                 renderSmall={() =>
                   filteredTopics.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -3027,6 +3064,11 @@ const AnalyticsDashboard = () => {
               })()}
               </>
             )}
+        </TabsContent>
+
+        {/* ---------------- ENGAGEMENT TAB ---------------- */}
+        <TabsContent value="engagement" className="mt-8">
+          <EngagementOverview />
         </TabsContent>
       </Tabs>
 

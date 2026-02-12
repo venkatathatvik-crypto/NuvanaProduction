@@ -11,10 +11,8 @@ import { LLMMessage, LLMProvider } from './llm.provider.interface';
 @Injectable()
 export class GeminiProvider implements LLMProvider, OnModuleInit {
     private apiKey: string | null = null;
-    private flashModelName: string;
-    private proModelName: string;
-    private flashModel: ChatGoogleGenerativeAI | null = null;
-    private proModel: ChatGoogleGenerativeAI | null = null;
+    private modelName: string;
+    private model: ChatGoogleGenerativeAI | null = null;
     private modelCache: Map<string, ChatGoogleGenerativeAI> = new Map();
     private readonly logger = new Logger(GeminiProvider.name);
 
@@ -22,14 +20,14 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         const rawApiKey = this.configService.get<string>('GEMINI_API_KEY');
         this.apiKey = rawApiKey ? rawApiKey.trim() : null;
 
-        // Use Gemini 3 preview models
-        this.flashModelName = this.configService.get<string>('GEMINI_FLASH_MODEL') || 'gemini-3-flash-preview';
-        this.proModelName = this.configService.get<string>('GEMINI_PRO_MODEL') || 'gemini-3-pro-preview';
+        // Use Gemini model (defaults to flash preview if not set)
+        this.modelName = this.configService.get<string>('GEMINI_MODEL') || 
+                        this.configService.get<string>('GEMINI_FLASH_MODEL') || 
+                        'gemini-3-flash-preview';
 
         if (this.apiKey) {
             this.logger.log(`Initialized Gemini with Key: ${this.apiKey.substring(0, 5)}...${this.apiKey.substring(this.apiKey.length - 4)}`);
-            this.logger.log(`Flash Model: ${this.flashModelName}`);
-            this.logger.log(`Pro Model: ${this.proModelName}`);
+            this.logger.log(`Active Model: ${this.modelName}`);
         } else {
             this.logger.warn('GEMINI_API_KEY is not set. GeminiProvider will fail if used.');
         }
@@ -39,11 +37,11 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         if (!this.apiKey) return;
 
         try {
-            // Initialize default Flash model
-            this.flashModel = this.createModel(this.flashModelName);
-            this.logger.log('✓ Gemini Flash Provider ready (v1beta)');
+            // Initialize default model
+            this.model = this.createModel(this.modelName);
+            this.logger.log(`✓ Gemini Provider ready (v1beta) - Model: ${this.modelName}`);
         } catch (error) {
-            this.logger.error('❌ Failed to initialize Gemini Flash model:', error);
+            this.logger.error(`❌ Failed to initialize Gemini model [${this.modelName}]:`, error);
         }
     }
 
@@ -57,36 +55,7 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         });
     }
 
-    /**
-     * Heuristic to determine if a task is complex enough to warrant the Pro model
-     * DISABLED: Always use Flash model for cost optimization
-     */
-    private shouldUseProModel(messages: LLMMessage[]): boolean {
-        // DISABLED: Force Flash model for all requests (student and teacher)
-        // User preference: Use only Flash model to reduce costs
-        return false;
-        
-        /* ORIGINAL LOGIC (DISABLED):
-        // Allow disabling Pro entirely via env var if quota is exhausted
-        if (this.configService.get<string>('DISABLE_GEMINI_PRO') === 'true') return false;
-
-        const totalContent = messages.map(m => m.content).join(' ');
-        
-        // Criteria for Pro model:
-        // 1. Long context (increased threshold: 12000 chars)
-        // Gemini 1.5/3 Flash handles up to 1M tokens, but reasoning degrades slightly
-        if (totalContent.length > 12000) return true;
-
-        // 2. Keywords indicating extremely complex reasoning
-        // Removed 'grade paper' and 'detailed lesson plan' as Flash (especially v3) is excellent at these
-        const complexKeywords = [
-            'critical analysis', 'advanced mathematics', 'complex logic', 
-            'coding architecture', 'adversarial testing'
-        ];
-
-        return complexKeywords.some(keyword => totalContent.toLowerCase().includes(keyword));
-        */
-    }
+    // Simplified: No Pro vs Flash routing for these models
 
     /**
      * Merges system messages into the first human message for better API compatibility
@@ -126,10 +95,10 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
             throw new Error('Gemini API key not initialized.');
         }
 
-        let targetModelName = modelOverride;
+        let targetModelName = modelOverride || this.modelName;
         let activeModel: ChatGoogleGenerativeAI | null = null;
 
-        // Determine active model based on override or routing logic
+        // Use override if provided, otherwise use default
         if (modelOverride) {
             if (this.modelCache.has(modelOverride)) {
                 activeModel = this.modelCache.get(modelOverride)!;
@@ -137,15 +106,8 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
                 activeModel = this.createModel(modelOverride);
                 this.modelCache.set(modelOverride, activeModel);
             }
-        } else if (this.shouldUseProModel(messages)) {
-            targetModelName = this.proModelName;
-            if (!this.proModel) {
-                this.proModel = this.createModel(this.proModelName);
-            }
-            activeModel = this.proModel;
         } else {
-            targetModelName = this.flashModelName;
-            activeModel = this.flashModel;
+            activeModel = this.model;
         }
 
         if (!activeModel) {
@@ -153,7 +115,7 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         }
 
         try {
-            this.logger.log(`[Gemini] Routing to: ${targetModelName}`);
+            this.logger.log(`[Gemini] Processing with: ${targetModelName}`);
             const langchainMessages = this.convertMessages(messages);
             const response = await activeModel.invoke(langchainMessages);
 
@@ -168,13 +130,6 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
             return text;
         } catch (error: any) {
             this.logger.error(`[Gemini] Generation failed (${targetModelName}):`, error.message);
-            
-            // Fallback: If Pro fails, try Flash (unless Flash was already the target)
-            if (targetModelName === this.proModelName && this.flashModel) {
-                this.logger.warn(`[Gemini] Pro model failed, falling back to Flash: ${this.flashModelName}`);
-                return this.generate(messages, this.flashModelName);
-            }
-            
             throw error;
         }
     }

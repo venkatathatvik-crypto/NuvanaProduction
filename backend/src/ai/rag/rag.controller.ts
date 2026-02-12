@@ -1,11 +1,10 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { RagService } from './rag.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 
 @Controller('rag')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 export class RagController {
     constructor(private readonly ragService: RagService) {}
 

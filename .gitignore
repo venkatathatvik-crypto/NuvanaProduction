@@ -36,3 +36,5 @@ build
 
 # OS
 Thumbs.db
+
+.vercel

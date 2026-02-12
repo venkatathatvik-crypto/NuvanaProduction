@@ -7,6 +7,13 @@ import { useEffect, useState, useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -139,8 +146,7 @@ const TeacherAttendance = () => {
     fetchStudents();
   }, [selectedClass, selectedDate]);
 
-  const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const classId = e.target.value;
+  const handleClassChange = (classId: string) => {
     const cls = classes.find((c) => c.class_id === classId);
     if (cls) {
       setSelectedClass(cls);
@@ -327,12 +333,9 @@ const TeacherAttendance = () => {
       return;
     }
 
-    // Validate that the selected date is not a Sunday (using IST)
-    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+    // Validate that the selected date is not a Sunday
     const dateToCheck = new Date(selectedDate + 'T00:00:00');
-    const istDate = new Date(dateToCheck.getTime() + istOffset);
-    
-    if (istDate.getUTCDay() === 0) {
+    if (dateToCheck.getDay() === 0) {
       toast.error("Cannot mark attendance for Sundays. Please select a different date.");
       return;
     }
@@ -444,57 +447,46 @@ const TeacherAttendance = () => {
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
 
-    // Validate that the selected date is not a Sunday (using IST)
-    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
-    const istDate = new Date(date.getTime() + istOffset);
-    
-    if (istDate.getUTCDay() === 0) {
+    // Validate that the selected date is not a Sunday
+    if (date.getDay() === 0) {
       toast.error("Cannot select Sundays for attendance");
       return;
     }
-
-    // Validate that the selected date is not in the future (using IST)
-    const now = new Date();
-    const istNow = new Date(now.getTime() + istOffset);
-    const istToday = new Date(Date.UTC(
-      istNow.getUTCFullYear(),
-      istNow.getUTCMonth(),
-      istNow.getUTCDate(),
-      23, 59, 59, 999
-    ));
     
-    if (date > istToday) {
+    // Validate that the selected date is not in the future
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
+    if (date > today) {
       toast.error("Cannot select future dates");
       return;
     }
 
     if (isMultiDateMode) {
+      const dateString = format(date, 'yyyy-MM-dd');
       const dateExists = selectedDates.some(d => 
-        d.toISOString().split('T')[0] === date.toISOString().split('T')[0]
+        format(d, 'yyyy-MM-dd') === dateString
       );
 
       if (dateExists) {
         // Remove date
         setSelectedDates(selectedDates.filter(d => 
-          d.toISOString().split('T')[0] !== date.toISOString().split('T')[0]
+          format(d, 'yyyy-MM-dd') !== dateString
         ));
       } else {
         // Add date
         setSelectedDates([...selectedDates, date]);
       }
     } else {
-      // Single date mode - extract date components in IST timezone
-      // Use UTC methods on the IST-adjusted date to get the correct date
-      const year = istDate.getUTCFullYear();
-      const month = (istDate.getUTCMonth() + 1).toString().padStart(2, '0');
-      const day = istDate.getUTCDate().toString().padStart(2, '0');
-      setSelectedDate(`${year}-${month}-${day}`);
+      // Single date mode
+      setSelectedDate(format(date, 'yyyy-MM-dd'));
     }
   };
 
   const removeDateFromSelection = (dateToRemove: Date) => {
+    const removeStr = format(dateToRemove, 'yyyy-MM-dd');
     setSelectedDates(selectedDates.filter(d => 
-      d.toISOString().split('T')[0] !== dateToRemove.toISOString().split('T')[0]
+      format(d, 'yyyy-MM-dd') !== removeStr
     ));
   };
 
@@ -516,7 +508,7 @@ const TeacherAttendance = () => {
 
     // Determine which dates to use
     const datesToSubmit = isMultiDateMode && selectedDates.length > 0
-      ? selectedDates.map(d => d.toISOString().split('T')[0])
+      ? selectedDates.map(d => format(d, 'yyyy-MM-dd'))
       : [selectedDate];
 
     if (datesToSubmit.length === 0) {
@@ -668,18 +660,21 @@ const TeacherAttendance = () => {
                 >
                   Select Class
                 </label>
-                <select
-                  id="class-select"
-                  className="w-full p-3 rounded-lg bg-muted border border-border"
+                <Select
                   value={selectedClass.class_id}
-                  onChange={handleClassChange}
+                  onValueChange={handleClassChange}
                 >
-                  {classes.map((cls) => (
-                    <option key={cls.class_id} value={cls.class_id}>
-                      {cls.class_name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full h-[50px] bg-muted border-border">
+                    <SelectValue placeholder="Select Class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((cls) => (
+                      <SelectItem key={cls.class_id} value={cls.class_id}>
+                        {cls.class_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-1 sm:col-span-2">
                 <div className="flex items-center justify-between mb-2">
@@ -712,7 +707,7 @@ const TeacherAttendance = () => {
                         ? selectedDates.length > 0
                           ? `${selectedDates.length} dates selected`
                           : "Click to select dates"
-                        : format(new Date(selectedDate + 'T00:00:00'), "PPP")}
+                        : format(new Date(selectedDate + 'T00:00:00'), "dd/MM/yyyy")}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 bg-background border-border" align="start">
@@ -722,25 +717,14 @@ const TeacherAttendance = () => {
                         selected={new Date(selectedDate + 'T00:00:00')}
                         onSelect={handleDateSelect}
                         disabled={(date) => {
-                          // Get current date in IST (UTC+5:30)
                           const now = new Date();
-                          const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
-                          const istNow = new Date(now.getTime() + istOffset);
+                          const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                           
-                          // Create IST midnight for comparison
-                          const istToday = new Date(Date.UTC(
-                            istNow.getUTCFullYear(),
-                            istNow.getUTCMonth(),
-                            istNow.getUTCDate(),
-                            23, 59, 59, 999
-                          ));
+                          // Disable future dates
+                          if (date > localToday) return true;
                           
-                          // Disable future dates (based on IST)
-                          if (date > istToday) return true;
-                          
-                          // Disable Sundays - check day of week in IST
-                          const istDate = new Date(date.getTime() + istOffset);
-                          return istDate.getUTCDay() === 0;
+                          // Disable Sundays
+                          return date.getDay() === 0;
                         }}
                         initialFocus
                       />
@@ -756,25 +740,14 @@ const TeacherAttendance = () => {
                             }
                           }}
                           disabled={(date) => {
-                            // Get current date in IST (UTC+5:30)
                             const now = new Date();
-                            const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
-                            const istNow = new Date(now.getTime() + istOffset);
+                            const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                             
-                            // Create IST midnight for comparison
-                            const istToday = new Date(Date.UTC(
-                              istNow.getUTCFullYear(),
-                              istNow.getUTCMonth(),
-                              istNow.getUTCDate(),
-                              23, 59, 59, 999
-                            ));
+                            // Disable future dates
+                            if (date > localToday) return true;
                             
-                            // Disable future dates (based on IST)
-                            if (date > istToday) return true;
-                            
-                            // Disable Sundays - check day of week in IST
-                            const istDate = new Date(date.getTime() + istOffset);
-                            return istDate.getUTCDay() === 0;
+                            // Disable Sundays
+                            return date.getDay() === 0;
                           }}
                           initialFocus
                         />

@@ -44,9 +44,7 @@ async function bootstrap() {
         }),
     );
 
-    // Global JWT authentication guard
-    const reflector = app.get(Reflector);
-    app.useGlobalGuards(new JwtAuthGuard(reflector));
+    // Global JWT authentication guard is now provided via APP_GUARD in AuthModule
 
     // Graceful shutdown handlers
     process.on('SIGTERM', async () => {

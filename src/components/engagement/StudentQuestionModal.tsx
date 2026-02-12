@@ -42,99 +42,77 @@ export const StudentQuestionModal: React.FC<StudentQuestionModalProps> = ({
   const calculateInitialTime = () => {
     if (expiresAt) {
       const remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
-      return Math.min(remaining, timeLimit); // Never exceed original time limit
+      return Math.min(remaining + 4, timeLimit); 
     }
     return timeLimit;
   };
 
   const [timeRemaining, setTimeRemaining] = useState(calculateInitialTime());
   const [submitted, setSubmitted] = useState(false);
+  const [submissionTime, setSubmissionTime] = useState<number | null>(null);
   const [result, setResult] = useState<{
     isCorrect: boolean;
     correctOption: string;
     pointsEarned: number;
   } | null>(null);
   const [startTime] = useState(Date.now());
+  const [wasExpired, setWasExpired] = useState(false);
 
   useEffect(() => {
+    if (submitted) return;
+
     const interval = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          if (!submitted) {
-            toast.error('Time expired!');
-            setTimeout(onClose, 1000);
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimeRemaining((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [submitted, onClose]);
+  }, [submitted]);
 
-  // Listen for result
+  useEffect(() => {
+    if (timeRemaining === 0 && !submitted && !wasExpired) {
+      setWasExpired(true);
+      toast.error('Time expired!');
+      setTimeout(onClose, 3000);
+    }
+  }, [timeRemaining, submitted, wasExpired, onClose]);
+
   useEffect(() => {
     const handleResult = (data: any) => {
       setResult(data);
       setSubmitted(true);
-      
       if (data.isCorrect) {
         toast.success(`Correct! +${data.pointsEarned} points 🎉`);
       } else {
         toast.error(`Incorrect. Correct answer: ${data.correctOption}`);
       }
-      
-      // Auto-close after 2 seconds
-      setTimeout(onClose, 2000);
+      setTimeout(onClose, 10000); // 10 seconds to see results
     };
 
     engagementSocket.onResponseResult(handleResult);
-
-    return () => {
-      engagementSocket.off('response:result', handleResult);
-    };
+    return () => engagementSocket.off('response:result', handleResult);
   }, [onClose]);
 
   const handleSubmit = () => {
-    console.log('[StudentQuestionModal] Submitting response. QuestionID:', questionId, 'StudentID:', studentId);
+    if (!questionId || !selectedOption) return;
     
-    if (!questionId) {
-      console.error('[StudentQuestionModal] CRITICAL: questionId is missing in handleSubmit!');
-      toast.error('Internal error: Question ID missing. Please refresh.');
-      return;
-    }
-
-    if (!selectedOption) {
-      toast.error('Please select an answer');
-      return;
-    }
-
-    const responseTime = Date.now() - startTime;
+    const timeTaken = Date.now() - startTime;
+    setSubmissionTime(timeTaken);
     
     engagementSocket.submitResponse({
       question_id: questionId,
       student_id: studentId,
       selected_option: selectedOption,
-      response_time_ms: responseTime,
+      response_time_ms: timeTaken,
     }, (response) => {
       if (!response.success) {
         toast.error(`Submission failed: ${response.error || 'Unknown error'}`);
-        setSubmitted(false); // Allow them to try again if there was an error
+        setSubmitted(false);
       }
     });
 
     setSubmitted(true);
   };
 
-  const sendReaction = (emoji: string) => {
-    engagementSocket.sendReaction({
-      sessionId,
-      emoji,
-      studentName,
-    });
-  };
 
   const progressPercentage = (timeRemaining / timeLimit) * 100;
   const progressColor = progressPercentage > 50 ? 'text-green-500' : progressPercentage > 25 ? 'text-yellow-500' : 'text-red-500';
@@ -145,164 +123,171 @@ export const StudentQuestionModal: React.FC<StudentQuestionModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-gradient-to-br from-primary/10 to-neon-purple/10 backdrop-blur-sm flex items-center justify-center p-4"
+        className="fixed inset-0 z-[9999] bg-background/60 backdrop-blur-md flex items-center justify-center p-4"
       >
         <motion.div
-          initial={{ scale: 0.9, y: 20 }}
-          animate={{ scale: 1, y: 0 }}
-          exit={{ scale: 0.9, y: 20 }}
-          className="w-full max-w-2xl"
+          initial={{ scale: 0.98, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.98, opacity: 0 }}
+          className="w-full max-w-4xl"
         >
-          <Card className="glass-card p-8 space-y-6 relative overflow-hidden">
-            {/* Confetti effect for correct answer */}
-            {result?.isCorrect && (
-              <div className="absolute inset-0 pointer-events-none">
-                {[...Array(20)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ y: -20, x: Math.random() * 100 + '%', opacity: 1 }}
-                    animate={{ y: '100vh', opacity: 0 }}
-                    transition={{ duration: 2, delay: i * 0.1 }}
-                    className="absolute w-2 h-2 rounded-full"
-                    style={{
-                      backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'][i % 4],
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Timer */}
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative w-24 h-24">
-                <svg className="w-full h-full -rotate-90">
-                  <circle
-                    cx="48"
-                    cy="48"
-                    r="40"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="none"
-                    className="text-muted"
-                  />
-                  <circle
-                    cx="48"
-                    cy="48"
-                    r="40"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeDasharray={`${2 * Math.PI * 40}`}
-                    strokeDashoffset={`${2 * Math.PI * 40 * (1 - progressPercentage / 100)}`}
-                    className={`${progressColor} transition-all duration-1000`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className={`text-2xl font-bold ${progressColor}`}>
-                    {timeRemaining}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Question */}
-            <div className="text-center space-y-2">
-              <h2 className="text-2xl font-bold">{questionText}</h2>
-              {!submitted && (
-                <p className="text-sm text-muted-foreground">
-                  Select your answer below
-                </p>
-              )}
-            </div>
-
-            {/* Options */}
-            <div className="space-y-3">
-              {(Object.keys(options) as Array<'A' | 'B' | 'C' | 'D'>).map((key) => {
-                const isSelected = selectedOption === key;
-                const isCorrect = result?.correctOption === key;
-                const isWrong = submitted && selectedOption === key && !result?.isCorrect;
-
-                return (
-                  <motion.button
-                    key={key}
-                    whileHover={!submitted ? { scale: 1.02 } : {}}
-                    whileTap={!submitted ? { scale: 0.98 } : {}}
-                    onClick={() => !submitted && setSelectedOption(key)}
-                    disabled={submitted}
-                    className={`w-full p-4 rounded-lg border-2 transition-all text-left flex items-center gap-3 ${
-                      isCorrect
-                        ? 'border-green-500 bg-green-500/10'
-                        : isWrong
-                        ? 'border-red-500 bg-red-500/10'
-                        : isSelected
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border bg-muted hover:border-primary/50'
-                    } ${submitted ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        isCorrect
-                          ? 'bg-green-500 text-white'
-                          : isWrong
-                          ? 'bg-red-500 text-white'
-                          : isSelected
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted-foreground/20 text-foreground'
-                      }`}
-                    >
-                      {isCorrect ? <Check className="w-5 h-5" /> : isWrong ? <X className="w-5 h-5" /> : key}
-                    </div>
-                    <span className="flex-1 font-medium">{options[key]}</span>
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            {/* Result Message */}
-            {result && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`text-center p-4 rounded-lg ${
-                  result.isCorrect ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                }`}
-              >
-                <p className="text-2xl font-bold">
-                  {result.isCorrect ? `Correct! +${result.pointsEarned} points 🎉` : 'Incorrect'}
-                </p>
-              </motion.div>
-            )}
-
-            {/* Submit Button */}
-            {!submitted && (
-              <Button
-                className="w-full neon-glow"
-                size="lg"
-                onClick={handleSubmit}
-                disabled={!selectedOption || submitted}
-              >
-                Submit Answer
-              </Button>
-            )}
-
-            {/* Points Info */}
-            <div className="text-center text-sm text-muted-foreground flex items-center justify-between">
-              <span>💰 {points} points available</span>
+          <Card className="bg-card/40 border-white/10 shadow-2xl backdrop-blur-2xl p-6 md:p-8 relative overflow-y-auto max-h-[85vh] rounded-[2rem] border-t-white/5 mx-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent hover:scrollbar-thumb-white/20">
+            {/* Ambient Background Effects - Softened */}
+            <div className="absolute -top-24 -left-24 w-64 h-64 bg-primary/10 rounded-full blur-[80px] pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-purple-500/5 rounded-full blur-[80px] pointer-events-none" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
               
-              <div className="flex gap-2">
-                {['❤️', '🔥', '👏', '😮'].map((emoji) => (
-                  <motion.button
-                    key={emoji}
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => sendReaction(emoji)}
-                    className="text-xl hover:grayscale-0 grayscale transition-all"
+              {/* Left Column: Info, Timer, Results */}
+              <div className="flex flex-col gap-6 justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-12 h-12">
+                      <svg className="w-full h-full -rotate-90">
+                        <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="none" className="text-white/5" />
+                        <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="none" strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - progressPercentage / 100)}`} className={`${progressColor} transition-all duration-1000`} strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className={`text-sm font-black ${progressColor}`}>{timeRemaining}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-white/40 text-[9px] font-black tracking-widest uppercase">Live Challenge</h3>
+                      <div className="flex items-center gap-1.5">
+                         <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 bg-primary/10 rounded-md border border-primary/20">{points} PTS</span>
+                         {submitted && (
+                           <span className="text-[10px] font-bold text-green-500 px-1.5 py-0.5 bg-green-500/10 rounded-md border border-green-500/20 uppercase">Locked In</span>
+                         )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <h2 className="text-2xl md:text-3xl font-bold tracking-tight leading-tight text-white">
+                    {questionText}
+                  </h2>
+                </div>
+
+                {result && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={`p-6 rounded-[1.5rem] border flex flex-col items-center justify-center text-center gap-4 ${
+                      result.isCorrect 
+                        ? 'bg-green-500/[0.03] border-green-500/20' 
+                        : 'bg-primary/[0.03] border-primary/20'
+                    }`}
                   >
-                    {emoji}
-                  </motion.button>
-                ))}
+                    <div className="space-y-0.5">
+                      <h3 className={`text-3xl font-black italic tracking-tighter ${result.isCorrect ? 'text-green-500' : 'text-primary'}`}>
+                        {result.isCorrect ? "SPOT ON!" : "NICE TRY!"}
+                      </h3>
+                      <p className="text-[9px] font-black tracking-[0.2em] uppercase text-white/30">Class Verdict</p>
+                    </div>
+                    
+                    <div className="space-y-2 w-full">
+                       <div className="w-16 h-16 mx-auto rounded-2xl bg-green-500 text-white flex items-center justify-center text-3xl font-black shadow-lg">
+                         {result.correctOption}
+                       </div>
+                       <p className="text-sm font-medium text-white/60 truncate max-w-full px-2">
+                         {options[result.correctOption as keyof typeof options]}
+                       </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 w-full">
+                       <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                          <p className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Time</p>
+                          <p className="text-base font-black text-white">{(submissionTime! / 1000).toFixed(1)}s</p>
+                       </div>
+                       <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                          <p className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Score</p>
+                          <p className={`text-base font-black ${result.isCorrect ? 'text-green-500' : 'text-white'}`}>
+                            +{result.isCorrect ? result.pointsEarned : 0}
+                          </p>
+                       </div>
+                    </div>
+                  </motion.div>
+                )}
               </div>
+
+              {/* Right Column: Interaction & Stats */}
+              <div className="flex flex-col gap-6">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                     <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">Select Answer</span>
+                     {submitted && (
+                        <span className="text-[9px] font-black text-white/40 uppercase items-center flex gap-1">
+                          <Check className="w-2 h-2" /> Answer Recorded
+                        </span>
+                     )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {(Object.keys(options) as Array<'A' | 'B' | 'C' | 'D'>).map((key) => {
+                      const isSelected = selectedOption === key;
+                      const isCorrect = result?.correctOption === key;
+                      
+                      let buttonClass = 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/20';
+                      let iconClass = 'bg-white/10 text-white/40';
+                      let icon: React.ReactNode = key;
+
+                      if (isCorrect) {
+                        buttonClass = 'border-green-500/50 bg-green-500/10 shadow-sm';
+                        iconClass = 'bg-green-500 text-white';
+                        icon = <Check className="w-4 h-4" />;
+                      } else if (isSelected) {
+                        buttonClass = 'border-primary/50 bg-primary/10 shadow-sm ring-1 ring-primary/20';
+                        iconClass = 'bg-primary text-primary-foreground';
+                        icon = submitted ? <Check className="w-3 h-3" /> : key;
+                      }
+
+                      return (
+                        <motion.button
+                          key={key}
+                          whileHover={!submitted ? { x: 4, backgroundColor: 'rgba(255,255,255,0.08)' } : {}}
+                          whileTap={!submitted ? { scale: 0.99 } : {}}
+                          onClick={() => !submitted && setSelectedOption(key)}
+                          disabled={submitted}
+                          className={`group w-full p-4 rounded-xl border transition-all text-left flex items-center gap-4 ${buttonClass} ${submitted ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}`}
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-base transition-transform ${iconClass}`}>
+                            {icon}
+                          </div>
+                          <span className="flex-1 font-semibold text-base leading-tight text-white/90">{options[key]}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {!submitted ? (
+                  <Button
+                    className="w-full h-14 rounded-xl text-sm font-bold uppercase tracking-wider glow-sm"
+                    onClick={handleSubmit}
+                    disabled={!selectedOption || submitted}
+                  >
+                    Lock It In
+                  </Button>
+                ) : (
+                  submitted && !result && (
+                    <div className="flex-1 flex items-center justify-center p-8 border border-white/5 bg-white/[0.02] rounded-[1.5rem]">
+                      <div className="text-center space-y-2">
+                        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin mx-auto opacity-50" />
+                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Analyzing Performance...</p>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Status Bar - Compact */}
+            <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between opacity-40">
+               <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-white">{studentName}</span>
+               </div>
+               <div className="text-[9px] font-bold uppercase tracking-widest text-white">
+                  {selectedOption ? `LOCKED: ${selectedOption}` : 'AWAITING SELECTION'}
+               </div>
             </div>
           </Card>
         </motion.div>

@@ -10,11 +10,9 @@ import {
 } from '@nestjs/common';
 import { AnnouncementsService } from './announcements.service';
 import { CreateAnnouncementDto, UpdateAnnouncementDto } from './dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Tenant } from '../auth/decorators/tenant.decorator';
 
 @Controller('announcements')
-@UseGuards(JwtAuthGuard)
 export class AnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
 

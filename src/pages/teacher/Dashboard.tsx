@@ -112,8 +112,7 @@ const TeacherDashboard = () => {
     { label: "Send Announcement", icon: Bell, color: "text-blue-500", path: "/teacher/announcements" },
     { label: "Manage Tests", icon: FileText, color: "text-green-500", path: "/teacher/tests" },
     { label: "Analytics", icon: BarChart2, color: "text-blue-500", path: "/teacher/analytics" },
-    { label: "Voice Upload", icon: Mic, color: "text-green-500", path: "/teacher/voice-upload" },
-    { label: "Engagement", icon: Target, color: "text-red-500", path: "/teacher/engagement" },
+    { label: "Audio Notes", icon: Mic, color: "text-green-500", path: "/teacher/voice-upload" },
     { label: "My Tasks", icon: CheckSquare, color: "text-blue-500", path: "/teacher/tasks" },
     { label: "Communication", icon: MessageSquare, color: "text-green-500", path: "/teacher/communication" },
   ];
@@ -206,7 +205,7 @@ const TeacherDashboard = () => {
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>
             <Card className="glass-card p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-4 sm:mb-6">
-                <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-accent" />
+                <Calendar className="w-5 h-5 sm:w-6 sm:h-6 accent-blue-300 " />
                 <h2 className="text-xl sm:text-2xl font-semibold">Recent Activity</h2>
               </div>
               <div className="space-y-4">

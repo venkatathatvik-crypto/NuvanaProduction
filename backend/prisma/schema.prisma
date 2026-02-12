@@ -174,6 +174,7 @@ model profiles {
   engagement_sessions                        engagement_sessions[]
   files                                      files[]
   notifications                              notifications[]
+  pdf_annotations                            pdf_annotations[]
   user_roles                                 user_roles                   @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   schools                                    schools?                     @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   quiz_history                               quiz_history[]
@@ -188,6 +189,7 @@ model profiles {
   tests                                      tests[]
   timetable_periods                          timetable_periods[]
   voice_notes                                voice_notes[]
+  whatsapp_messages                          whatsapp_messages[]
 
   @@index([school_id], map: "idx_profiles_school")
 }
@@ -245,6 +247,7 @@ model schools {
   timetable_days             timetable_days[]
   timetable_periods          timetable_periods[]
   voice_notes                voice_notes[]
+  whatsapp_messages          whatsapp_messages[]
 }
 
 model student_answers {
@@ -422,9 +425,13 @@ model pdf_annotations {
   annotation_data Json
   created_at      DateTime? @default(now()) @db.Timestamptz(6)
   updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  profile_id      String    @db.Uuid
+  note_type       String?   @default("ANNOTATION") @db.VarChar(20)
+  profiles        profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_pdf_annotations_profile")
   files           files     @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   schools         schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@unique([file_id, profile_id, page_number, note_type], map: "idx_pdf_notes_per_user_type")
   @@index([file_id], map: "idx_pdf_annotations_file")
   @@index([school_id], map: "idx_pdf_annotations_tenant")
 }
@@ -556,6 +563,26 @@ model term_engagement_summary {
   @@index([school_id, academic_year], map: "idx_term_summary_school_year")
 }
 
+model whatsapp_messages {
+  id            String                          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  wa_message_id String?                         @unique
+  sender_id     String?                         @db.Uuid
+  school_id     String?                         @db.Uuid
+  phone_number  String
+  message_text  String
+  status        whatsapp_message_status_enum    @default(SENT)
+  direction     whatsapp_message_direction_enum @default(OUTGOING)
+  metadata      Json?                           @default("{}")
+  created_at    DateTime?                       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?                       @default(now()) @db.Timestamptz(6)
+  schools       schools?                        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles      profiles?                       @relation(fields: [sender_id], references: [id], onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_whatsapp_messages_school")
+  @@index([sender_id], map: "idx_whatsapp_messages_sender")
+  @@index([wa_message_id], map: "idx_whatsapp_messages_wa_id")
+}
+
 enum attendance_status_enum {
   present
   absent
@@ -577,4 +604,16 @@ enum question_type_enum {
 enum engagement_session_status {
   active
   ended
+}
+
+enum whatsapp_message_direction_enum {
+  OUTGOING
+  INCOMING
+}
+
+enum whatsapp_message_status_enum {
+  SENT
+  DELIVERED
+  READ
+  FAILED
 }

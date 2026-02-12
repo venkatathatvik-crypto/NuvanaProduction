@@ -10,19 +10,24 @@ import { useQuery } from '@tanstack/react-query';
 import { engagementApi } from '@/services/engagementApi';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LabelList, Tooltip } from 'recharts';
 
-interface Response {
+export interface Response {
   studentId: string;
   studentName: string;
   responseTime: number;
   isCorrect: boolean;
   selectedOption: string;
+  points?: number;
 }
+
+const EMPTY_ARRAY: any[] = [];
 
 export const LiveResponseFeed: React.FC<{ 
   sessionId: string; 
   onResponsesUpdate?: (responses: Response[]) => void;
-}> = ({ sessionId, onResponsesUpdate }) => {
-  const [liveResponses, setLiveResponses] = useState<Response[]>([]);
+  externalLiveResponses?: Response[];
+  isHistory?: boolean;
+}> = ({ sessionId, onResponsesUpdate, externalLiveResponses = EMPTY_ARRAY, isHistory }) => {
+  const [internalLiveResponses, setInternalLiveResponses] = useState<Response[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'chart'>('chart');
 
   const { data: sessionDataRaw, isLoading } = useQuery({
@@ -47,19 +52,22 @@ export const LiveResponseFeed: React.FC<{
           responseTime: r.response_time_ms,
           isCorrect: r.is_correct,
           selectedOption: r.selected_option,
+          points: r.points_earned,
         });
       });
     });
     return allResps;
   }, [sessionDataRaw]);
 
+  // Combine parent-provided live responses, internal live responses (as fallback), and historical data
   const allResponses = useMemo(() => {
-    // Merge live and historical, removing duplicates by studentId (preferring live if needed)
     const seen = new Set();
-    const merged = [...liveResponses];
-    merged.forEach(r => seen.add(r.studentId));
+    const merged: Response[] = [];
+
+    // Prioritize live data
+    const liveSource = externalLiveResponses.length > 0 ? externalLiveResponses : internalLiveResponses;
     
-    historicalResponses.forEach(r => {
+    [...liveSource, ...historicalResponses].forEach(r => {
       if (!seen.has(r.studentId)) {
         merged.push(r);
         seen.add(r.studentId);
@@ -67,7 +75,7 @@ export const LiveResponseFeed: React.FC<{
     });
 
     return merged.sort((a, b) => b.responseTime - a.responseTime);
-  }, [liveResponses, historicalResponses]);
+  }, [externalLiveResponses, internalLiveResponses, historicalResponses]);
 
   useEffect(() => {
     onResponsesUpdate?.(allResponses);
@@ -84,17 +92,18 @@ export const LiveResponseFeed: React.FC<{
   }, [allResponses]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    // If parent is handling externalLiveResponses, we don't need internal listener
+    if (!sessionId || isHistory || (externalLiveResponses && externalLiveResponses.length > 0)) return;
 
     const handleResponse = (data: any) => {
-      console.log('[LiveResponseFeed] New response received:', data);
-      setLiveResponses((prev) => [
+      setInternalLiveResponses((prev) => [
         {
           studentId: data.studentId,
           studentName: data.studentName,
           responseTime: data.responseTime,
           isCorrect: data.isCorrect,
           selectedOption: data.selectedOption,
+          points: data.pointsEarned,
         },
         ...prev,
       ]);
@@ -104,13 +113,15 @@ export const LiveResponseFeed: React.FC<{
     return () => {
       engagementSocket.off('response:received', handleResponse);
     };
-  }, [sessionId]);
+  }, [sessionId, isHistory, externalLiveResponses]);
 
   return (
     <Card className="glass-card">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div className="flex items-center gap-4">
-          <CardTitle className="text-lg font-semibold">Live Pulse</CardTitle>
+          <CardTitle className="text-lg font-semibold">
+            {isHistory ? "Session Results" : "Live Pulse"}
+          </CardTitle>
           <div className="flex bg-muted rounded-lg p-1">
             <Button 
               variant={viewMode === 'chart' ? 'secondary' : 'ghost'} 
@@ -130,9 +141,15 @@ export const LiveResponseFeed: React.FC<{
             </Button>
           </div>
         </div>
-        <Badge variant="outline" className="animate-pulse bg-green-500/10 text-green-500 border-green-500/20">
-          Live
-        </Badge>
+        {isHistory ? (
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+            Report
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="animate-pulse bg-green-500/10 text-green-500 border-green-500/20">
+            Live
+          </Badge>
+        )}
       </CardHeader>
       
       <CardContent>
@@ -146,7 +163,7 @@ export const LiveResponseFeed: React.FC<{
           </div>
         ) : viewMode === 'chart' ? (
           <div className="h-[300px] w-full pt-4">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minHeight={300}>
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                 <XAxis 
                   dataKey="name" 
@@ -194,26 +211,34 @@ export const LiveResponseFeed: React.FC<{
               {allResponses.map((resp, i) => (
                 <motion.div
                   key={`${resp.studentId}-${i}`}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/20 transition-all duration-300"
                 >
-                  <div className="flex items-center gap-3">
-                    {resp.isCorrect ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )}
-                    <div>
-                      <p className="font-medium text-sm">{resp.studentName}</p>
-                      <p className="text-xs text-muted-foreground">Selected: {resp.selectedOption}</p>
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-lg ${resp.isCorrect ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'} border border-current opacity-80`}>
+                      {resp.isCorrect ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm tracking-tight">{resp.studentName}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">Option {resp.selectedOption}</span>
+                        <div className="w-1 h-1 rounded-full bg-border" />
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground opacity-80 uppercase tracking-widest">
+                          <Clock className="w-3 h-3" />
+                          {resp.responseTime}ms
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    {resp.responseTime}ms
-                  </div>
+                  <Badge variant="outline" className={`font-black text-[10px] tracking-tight ${resp.isCorrect ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+                    {resp.isCorrect ? 'Correct' : 'Incorrect'}
+                  </Badge>
                 </motion.div>
               ))}
             </AnimatePresence>

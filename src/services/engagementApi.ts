@@ -138,4 +138,14 @@ export const engagementApi = {
     );
     return response.data;
   },
+  // Get student-level details for a specific session
+  getSessionStudentDetails: async (sessionId: string, token: string) => {
+    const response = await axios.get(
+      `${API_URL}/engagement/sessions/${sessionId}/students`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return response.data;
+  },
 };
