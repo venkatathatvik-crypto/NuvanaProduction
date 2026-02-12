@@ -5,6 +5,7 @@ export interface PdfAnnotation {
   file_id: string;
   page_number: number;
   annotation_data: any;
+  note_type: 'ANNOTATION' | 'SCRATCHPAD';
   created_at?: string;
   updated_at?: string;
 }
@@ -12,12 +13,14 @@ export interface PdfAnnotation {
 export const savePdfAnnotation = async (
   fileId: string,
   pageNumber: number,
-  annotationData: any
+  annotationData: any,
+  noteType: 'ANNOTATION' | 'SCRATCHPAD' = 'ANNOTATION'
 ): Promise<PdfAnnotation> => {
   return apiClient.post<PdfAnnotation>("/pdf-annotations", {
     file_id: fileId,
     page_number: pageNumber,
     annotation_data: annotationData,
+    note_type: noteType,
   });
 };
 

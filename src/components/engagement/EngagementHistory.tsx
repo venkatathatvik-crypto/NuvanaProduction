@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Award, Calendar, Users, Target, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 
 interface EngagementRecord {
@@ -28,111 +29,129 @@ interface EngagementHistoryProps {
 
 export const EngagementHistory: React.FC<EngagementHistoryProps> = ({ history, isLoading }) => {
   const getMedal = (accuracy: number) => {
-    if (accuracy >= 90) return { icon: <Award className="w-5 h-5 text-yellow-500" />, label: 'Gold', color: 'bg-yellow-500/10 text-yellow-600' };
-    if (accuracy >= 75) return { icon: <Award className="w-5 h-5 text-slate-400" />, label: 'Silver', color: 'bg-slate-400/10 text-slate-500' };
-    if (accuracy >= 60) return { icon: <Award className="w-5 h-5 text-amber-600" />, label: 'Bronze', color: 'bg-amber-600/10 text-amber-700' };
+    if (accuracy >= 90) return { icon: <Award className="w-3.5 h-3.5" />, label: 'Gold Rank', color: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20' };
+    if (accuracy >= 75) return { icon: <Award className="w-3.5 h-3.5" />, label: 'Silver Rank', color: 'text-slate-400 bg-slate-400/10 border-slate-400/20' };
+    if (accuracy >= 60) return { icon: <Award className="w-3.5 h-3.5" />, label: 'Bronze Rank', color: 'text-orange-500 bg-orange-500/10 border-orange-500/20' };
     return null;
   };
-
-  if (isLoading) {
-    return (
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" /> Engagement Journey
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 w-full animate-pulse bg-muted/20 rounded-xl" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   const historyItems = Array.isArray(history) ? history : [];
 
   return (
-    <Card className="glass-card">
-      <CardHeader className="flex flex-row items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <CardTitle className="flex items-center gap-2">
-            <Award className="w-6 h-6 text-primary" /> Engagement Journey
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">Your history of live classroom interactions</p>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Engagement Journey</h2>
+          <p className="text-sm text-muted-foreground mt-1">Your track record of live classroom participation</p>
         </div>
-      </CardHeader>
-      <CardContent>
-        {historyItems.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground italic">
-            <Target className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            No engagement history found yet. Join a live session to start your journey!
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent border-border/50">
-                  <TableHead className="w-[250px]">Session</TableHead>
-                  <TableHead>Teacher</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-center">Accuracy</TableHead>
-                  <TableHead className="text-right">Points</TableHead>
-                  <TableHead className="text-right w-[100px]">Medal</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <AnimatePresence mode="popLayout">
-                  {historyItems.map((record, index) => {
-                    const medal = getMedal(record.accuracyRate);
-                    return (
-                      <motion.tr
-                        key={record.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="hover:bg-muted/30 border-border/50 transition-colors cursor-default"
-                      >
-                        <TableCell className="font-semibold">{record.sessionName}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Users className="w-3 h-3 text-muted-foreground" />
-                            {record.teacherName}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {format(new Date(record.startedAt), 'MMM dd, yyyy')}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={`font-mono ${record.accuracyRate >= 80 ? 'text-green-500 border-green-500/20' : 'text-blue-500'}`}>
-                            {record.accuracyRate}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-primary">
-                          +{record.pointsEarned}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {medal ? (
-                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${medal.color}`}>
-                              {medal.icon}
-                              {medal.label}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                      </motion.tr>
-                    );
-                  })}
-                </AnimatePresence>
-              </TableBody>
-            </Table>
-          </div>
+        {!isLoading && historyItems.length > 0 && (
+          <Badge variant="outline" className="glass bg-primary/5 text-primary border-primary/20 px-3 py-1">
+            {historyItems.length} Sessions Completed
+          </Badge>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-48 w-full glass-card rounded-2xl" />
+          ))}
+        </div>
+      ) : historyItems.length === 0 ? (
+        <Card className="glass-card border-dashed bg-transparent">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-primary/5 flex items-center justify-center mb-4">
+              <Target className="w-8 h-8 text-muted-foreground opacity-30" />
+            </div>
+            <h3 className="text-lg font-semibold">No Sessions Joined Yet</h3>
+            <p className="text-sm text-muted-foreground max-w-xs mt-2">
+              Your engagement journey starts when you participate in your first live session. Keep an eye out for teacher questions!
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <AnimatePresence mode="popLayout">
+            {historyItems.map((record, index) => {
+              const medal = getMedal(record.accuracyRate);
+              return (
+                <motion.div
+                  key={record.id}
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  whileHover={{ y: -4 }}
+                >
+                  <Card className="glass-card overflow-hidden h-full group transition-all duration-300 hover:border-primary/40">
+                    <CardHeader className="pb-4 border-b border-border/50 bg-primary/[0.01]">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                          <CardTitle className="text-base font-bold truncate group-hover:text-primary transition-colors">
+                            {record.sessionName}
+                          </CardTitle>
+                          <div className="flex items-center gap-2 mt-1 opacity-60">
+                            <Calendar className="w-3 h-3" />
+                            <span className="text-[10px] font-medium uppercase tracking-wider">
+                              {format(new Date(record.startedAt), 'MMM dd, yyyy')}
+                            </span>
+                          </div>
+                        </div>
+                        {medal && (
+                          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-tighter shadow-sm ${medal.color}`}>
+                            {medal.icon}
+                            {medal.label}
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-5 space-y-5">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest opacity-60">Accuracy</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xl font-black ${record.accuracyRate >= 80 ? 'text-green-500' : 'text-primary'}`}>
+                              {record.accuracyRate}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest opacity-60">Points</p>
+                          <div className="flex items-center justify-end gap-1.5 font-black text-xl text-primary">
+                            <Zap className="w-4 h-4" />
+                            +{record.pointsEarned}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">
+                          <span>Participation</span>
+                          <span>{record.participationRate}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden border border-border/50">
+                          <motion.div 
+                            initial={{ width: 0 }} 
+                            animate={{ width: `${record.participationRate}%` }} 
+                            className="h-full bg-primary/60"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-border/50 flex items-center justify-between text-[10px] font-semibold text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="w-3 h-3 text-primary" />
+                          <span>Dr. {record.teacherName}</span>
+                        </div>
+                        <span>{record.answeredCount}/{record.totalQuestions} Questions</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
   );
 };

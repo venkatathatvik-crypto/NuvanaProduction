@@ -1,0 +1,2035 @@
+{
+	"info": {
+		"_postman_id": "auth-collection-id",
+		"name": "Nuvana Authentication API",
+		"description": "## Nuvana Authentication API Collection\n\nThis collection contains all authentication-related endpoints for the Nuvana system, supporting multiple roles: Super Admin, School Admin, Teacher, and Student.\n\n### How Tokens Work\n\n1. **Access Token**: A short-lived JWT token used to authenticate most API requests. It should be sent in the `Authorization` header as a Bearer token: \n   `Authorization: Bearer <your_access_token>`\n\n2. **Refresh Token**: A long-lived JWT token used to obtain a new access token when the current one expires. It is sent to the `/auth/refresh` endpoint.\n\n### Authentication Flow\n\n1. **Login**: Perform a login request with your credentials and `expectedRole` (optional but recommended).\n2. **Store Tokens**: Upon successful login, you will receive an `access_token` and a `refresh_token`.\n3. **Authorize Requests**: Use the `access_token` for all subsequent requests requiring authentication.\n4. **Handle Expiry**: If a request returns a `401 Unauthorized` error, use the `refresh_token` to get a new `access_token`.\n\n### Roles in Nuvana\n\n| Role | ID | Description |\n| :--- | :--- | :--- |\n| `super_admin` | 1 | Full system access, manages schools |\n| `school_admin` | 2 | Manages school-specific settings and users |\n| `teacher` | 3 | Manages classes, attendance, and content |\n| `student` | 4 | Accesses courses, quizzes, and learning materials |\n\n### Base URL\n\nThe default base URL is `http://localhost:3000`. You can change this using Postman environments.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Super Admin",
+			"item": [
+				{
+					"name": "Register Super Admin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"superadmin@nuvana.com\",\n    \"password\": \"nuvana2024\",\n    \"name\": \"Nuvana Super Admin\",\n    \"secret\": \"{{SUPER_ADMIN_SECRET}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/super-admin/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"super-admin",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard School & Admin",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Greenwood High\",\n    \"admin_email\": \"admin@greenwood.com\",\n    \"admin_password\": \"AdminPass123!\",\n    \"admin_name\": \"John School Admin\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/schools/onboard",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"schools",
+								"onboard"
+							]
+						},
+						"description": "Creates a new school and its primary School Admin in one transaction. Requires Super Admin privileges."
+					},
+					"response": []
+				},
+				{
+					"name": "Login Super Admin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"superadmin@nuvana.com\",\n    \"password\": \"nuvana2024\",\n    \"expectedRole\": \"super_admin\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints specifically for Super Administrators who manage the entire Nuvana platform."
+		},
+		{
+			"name": "School Admin",
+			"item": [
+				{
+					"name": "Login School Admin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@school.com\",\n    \"password\": \"AdminPassword123\",\n    \"school_id\": \"your-school-uuid-here\",\n    \"expectedRole\": \"school_admin\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register User (Teacher/Student)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"user@school.com\",\n    \"name\": \"New Teacher\",\n    \"role_id\": 3,\n    \"school_id\": \"your-school-uuid-here\",\n    \"temporaryPassword\": \"TempPass123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						},
+						"description": "Registers a new user (Teacher or Student) within a school. Requires School Admin or Super Admin privileges."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Teacher",
+			"item": [
+				{
+					"name": "Login Teacher",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"teacher@school.com\",\n    \"password\": \"TeacherPass123!\",\n    \"school_id\": \"your-school-uuid-here\",\n    \"expectedRole\": \"teacher\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Student",
+			"item": [
+				{
+					"name": "Login Student",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"student@school.com\",\n    \"password\": \"StudentPass123!\",\n    \"school_id\": \"your-school-uuid-here\",\n    \"expectedRole\": \"student\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users Management",
+			"item": [
+				{
+					"name": "List All Users",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users"
+							],
+							"query": [
+								{
+									"key": "role_id",
+									"value": "3",
+									"description": "Optional: 3 for Teachers, 4 for Students"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/user-uuid-here",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"user-uuid-here"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Name\",\n    \"email\": \"updated@email.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/users/user-uuid-here",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"user-uuid-here"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Avatar",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/users/user-uuid-here/avatar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"user-uuid-here",
+								"avatar"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/user-uuid-here",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"user-uuid-here"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Common",
+			"item": [
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"user-uuid-here\",\n    \"newPassword\": \"NewPermanentPassword123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/reset-password",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"reset-password"
+							]
+						},
+						"description": "Required for first-time login for students and teachers after admin registration."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"your-refresh-token-here\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Exchange a refresh token for a new access token."
+					},
+					"response": []
+				},
+				{
+					"name": "Validate Session",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/validate-session",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"validate-session"
+							]
+						},
+						"description": "Check if the current session token is still valid."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Session/User Details",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/session",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"session"
+							]
+						},
+						"description": "Retrieves the current user's profile information."
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "School Admin Operations",
+			"item": [
+				{
+					"name": "User Management",
+					"item": [
+						{
+							"name": "List All Users",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users?role_id=3",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"users"
+									],
+									"query": [
+										{
+											"key": "role_id",
+											"value": "3",
+											"description": "3 for Teachers, 4 for Students"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get User Profile",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users/user-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"users",
+										"user-uuid-here"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update User Profile",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Updated Name\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/users/user-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"users",
+										"user-uuid-here"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create/Update Student Details (Assign to Class)",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"roll_number\": \"S123\",\n    \"class_id\": \"class-uuid-here\",\n    \"parent_contact\": \"+1234567890\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/users/user-uuid-here/student-details",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"users",
+										"user-uuid-here",
+										"student-details"
+									]
+								},
+								"description": "Sets a student's roll number and assigns them to a specific class."
+							},
+							"response": []
+						},
+						{
+							"name": "Create/Update Teacher Details",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"bio\": \"Experienced Physics teacher with 10 years experience.\",\n    \"specialization\": \"Quantum Mechanics\",\n    \"joining_date\": \"2024-01-01\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/users/user-uuid-here/teacher-details",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"users",
+										"user-uuid-here",
+										"teacher-details"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete User",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users/user-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"users",
+										"user-uuid-here"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Academic Setup",
+					"item": [
+						{
+							"name": "Grades",
+							"item": [
+								{
+									"name": "List Grades",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/grades",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grades"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create Grade",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"10th Grade\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/grades",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grades"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Update Grade",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "PATCH",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"Grade 10 Modified\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/grades/grade-id-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grades",
+												"grade-id-here"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Grade",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/grades/grade-id-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grades",
+												"grade-id-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Classes",
+							"item": [
+								{
+									"name": "List Classes",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/classes",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"classes"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create Class",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"10-A\",\n    \"grade_level_id\": 1\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/classes",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"classes"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Update Class",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "PATCH",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"10-A Modified\",\n    \"grade_level_id\": 1\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/classes/class-uuid-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"classes",
+												"class-uuid-here"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Class",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/classes/class-uuid-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"classes",
+												"class-uuid-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Subjects (Master)",
+							"item": [
+								{
+									"name": "List Master Subjects",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/subjects",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"subjects"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create Master Subject",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"Physics\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/subjects",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"subjects"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Master Subject",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/subjects/subject-uuid-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"subjects",
+												"subject-uuid-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Exam Types",
+							"item": [
+								{
+									"name": "List Exam Types",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/exam-types",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"exam-types"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create Exam Type",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"Unit Test 1\",\n    \"type\": \"Internal Assessment\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/exam-types",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"exam-types"
+											]
+										},
+										"description": "type can be 'Internal Assessment' or 'School Exam'"
+									},
+									"response": []
+								},
+								{
+									"name": "Update Exam Type",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "PATCH",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"Unit Test 1 Updated\",\n    \"type\": \"Internal_Assessment\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/exam-types/exam-type-id-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"exam-types",
+												"exam-type-id-here"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Exam Type",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/exam-types/exam-type-id-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"exam-types",
+												"exam-type-id-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "File Categories",
+							"item": [
+								{
+									"name": "List File Categories",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/file-categories",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"file-categories"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create File Category",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"Homework\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/file-categories",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"file-categories"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Update File Category",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "PATCH",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"name\": \"Homework Assignments\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/file-categories/category-id-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"file-categories",
+												"category-id-here"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete File Category",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/file-categories/category-id-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"file-categories",
+												"category-id-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "Assignments",
+					"item": [
+						{
+							"name": "Grade-Subject Assignments",
+							"item": [
+								{
+									"name": "List All Grade-Subjects",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/grade-subjects",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grade-subjects"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Assign Subjects to Grade",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"grade_level_id\": 1,\n    \"subject_master_ids\": [\n        \"subject-uuid-1\",\n        \"subject-uuid-2\"\n    ]\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/grade-subjects",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grade-subjects"
+											]
+										},
+										"description": "Associates master subjects with a specific grade level."
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Grade-Subject",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/grade-subjects/grade-subject-uuid-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"grade-subjects",
+												"grade-subject-uuid-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Teacher-Class Assignments",
+							"item": [
+								{
+									"name": "List All Teacher-Classes",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/teacher-classes",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"teacher-classes"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Assign Teacher to Class",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"teacher_id\": \"teacher-uuid-here\",\n    \"class_id\": \"class-uuid-here\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/teacher-classes",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"teacher-classes"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Teacher-Class Assignment",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/teacher-classes/assignment-uuid-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"teacher-classes",
+												"assignment-uuid-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Teacher-Subject Assignments",
+							"item": [
+								{
+									"name": "List All Teacher-Subjects",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/teacher-subjects",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"teacher-subjects"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Assign Subjects to Teacher",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"teacher_id\": \"teacher-uuid-here\",\n    \"grade_subject_ids\": [\n        \"grade-subject-uuid-1\",\n        \"grade-subject-uuid-2\"\n    ]\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_url}}/academic/teacher-subjects",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"teacher-subjects"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Teacher-Subject Assignment",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{access_token}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/academic/teacher-subjects/assignment-uuid-here",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"academic",
+												"teacher-subjects",
+												"assignment-uuid-here"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "Timetable",
+					"item": [
+						{
+							"name": "Get Weekly Timetable for Class",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/academic/timetable/class/class-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"academic",
+										"timetable",
+										"class",
+										"class-uuid-here"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create or Update Timetable Period",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"class_id\": \"class-uuid-here\",\n    \"day_of_week\": 1,\n    \"period_number\": 1,\n    \"subject_id\": \"grade-subject-uuid-here\",\n    \"teacher_id\": \"teacher-uuid-here\",\n    \"start_time\": \"08:30\",\n    \"end_time\": \"09:20\",\n    \"room\": \"Room 101\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/academic/timetable/periods",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"academic",
+										"timetable",
+										"periods"
+									]
+								},
+								"description": "day_of_week: 1=Monday, 7=Sunday. subject_id must be a Grade-Subject ID."
+							},
+							"response": []
+						},
+						{
+							"name": "Partial Update Timetable Period",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"period_number\": 2,\n    \"start_time\": \"09:30\",\n    \"end_time\": \"10:20\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/academic/timetable/periods/period-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"academic",
+										"timetable",
+										"periods",
+										"period-uuid-here"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Timetable Period",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/academic/timetable/periods/period-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"academic",
+										"timetable",
+										"periods",
+										"period-uuid-here"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Announcements",
+					"item": [
+						{
+							"name": "Create Announcement",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"School Closure\",\n    \"message\": \"School will be closed tomorrow due to weather.\",\n    \"isUrgent\": true,\n    \"classIds\": [\"class-uuid-1\", \"class-uuid-2\"],\n    \"teacherId\": \"admin-uuid-here\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/announcements",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"announcements"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Announcement",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/announcements/announcement-uuid",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"announcements",
+										"announcement-uuid"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "School Settings",
+					"item": [
+						{
+							"name": "Get School Details",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/schools/school-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"schools",
+										"school-uuid-here"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update School Profile",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Greenwood International School\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/schools/school-uuid-here",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"schools",
+										"school-uuid-here"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "SUPER_ADMIN_SECRET",
+			"value": "your-secret-here",
+			"type": "string"
+		}
+	]
+}

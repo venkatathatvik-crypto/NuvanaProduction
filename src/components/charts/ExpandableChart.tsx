@@ -5,6 +5,8 @@ import { Maximize2, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 // --- Components ---
 
 interface ChartCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -12,48 +14,66 @@ interface ChartCardProps extends React.HTMLAttributes<HTMLDivElement> {
     description?: string;
     onClick?: () => void;
     children: React.ReactNode;
+    isLoading?: boolean;
 }
 
-export const ChartCard = ({ title, description, onClick, children, className, ...props }: ChartCardProps) => {
+export const ChartCard = ({ title, description, onClick, children, className, isLoading, ...props }: ChartCardProps) => {
     const [isHovered, setIsHovered] = useState(false);
 
     return (
         <Card
             className={cn(
-                "cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.01] relative overflow-hidden group glass-card",
+                "transition-all duration-300 relative overflow-hidden group glass-card",
+                !isLoading && "cursor-pointer hover:shadow-lg hover:scale-[1.01]",
                 className
             )}
-            onClick={onClick}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
+            onClick={!isLoading ? onClick : undefined}
+            onMouseEnter={() => !isLoading && setIsHovered(true)}
+            onMouseLeave={() => !isLoading && setIsHovered(false)}
             {...props}
         >
             <CardHeader>
                 <CardTitle className="flex justify-between items-center">
-                    {title}
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1 : 0.8 }}
-                        className="text-muted-foreground bg-secondary/50 p-1.5 rounded-full"
-                    >
-                        <Maximize2 className="w-4 h-4" />
-                    </motion.div>
+                    <span className={cn(isLoading && "h-6 w-3/4 animate-pulse bg-muted rounded")}>
+                        {!isLoading ? title : null}
+                    </span>
+                    {!isLoading && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1 : 0.8 }}
+                            className="text-muted-foreground bg-secondary/50 p-1.5 rounded-full"
+                        >
+                            <Maximize2 className="w-4 h-4" />
+                        </motion.div>
+                    )}
                 </CardTitle>
-                {description && <CardDescription>{description}</CardDescription>}
+                {isLoading ? (
+                    <div className="h-4 w-1/2 animate-pulse bg-muted/60 rounded mt-2" />
+                ) : (
+                    description && <CardDescription>{description}</CardDescription>
+                )}
             </CardHeader>
             <CardContent className="h-[320px] relative">
-                {children}
-
-                {/* Hover overlay hint */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: isHovered ? 1 : 0 }}
-                    className="absolute inset-0 bg-background/5 backdrop-blur-[1px] flex items-center justify-center p-4 pointer-events-none transition-opacity z-10"
-                >
-                    <span className="bg-background/90 text-foreground px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm backdrop-blur-md">
-                        Click to expand
-                    </span>
-                </motion.div>
+                {isLoading ? (
+                    <div className="w-full h-full flex flex-col gap-4">
+                        <div className="flex-1 w-full bg-muted/40 animate-pulse rounded-lg" />
+                        <div className="h-4 w-full bg-muted/20 animate-pulse rounded" />
+                    </div>
+                ) : (
+                    <>
+                        {children}
+                        {/* Hover overlay hint */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: isHovered ? 1 : 0 }}
+                            className="absolute inset-0 bg-background/5 backdrop-blur-[1px] flex items-center justify-center p-4 pointer-events-none transition-opacity z-10"
+                        >
+                            <span className="bg-background/90 text-foreground px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm backdrop-blur-md">
+                                Click to expand
+                            </span>
+                        </motion.div>
+                    </>
+                )}
             </CardContent>
         </Card>
     );
@@ -109,6 +129,7 @@ interface ExpandableChartWidgetProps {
     renderSmall: () => React.ReactNode;
     renderExpanded: () => React.ReactNode;
     className?: string; // For the card
+    isLoading?: boolean;
 }
 
 export const ExpandableChartWidget = ({
@@ -117,7 +138,8 @@ export const ExpandableChartWidget = ({
     insights,
     renderSmall,
     renderExpanded,
-    className
+    className,
+    isLoading
 }: ExpandableChartWidgetProps) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -128,6 +150,7 @@ export const ExpandableChartWidget = ({
                 description={description}
                 onClick={() => setIsOpen(true)}
                 className={className}
+                isLoading={isLoading}
             >
                 {renderSmall()}
             </ChartCard>
@@ -147,3 +170,4 @@ export const ExpandableChartWidget = ({
         </>
     );
 };
+

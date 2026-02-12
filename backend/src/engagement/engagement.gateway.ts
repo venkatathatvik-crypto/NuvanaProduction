@@ -74,6 +74,13 @@ export class EngagementGateway
       const latestQuestion = activeSession.pop_questions[0];
       this.logger.log(`[DEBUG] Latest question for session ${activeSession.id}: ${latestQuestion.id}, Expires At: ${latestQuestion.expires_at}`);
       
+      // Check if question has already expired
+      const isExpired = new Date() > new Date(latestQuestion.expires_at);
+      if (isExpired) {
+        this.logger.log(`Latest question ${latestQuestion.id} has already expired. Skipping catch-up.`);
+        return { success: true, message: 'Joined class room (No active question)' };
+      }
+
       // DE-DUPLICATION: Only send the question if the student hasn't answered it yet
       const hasResponded = await this.engagementService.hasStudentResponded(latestQuestion.id, studentId);
       this.logger.log(`[DEBUG] Student ${studentName} hasResponded to ${latestQuestion.id}: ${hasResponded}`);
@@ -188,6 +195,18 @@ export class EngagementGateway
           responseTime: response.response_time_ms,
           selectedOption: response.selected_option,
         });
+
+        // Also notify school admins
+        const session = await this.engagementService.getSession(sessionId);
+        if (session && session.school_id) {
+          this.logger.log(`[DEBUG] Emitting school:update (type: response) to school:${session.school_id}`);
+          this.server.to(`school:${session.school_id}`).emit('school:update', {
+            type: 'response',
+            sessionId: sessionId
+          });
+        } else {
+          this.logger.warn(`[DEBUG] Could not emit school:update - school_id not found for session ${sessionId}`);
+        }
       }
       
       this.logger.log(`Response received from student ${response.student_id}`);
@@ -216,6 +235,24 @@ export class EngagementGateway
     return { success: true, message: 'Joined session room' };
   }
 
+  // School admin joins school room
+  @SubscribeMessage('join:school')
+  async handleJoinSchool(
+    @MessageBody() rawData: any,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const data = Array.isArray(rawData) ? rawData[0] : rawData;
+    const { schoolId, adminId } = data;
+    
+    this.logger.log(`[DEBUG] Admin ${adminId} attempting to join school room: ${schoolId}`);
+    await client.join(`school:${schoolId}`);
+    this.userSockets.set(adminId, client.id);
+    
+    this.logger.log(`[DEBUG] Admin ${adminId} SUCCESSFULLY joined school room ${schoolId}`);
+    
+    return { success: true, message: 'Joined school room' };
+  }
+
   // End session
   @SubscribeMessage('session:end')
   async handleEndSession(
@@ -230,6 +267,15 @@ export class EngagementGateway
       this.server.to(`class:${session.class_id}`).emit('session:ended', {
         sessionId: session.id,
       });
+
+      // Notify school admins
+      if (session.school_id) {
+        this.logger.log(`[DEBUG] Emitting school:update (type: session_end) to school:${session.school_id}`);
+        this.server.to(`school:${session.school_id}`).emit('school:update', {
+          type: 'session_end',
+          sessionId: session.id
+        });
+      }
       
       this.logger.log(`Session ${session.id} ended`);
       

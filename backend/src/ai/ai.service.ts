@@ -10,6 +10,7 @@ import { MasteryService } from './recommender/mastery.service';
 import { RecommendationService } from './recommender/recommendation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QuizDeduplicationService } from './quiz-deduplication.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 // Prompts
 import { SYSTEM_ROOT_PROMPT } from './prompts/system.prompt';
@@ -41,6 +42,7 @@ export class AiService {
         private llmProvider: GeminiProvider,
         private prisma: PrismaService,
         private quizDeduplicationService: QuizDeduplicationService, // Phase 3 & 4
+        private analyticsService: AnalyticsService,
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
@@ -56,6 +58,9 @@ export class AiService {
 
         try {
             const { taskType, query, subject, classBand, studentId, additionalContext } = dto;
+            const roleId = additionalContext?.roleId;
+            const isTeacher = roleId === 3;
+            const isStudent = roleId === 4;
 
             // Create cache key from request parameters (including quiz params for accurate caching)
             const quizParamsKey = dto.quizParams 
@@ -84,7 +89,6 @@ export class AiService {
 
             // OPTIMIZATION: Check if we can skip RAG/Profile for quick reply turns
             // We only need RAG and Mastery for the FINAL quiz generation, not for asking "How many questions?"
-            const isTeacher = additionalContext?.role === 'teacher';
             const isQuizTask = taskType === AiTaskType.MOCK_TEST;
             const needsQuickReplies = isTeacher && isQuizTask && (
                 !dto.quizParams?.questionCount || 
@@ -99,7 +103,7 @@ export class AiService {
             }
             const parallelStartTime = Date.now();
 
-            const [profileResult, ragContext, masteryResult] = await Promise.all([
+            const [profileResult, ragContext, masteryResult, studentAnalytics, classAnalytics] = await Promise.all([
                 // 0. Get Profile (if studentId provided AND not skipping)
                 (studentId && !needsQuickReplies) ? (async () => {
                     try {
@@ -134,7 +138,7 @@ export class AiService {
                     try {
                         const context = await this.ragService.retrieve(
                             query,
-                            subject || 'General',
+                            subject,
                             autoClassBand || classBand || 'middle',
                             studentClassId
                         );
@@ -155,6 +159,49 @@ export class AiService {
                         return { success: false, profile: null };
                     }
                 })() : Promise.resolve({ success: true, profile: null }),
+
+                // 3. Detailed Student Analytics (new) - Only for Students (role_id 4)
+                (studentId && isStudent && !needsQuickReplies) ? (async () => {
+                    try {
+                        const profile = await this.prisma.profiles.findFirst({
+                            where: { id: studentId },
+                            select: { school_id: true }
+                        });
+                        if (profile?.school_id) {
+                            const stats = await this.analyticsService.getStudentStatsSummary(studentId, profile.school_id);
+                            const performance = await this.analyticsService.getStudentSubjectPerformance(studentId, profile.school_id);
+                            const strengthsWeaknesses = await this.analyticsService.getStudentStrengthsWeaknesses(studentId, profile.school_id);
+                            return { success: true, stats, performance, strengthsWeaknesses };
+                        }
+                        return { success: false };
+                    } catch (error) {
+                        if (error?.response?.message === 'Student not found' || error?.status === 404) {
+                            console.warn(`[AI Service] ℹ️ Detailed analytics skipped: Student not found (${studentId})`);
+                        } else {
+                            console.error(`[AI Service] ❌ Error getting detailed analytics:`, error);
+                        }
+                        return { success: false };
+                    }
+                })() : Promise.resolve({ success: false }),
+
+                // 4. Class Average Analytics (new - for Teachers)
+                (isTeacher && dto.classId && !needsQuickReplies) ? (async () => {
+                    try {
+                        const profile = await this.prisma.profiles.findFirst({
+                            where: { id: additionalContext.userId }, // Assuming userId is provided for teacher
+                            select: { school_id: true }
+                        });
+                        if (profile?.school_id) {
+                            const subjectAverages = await this.analyticsService.getClassSubjectAverages(dto.classId, profile.school_id);
+                            const chapterTopic = await this.analyticsService.getClassChapterTopicAnalytics(dto.classId, profile.school_id, subject ? undefined : undefined); // Subject filtering can be added
+                            return { success: true, subjectAverages, chapterTopic };
+                        }
+                        return { success: false };
+                    } catch (error) {
+                        console.error(`[AI Service] ❌ Error getting class analytics:`, error);
+                        return { success: false };
+                    }
+                })() : Promise.resolve({ success: false }),
             ]);
 
 
@@ -220,6 +267,25 @@ export class AiService {
             } else {
                 console.log(`[AI Service] ⚠️ Skipping mastery (studentId or subject missing)`);
             }
+
+            // 2.1 Process Detailed Student Analytics
+            let detailedStudentContext = '';
+            if ((studentAnalytics as any)?.success && (studentAnalytics as any)?.stats) {
+                const sa = studentAnalytics as any;
+                detailedStudentContext = this.formatStudentAnalytics(sa.stats, sa.performance, sa.strengthsWeaknesses);
+                console.log(`[AI Service] ✓ Detailed student analytics processed`);
+            }
+
+            // 2.2 Process Class Analytics
+            let classAnalyticsContext = '';
+            if ((classAnalytics as any)?.success) {
+                const ca = classAnalytics as any;
+                classAnalyticsContext = this.formatClassAnalytics(ca.subjectAverages, ca.chapterTopic);
+                console.log(`[AI Service] ✓ Class analytics processed for class: ${dto.classId}`);
+            }
+
+            // Combine all analytic context
+            const analyticsContext = `${masteryProfile !== 'Standard' ? `MASTERY PROFILE: ${masteryProfile}\n` : ''}${detailedStudentContext}${classAnalyticsContext}`;
 
             // 3. Prompt Selection
             console.log(`[AI Service] Step 3: Selecting prompt template for task: ${taskType}...`);
@@ -403,6 +469,8 @@ export class AiService {
             // Combine system prompt and RAG context into single system message
             // (Gemini LangChain provider requires only one system message)
             const systemMessage = `${SYSTEM_ROOT_PROMPT}
+ 
+ ${analyticsContext ? `ANALYTICS CONTEXT:\n${analyticsContext}\n` : ''}
 
 RAG CONTEXT:
 ${ragContext}`;
@@ -892,5 +960,76 @@ ${ragContext}`;
         }
         
         return questions;
+    }
+
+    /**
+     * Format student analytics into a readable string for AI context
+     */
+    private formatStudentAnalytics(stats: any, performance: any[], strengthsWeaknesses: any): string {
+        if (!stats) return '';
+        let context = 'STUDENT PERFORMANCE ANALYTICS:\n';
+        context += `- Overall Percentage: ${stats.overallPercentage}%\n`;
+        context += `- Best Subject: ${stats.bestSubject}\n`;
+        context += `- Total Tests Taken: ${stats.totalTests}\n`;
+        context += `- Attendance: ${stats.attendancePercentage}%\n\n`;
+
+        context += 'SUBJECT PERFORMANCE:\n';
+        performance.forEach(p => {
+            context += `- ${p.subject}: ${p.percentage}%\n`;
+        });
+        context += '\n';
+
+        context += 'STRENGTHS:\n';
+        if (strengthsWeaknesses.strengths?.length > 0) {
+            strengthsWeaknesses.strengths.forEach(s => {
+                context += `- ${s.topic} (${s.subject}): ${s.desc}\n`;
+            });
+        } else {
+            context += '- No specific strengths identified yet.\n';
+        }
+        context += '\n';
+
+        context += 'WEAKNESSES:\n';
+        if (strengthsWeaknesses.weaknesses?.length > 0) {
+            strengthsWeaknesses.weaknesses.forEach(w => {
+                context += `- ${w.topic} (${w.subject}): ${w.desc}\n`;
+            });
+        } else {
+            context += '- No specific weaknesses identified yet.\n';
+        }
+
+        return context + '\n';
+    }
+
+    /**
+     * Format class analytics into a readable string for AI context
+     */
+    private formatClassAnalytics(subjectAverages: any[], chapterTopic: any): string {
+        if (!subjectAverages || !chapterTopic) return '';
+        let context = 'CLASS-WIDE ANALYTICS:\n';
+        
+        context += 'SUBJECT AVERAGES (CLASS):\n';
+        subjectAverages.forEach(s => {
+            context += `- ${s.subject}: ${s.avg}%\n`;
+        });
+        context += '\n';
+
+        context += 'CLASS TOPIC MASTERY:\n';
+        if (chapterTopic.topics?.length > 0) {
+            // Include top 3 and bottom 3 topics
+            const sortedTopics = [...chapterTopic.topics].sort((a, b) => b.mastery - a.mastery);
+            context += 'Strongest Topics:\n';
+            sortedTopics.slice(0, 3).forEach(t => {
+                context += `- ${t.name}: ${t.mastery}%\n`;
+            });
+            context += 'Topics Needing Attention:\n';
+            sortedTopics.slice(-3).forEach(t => {
+                context += `- ${t.name}: ${t.mastery}%\n`;
+            });
+        } else {
+            context += '- No topic mastery data available for the class.\n';
+        }
+
+        return context + '\n';
     }
 }

@@ -506,7 +506,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                                                     className="flex-1 justify-start text-left font-normal bg-muted border-border hover:bg-muted/80"
                                                                 >
                                                                     <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
-                                                                    {dateValue ? format(dateValue, "PPP") : "Select date"}
+                                                                    {dateValue ? format(dateValue, "dd/MM/yyyy") : "Select date"}
                                                                 </Button>
                                                             </PopoverTrigger>
                                                             <PopoverContent className="w-auto p-0 bg-background border-border" align="start">
@@ -521,6 +521,7 @@ export const TestForm = ({ initialData, onSubmit, defaultExamType }: TestFormPro
                                                                             field.onChange(`${year}-${month}-${day}T${timeValue}`);
                                                                         }
                                                                     }}
+                                                                    disabled={(date) => date.getDay() === 0}
                                                                     initialFocus
                                                                 />
                                                             </PopoverContent>

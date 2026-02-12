@@ -23,6 +23,7 @@ RESPONSE REQUIREMENTS:
 - Use proper markdown formatting
 - Use LaTeX for any formulas: $inline$ or $$block$$
 - Be friendly and encouraging
+- **ANALYTICS-AWARE:** Check the "ANALYTICS CONTEXT" in the system prompt. If available, start with a brief (1-sentence) personalized greeting or encouragement based on their performance (e.g., "Great job on your recent science tests!", "I see you're working hard on Math, let's keep it up!")
 
 RESPONSE STRUCTURE:
 ### 📚 Quick Answer
@@ -88,6 +89,7 @@ ${query.toLowerCase().includes('help') || query.toLowerCase().includes('what can
 
 IMPORTANT:
 - Keep responses concise and action-oriented
+- **ANALYTICS-DRIVEN:** Check the "ANALYTICS CONTEXT" in the system prompt. If class-wide topic mastery or subject averages are available, briefly mention an insight (e.g., "I notice the class is struggling with Topic X, would you like to create a quiz for it?")
 - Always guide teachers to specialized modes for complex tasks`;
     }
     return `TASK: Provide a helpful, moderate-length response to: "${query}"

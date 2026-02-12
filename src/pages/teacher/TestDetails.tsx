@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TestForm } from "@/components/mcq/TestForm";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { ArrowLeft, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -161,7 +162,7 @@ const TestDetails = () => {
       s.score,
       totalMarks,
       s.timeTakenSeconds,
-      new Date(s.submittedAt).toLocaleString(),
+      format(new Date(s.submittedAt), "dd/MM/yyyy HH:mm:ss"),
     ]);
 
     const csvContent = [
@@ -304,7 +305,7 @@ const TestDetails = () => {
                           {submission.timeTakenSeconds % 60}s
                         </TableCell>
                         <TableCell>
-                          {new Date(submission.submittedAt).toLocaleString()}
+                          {format(new Date(submission.submittedAt), "dd/MM/yyyy HH:mm")}
                         </TableCell>
                       </TableRow>
                     ))}

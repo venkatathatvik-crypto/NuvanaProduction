@@ -1,91 +1,127 @@
-import { Controller, Post, Body, Logger, BadRequestException } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus, Param } from '@nestjs/common';
+import { WhatsappService } from './whatsapp.service';
+import { ConfigService } from '@nestjs/config';
 import { Public } from '../auth/decorators/public.decorator';
-import { BroadcastWhatsappDto } from './dto/broadcast.dto';
-import { PrismaService } from '../prisma/prisma.service';
 
+@Public()
 @Controller('whatsapp')
 export class WhatsappController {
-  private readonly logger = new Logger(WhatsappController.name);
-
   constructor(
-    @InjectQueue('whatsapp-broadcast') private readonly whatsappQueue: Queue,
-    private readonly prisma: PrismaService,
+    private whatsappService: WhatsappService,
+    private configService: ConfigService,
   ) {}
 
-  @Public()
+  /**
+   * Endpoint to trigger a broadcast
+   */
   @Post('broadcast')
-  async broadcast(@Body() dto: BroadcastWhatsappDto) {
-    const { message, classId, schoolId, to } = dto;
+  async broadcast(@Body() body: any) {
+    console.log('--- WhatsApp Broadcast Request Received ---');
+    console.log('Body:', JSON.stringify(body, null, 2));
 
-    // 1. Logic for individual testing (via Postman)
-    if (to) {
-      this.logger.log(`Enqueuing individual test message to ${to}`);
-      await this.whatsappQueue.add('send-message', {
-        to,
-        message,
+    try {
+      const result = await this.whatsappService.queueBroadcast({
+        recipients: body.recipients || [],
+        templateName: body.templateName,
+        languageCode: body.languageCode,
+        components: body.components,
+        senderId: body.senderId || 'test-sender',
+        schoolId: body.schoolId || 'test-school',
       });
-      return { status: 'queued', type: 'individual', recipient: to };
+      console.log('Result:', JSON.stringify(result));
+      return result;
+    } catch (error) {
+      console.error('Error in WhatsApp broadcast controller:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Endpoint to send a plain text message
+   */
+  @Post('send-text')
+  async sendText(@Body() body: {
+    phoneNumber: string;
+    message: string;
+    senderId?: string;
+    schoolId?: string;
+  }) {
+    console.log('--- WhatsApp Plain Text Request Received ---');
+    console.log('Body:', JSON.stringify(body, null, 2));
+
+    try {
+      const result = await this.whatsappService.queueTextMessage({
+        phoneNumber: body.phoneNumber,
+        message: body.message,
+        senderId: body.senderId,
+        schoolId: body.schoolId,
+      });
+      console.log('Result:', JSON.stringify(result));
+      return result;
+    } catch (error) {
+      console.error('Error in WhatsApp send-text controller:', error);
+      throw error;
+    }
+  }
+  @Get('recipients/class/:classId')
+  async getClassRecipients(@Param('classId') classId: string) {
+    return this.whatsappService.getClassRecipients(classId);
+  }
+
+  /**
+   * Get eligible recipient for a specific student
+   */
+  @Get('recipients/student/:studentId')
+  async getStudentRecipient(@Param('studentId') studentId: string) {
+    return this.whatsappService.getStudentRecipient(studentId);
+  }
+
+  /**
+   * Get history of messages
+   */
+  @Get('history')
+  async getHistory(@Query('schoolId') schoolId: string, @Query('limit') limit?: string) {
+    return this.whatsappService.getHistory(schoolId || 'test-school', limit ? parseInt(limit) : 50);
+  }
+
+  /**
+   * Webhook Verification (for Meta)
+   */
+  @Get('webhook')
+  verifyWebhook(
+    @Query('hub.mode') mode: string,
+    @Query('hub.verify_token') token: string,
+    @Query('hub.challenge') challenge: string,
+  ) {
+    const verifyToken = this.configService.get<string>('WHATSAPP_VERIFY_TOKEN');
+
+    if (mode === 'subscribe' && token === verifyToken) {
+      return challenge;
+    }
+    return 'Verification failed';
+  }
+
+  /**
+   * Webhook handling (status updates and messages)
+   */
+  @Post('webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhook(@Body() body: any) {
+    // Meta sends updates in this format: entry[].changes[].value.statuses[]
+    const entry = body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+
+    if (value?.statuses) {
+      for (const statusUpdate of value.statuses) {
+        await this.whatsappService.updateMessageStatus(
+          statusUpdate.id,
+          statusUpdate.status,
+        );
+      }
     }
 
-    // 2. Logic for class-based broadcasting
-    if (!classId || !schoolId) {
-      throw new BadRequestException('Either "to" number OR "classId" and "schoolId" must be provided');
-    }
-
-    this.logger.log(`Fetching students for class ${classId} in school ${schoolId}`);
-    
-    // Find all students in the class who have parent contact numbers
-    const students = await this.prisma.profiles.findMany({
-      where: {
-        school_id: schoolId,
-        role_id: 4, // Student role
-        student_details: {
-          class_id: classId,
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-        student_details: {
-          select: {
-            parent_contact: true,
-          },
-        },
-      },
-    });
-
-    const recipients = students
-      .filter(s => s.student_details?.parent_contact)
-      .map(s => s.student_details.parent_contact);
-
-    if (recipients.length === 0) {
-      return { status: 'skipped', message: 'No recipients found with valid contact numbers' };
-    }
-
-    this.logger.log(`Enqueuing broadcast for ${recipients.length} recipients`);
-
-    // Add each recipient as a separate job in the queue
-    const jobs = recipients.map(number => ({
-      name: 'send-message',
-      data: { to: number, message },
-      opts: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
-      },
-    }));
-
-    await this.whatsappQueue.addBulk(jobs);
-
-    return { 
-      status: 'queued', 
-      type: 'broadcast', 
-      totalRecipients: recipients.length,
-      classId 
-    };
+    // Always return 200 to Meta
+    return { success: true };
   }
 }

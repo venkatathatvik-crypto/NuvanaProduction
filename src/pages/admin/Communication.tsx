@@ -16,6 +16,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { userService } from "@/services/userService";
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { whatsappApi, type WhatsappMessage } from "@/services/whatsappApiService";
+import { getClasses } from "@/services/classService";
+import { FlattenedClass } from "@/schemas/academic";
 
 const AdminCommunication = () => {
     const navigate = useNavigate();
@@ -24,7 +27,7 @@ const AdminCommunication = () => {
     const [loading, setLoading] = useState(false);
     const [teachers, setTeachers] = useState<any[]>([]);
     const [teachersLoading, setTeachersLoading] = useState(true);
-    const [classes, setClasses] = useState<any[]>([]);
+    const [classes, setClasses] = useState<FlattenedClass[]>([]);
     const [classesLoading, setClassesLoading] = useState(true);
 
     // Form states for new message to teacher
@@ -36,18 +39,13 @@ const AdminCommunication = () => {
     const [parentClass, setParentClass] = useState('');
     const [parentMessage, setParentMessage] = useState('');
 
-    // Simulated WhatsApp Broadcast History
-    const [parentBroadcastHistory, setParentBroadcastHistory] = useState<any[]>(() => {
-        const saved = localStorage.getItem('admin_parent_broadcast_history');
-        return saved ? JSON.parse(saved) : [
-            { id: '1', className: 'Class 10A', message: 'Parent-Teacher Meeting scheduled for next Monday at 10 AM.', date: new Date(Date.now() - 86400000 * 3).toISOString(), status: 'read' },
-            { id: '2', className: 'Class 9B', message: 'School will remain closed on Friday due to maintenance.', date: new Date(Date.now() - 7200000).toISOString(), status: 'delivered' }
-        ];
+    // WhatsApp Broadcast History from Backend
+    const { data: broadcastHistory = [], isLoading: historyLoading } = useQuery({
+        queryKey: ['whatsapp-history', profile?.school_id],
+        queryFn: () => profile?.school_id ? whatsappApi.getHistory(profile.school_id) : [],
+        enabled: !!profile?.school_id,
+        refetchInterval: 10000,
     });
-
-    useEffect(() => {
-        localStorage.setItem('admin_parent_broadcast_history', JSON.stringify(parentBroadcastHistory));
-    }, [parentBroadcastHistory]);
 
     // Fetch all conversations
     const { data: conversations = [], isLoading: conversationsLoading } = useQuery({
@@ -80,9 +78,9 @@ const AdminCommunication = () => {
         fetchTeachers();
     }, [profile, profileLoading]);
 
-    // Fetch classes (you'll need to implement this based on your class service)
+    // Fetch classes
     useEffect(() => {
-        const fetchClasses = async () => {
+        const fetchClassesList = async () => {
             if (profileLoading || !profile) {
                 setClassesLoading(false);
                 return;
@@ -90,16 +88,8 @@ const AdminCommunication = () => {
 
             try {
                 setClassesLoading(true);
-                // TODO: Implement getClasses service
-                // const schoolClasses = await getClasses(profile.school_id);
-                // setClasses(schoolClasses);
-                // For now, using mock data
-                setClasses([
-                    { id: '1', name: 'Class 10A' },
-                    { id: '2', name: 'Class 10B' },
-                    { id: '3', name: 'Class 9A' },
-                    { id: '4', name: 'Class 9B' },
-                ]);
+                const schoolClasses = await getClasses(profile.school_id);
+                setClasses(schoolClasses);
             } catch (error) {
                 console.error("Error fetching classes:", error);
                 toast.error("Failed to load classes");
@@ -108,7 +98,7 @@ const AdminCommunication = () => {
             }
         };
 
-        fetchClasses();
+        fetchClassesList();
     }, [profile, profileLoading]);
 
     const handleSendToTeacher = async (e: React.FormEvent) => {
@@ -145,36 +135,43 @@ const AdminCommunication = () => {
 
     const handleSendToParents = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         
-        // Simulate API call to WhatsApp bot service
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const selectedClassData = classes.find(c => c.id === parentClass);
-        const className = selectedClassData ? selectedClassData.name : parentClass;
-        
-        const newMessage = {
-            id: Date.now().toString(),
-            className,
-            message: parentMessage,
-            date: new Date().toISOString(),
-            status: 'sent'
-        };
-        
-        setParentBroadcastHistory([newMessage, ...parentBroadcastHistory]);
-        
-        toast.success(`WhatsApp message scheduled for parents of ${className}`);
-        setParentClass('');
-        setParentMessage('');
-        setLoading(false);
+        if (!parentClass) {
+            toast.error("Please select a class");
+            return;
+        }
 
-        // Simulate delivery/read status updates
-        setTimeout(() => {
-            setParentBroadcastHistory(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'delivered' } : m));
-        }, 5000);
-        
-        setTimeout(() => {
-            setParentBroadcastHistory(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'read' } : m));
-        }, 12000);
+        setLoading(true);
+        try {
+            const classRecipients = await whatsappApi.getClassRecipients(parentClass);
+            const recipients = classRecipients.map(r => ({ phoneNumber: r.phoneNumber, recipientId: r.recipientId }));
+
+            if (recipients.length === 0) {
+                toast.error("No valid parent contacts found for this class");
+                setLoading(false);
+                return;
+            }
+
+            await whatsappApi.sendBroadcast({
+                recipients,
+                templateName: 'hello_world', // Phase 1: Using test template
+                languageCode: 'en_US',
+                schoolId: profile?.school_id || 'test-school',
+                senderId: profile?.id || 'test-sender',
+            });
+
+            toast.success(`WhatsApp broadcast initiated for ${recipients.length} parents`);
+            setParentClass('');
+            setParentMessage('');
+            
+            // Invalidate history query
+            queryClient.invalidateQueries({ queryKey: ['whatsapp-history'] });
+        } catch (error: any) {
+            console.error("Error sending WhatsApp broadcast:", error);
+            toast.error(error.message || "Failed to send WhatsApp message");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -411,8 +408,8 @@ const AdminCommunication = () => {
                                                     </div>
                                                 ) : (
                                                     classes.map((cls) => (
-                                                        <SelectItem key={cls.id} value={cls.id}>
-                                                            {cls.name}
+                                                        <SelectItem key={cls.class_id} value={cls.class_id}>
+                                                            {cls.class_name} ({cls.grade_name})
                                                         </SelectItem>
                                                     ))
                                                 )}
@@ -441,28 +438,20 @@ const AdminCommunication = () => {
                                     </Button>
                                 </form>
 
-                                {/* Broadcast History */}
-                                {parentBroadcastHistory.length > 0 && (
+                                {historyLoading ? (
+                                    <div className="flex justify-center py-12">
+                                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                    </div>
+                                ) : broadcastHistory.length > 0 ? (
                                     <div className="mt-12 space-y-6">
                                         <div className="flex items-center justify-between border-b border-white/10 pb-4">
                                             <h3 className="text-xl font-bold flex items-center gap-2">
                                                 <History className="w-6 h-6 text-primary" />
                                                 Broadcast History
                                             </h3>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
-                                                onClick={() => {
-                                                    setParentBroadcastHistory([]);
-                                                    localStorage.removeItem('admin_parent_broadcast_history');
-                                                }}
-                                                className="text-muted-foreground hover:text-destructive"
-                                            >
-                                                Clear History
-                                            </Button>
                                         </div>
                                         <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                            {parentBroadcastHistory.map((item) => (
+                                            {broadcastHistory.map((item: WhatsappMessage) => (
                                                 <motion.div 
                                                     key={item.id} 
                                                     initial={{ opacity: 0, x: -10 }}
@@ -475,36 +464,46 @@ const AdminCommunication = () => {
                                                             <div>
                                                                 <div className="flex items-center gap-2 mb-1">
                                                                     <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold uppercase text-[10px]">
-                                                                        {item.className}
+                                                                        {item.phone_number}
                                                                     </Badge>
                                                                     <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                                                        {formatDistanceToNow(new Date(item.date), { addSuffix: true })}
+                                                                        {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                                                                     </p>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {item.status === 'sent' && (
+                                                                {item.status === 'SENT' && (
                                                                     <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
                                                                         <Check className="w-3 h-3" /> Sent
                                                                     </Badge>
                                                                 )}
-                                                                {item.status === 'delivered' && (
+                                                                {item.status === 'DELIVERED' && (
                                                                     <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
                                                                         <CheckCheck className="w-3 h-3" /> Delivered
                                                                     </Badge>
                                                                 )}
-                                                                {item.status === 'read' && (
+                                                                {item.status === 'READ' && (
                                                                     <Badge variant="outline" className="bg-blue-400/10 text-blue-400 border-blue-400/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
                                                                         <CheckCheck className="w-3 h-3" /> Read
                                                                     </Badge>
                                                                 )}
+                                                                {item.status === 'FAILED' && (
+                                                                    <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                        Failed
+                                                                    </Badge>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message}</p>
+                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message_text}</p>
                                                     </div>
                                                 </motion.div>
                                             ))}
                                         </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12 text-muted-foreground">
+                                        <History className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                                        <p>No broadcast history found</p>
                                     </div>
                                 )}
                             </CardContent>

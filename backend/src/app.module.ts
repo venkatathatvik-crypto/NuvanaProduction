@@ -19,9 +19,11 @@ import { FileUploadModule } from './file-upload/file-upload.module';
 import { TestModule } from './test/test.module';
 import { StorageModule } from './storage/storage.module';
 import { BullModule } from '@nestjs/bullmq';
-import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { PdfAnnotationsModule } from './pdf-annotations/pdf-annotations.module';
 import { EngagementModule } from './engagement/engagement.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
 
 @Module({
     imports: [
@@ -135,9 +137,13 @@ import { EngagementModule } from './engagement/engagement.module';
         FileUploadModule,
         TestModule,
         StorageModule,
-        WhatsappModule,
         PdfAnnotationsModule,
         EngagementModule,
+        WhatsappModule,
+        BullBoardModule.forRoot({
+          route: '/admin/queues',
+          adapter: ExpressAdapter,
+        }),
         HealthModule,
     ],
 })

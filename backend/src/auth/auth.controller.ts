@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Headers } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterSuperAdminDto } from './dto/register-super-admin.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
@@ -65,11 +65,15 @@ export class AuthController {
     return this.authService.getCurrentUser(user.sub);
   }
 
-  @Post('logout')
-  @HttpCode(HttpStatus.OK)
-  async logout() {
-    return {
-      message: 'Logged out successfully',
-    };
-  }
+    @Post('logout')
+    @HttpCode(HttpStatus.OK)
+    async logout(@Headers('authorization') authHeader: string) {
+        const token = authHeader?.split(' ')[1];
+        if (token) {
+            await this.authService.logout(token);
+        }
+        return {
+            message: 'Logged out successfully',
+        };
+    }
 }

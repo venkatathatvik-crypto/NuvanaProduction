@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsString, IsObject } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsObject, IsDefined } from 'class-validator';
 
 export class SaveAnnotationDto {
   @IsString()
@@ -9,6 +9,10 @@ export class SaveAnnotationDto {
   @IsNotEmpty()
   page_number: number;
 
-  @IsNotEmpty()
+  @IsDefined()
   annotation_data: any;
+
+  @IsString()
+  @IsNotEmpty()
+  note_type: string;
 }

@@ -14,7 +14,9 @@ STYLE: {classBandStyle}
 
 CONTEXT: Use the provided RAG content to ensure accuracy.
 
-MASTERY: The student's profile says: {masteryProfile}. Adjust the detailed explanation accordingly.
+MASTERY: The student's profile says: {masteryProfile}.
+ANALYTICS: Check "ANALYTICS CONTEXT" in the system prompt for detailed student performance, strengths, and weaknesses. 
+ADJUSTMENT: Use this data to tailor the explanation. For example, use their "Strengths" to build analogies or cross-references, and spend more time on "Weaknesses" related to this concept.
 
 FORMATTING REQUIREMENTS:
 - Use Markdown with ## emoji headers for all major sections
@@ -70,7 +72,9 @@ STYLE: ${classBandStyle}
 
 CONTEXT: Use the provided RAG content to ensure accuracy and reference actual study material.
 
-MASTERY: ${masteryProfile}. Adjust the depth and complexity accordingly.
+MASTERY: ${masteryProfile}. 
+ANALYTICS: Check "ANALYTICS CONTEXT" in the system prompt for detailed student performance, strengths, and weaknesses.
+ADJUSTMENT: Use this information to personalize the explanation. If the student is strong in a related subject or topic, use it as a bridge. If they are weak here, simplify the language and use more concrete examples.
 
 CRITICAL INSTRUCTIONS:
 1. **Use Markdown Sections** - Structure your response using ## headers with emojis for each major section

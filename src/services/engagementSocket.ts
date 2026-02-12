@@ -9,6 +9,7 @@ class EngagementSocketService {
       return this.socket;
     }
 
+    console.log('[EngagementSocket] Connecting for user:', userId, 'role:', userRole);
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
     
     this.socket = io(`${backendUrl}/engagement`, {
@@ -89,6 +90,22 @@ class EngagementSocketService {
     this.socket.emit('reaction:send', reactionData);
   }
 
+  // Generic listener
+  on(event: string, callback: (...args: any[]) => void) {
+    console.log('[EngagementSocket] Registering listener for:', event);
+    if (!this.socket) {
+      console.warn('[EngagementSocket] Cannot register .on() - socket not initialized');
+      return;
+    }
+    
+    this.socket.on(event, callback);
+    
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(callback);
+  }
+
   // Listen for new questions
   onNewQuestion(callback: (data: any) => void) {
     if (!this.socket) return;
@@ -138,9 +155,23 @@ class EngagementSocketService {
     this.listeners.get('response:received')!.add(callback);
   }
 
+  // Admin joins school room
+  joinSchool(schoolId: string, adminId: string) {
+    if (!this.socket) {
+      console.warn('[EngagementSocket] Cannot join school room - socket not initialized');
+      return;
+    }
+    console.log('[EngagementSocket] Attempting to join school room:', schoolId, 'for admin:', adminId);
+    this.socket.emit('join:school', { schoolId, adminId });
+  }
+
   // Listen for session end
   onSessionEnded(callback: (data: any) => void) {
-    if (!this.socket) return;
+    console.log('[EngagementSocket] Registering session:ended listener');
+    if (!this.socket) {
+      console.warn('[EngagementSocket] Cannot register session:ended - socket not initialized');
+      return;
+    }
     
     this.socket.on('session:ended', callback);
     

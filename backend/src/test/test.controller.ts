@@ -16,11 +16,9 @@ import {
   GradeSubmissionDto,
   CreateTestFromAiGradingDto,
 } from './dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Tenant } from '../auth/decorators/tenant.decorator';
 
 @Controller('tests')
-@UseGuards(JwtAuthGuard)
 export class TestController {
   constructor(private readonly testService: TestService) {}
 

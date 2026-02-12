@@ -204,6 +204,9 @@ ${ragContext}
 IMPORTANT: Generate questions DIRECTLY from the above educational content. Extract key concepts, facts, definitions, examples, and problem-solving approaches from the provided material. Questions should test understanding of THIS specific content.
 ` : 'NOTE: Generate general knowledge questions on this topic as no specific educational materials were provided.\n'}
 
+🚨 **ANALYTICS-DRIVEN GENERATION:**
+Check the "ANALYTICS CONTEXT" in the system prompt. If class-wide topic mastery or subject averages are available, prioritize generating questions for "Topics Needing Attention" to help with remediation, while maintaining the specified difficulty.
+
 ${uniquenessWarning}
 
 ${isMcqOnly ? `🚨 **STRICT INSTRUCTION: MCQ ONLY MODE**

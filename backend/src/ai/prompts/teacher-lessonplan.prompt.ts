@@ -34,6 +34,7 @@ CRITICAL INSTRUCTIONS:
 4. **Practical and Actionable** - Include specific activities and timings
 5. **Age-Appropriate** - Adjust complexity and activities for the grade level
 6. **Multi-Day Plan** - Create a ${numberOfDays}-day lesson plan, with each day being ${lessonDurationMinutes} minutes
+7. **Analytics-Driven** - Check the "ANALYTICS CONTEXT" in the system prompt. If class-wide topic mastery or subject averages are available, emphasize and spend more time on "Topics Needing Attention" while still covering the main topic.
 
 ⚠️ **CRITICAL:** Do NOT write "Below is a lesson plan..." - WRITE THE ACTUAL LESSON PLAN DIRECTLY!
 

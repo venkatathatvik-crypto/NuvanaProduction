@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
@@ -275,18 +276,12 @@ const TeacherTests = () => {
                         </div>
                       )}
                     </div>
-                    {test.dueDate && (
-                      <div className="text-xs text-orange-500 bg-orange-500/10 px-2 py-1 rounded w-fit flex items-center gap-1">
-                        <span>📅</span>
-                        <span>Due: {new Date(test.dueDate).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}</span>
-                      </div>
-                    )}
+                      {test.dueDate && (
+                        <div className="text-xs text-orange-500 bg-orange-500/10 px-2 py-1 rounded w-fit flex items-center gap-1">
+                          <span>📅</span>
+                          <span>Due: {format(new Date(test.dueDate), "dd/MM/yyyy HH:mm")}</span>
+                        </div>
+                      )}
 
                     <div className="grid grid-cols-2 gap-2 pt-4">
                       <Button

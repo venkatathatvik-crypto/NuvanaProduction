@@ -9,20 +9,22 @@ import {
   ChevronRight, 
   Pencil, 
   Highlighter, 
-  Eraser, 
-  RotateCcw, 
-  Save, 
+  RotateCcw,
+  Save,
   X,
   ZoomIn,
   ZoomOut,
-  Type,
   Download,
   UserCircle,
   Users,
-  Target
+  Target,
+  Columns2,
+  FileText,
+  Eraser as EraserIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { savePdfAnnotation, getPdfAnnotations } from '@/services/pdfAnnotationService';
 import LoadingSpinner from './LoadingSpinner';
@@ -57,6 +59,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   sessionId
 }) => {
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
@@ -69,9 +72,10 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   const canvasRef = useRef<ReactSketchCanvasRef>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   
-  const [teacherAnnotations, setTeacherAnnotations] = useState<Record<number, any>>({});
-  const [studentAnnotations, setStudentAnnotations] = useState<Record<number, any>>({});
-  const [isStudentMode, setIsStudentMode] = useState(false);
+  const [pdfAnnotations, setPdfAnnotations] = useState<Record<number, any>>({});
+  const [textNotes, setTextNotes] = useState<Record<number, string>>({});
+  
+  const [isSplitView, setIsSplitView] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [pdfLoaded, setPdfLoaded] = useState(false);
   const [showEngagementPanel, setShowEngagementPanel] = useState(false);
@@ -86,49 +90,56 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Sync fetched annotations to state when they arrive
   useEffect(() => {
-    if (isSuccess && fetchedAnnotations.length > 0) {
-      const annotationsMap: Record<number, any> = {};
+    if (isSuccess) {
+      const pdfMap: Record<number, any> = {};
+      const notesMap: Record<number, string> = {};
+      
       fetchedAnnotations.forEach(ann => {
-        annotationsMap[ann.page_number] = ann.annotation_data;
+        if (ann.note_type === 'SCRATCHPAD') {
+          // Strictly extract text: handle string or {text: ""}
+          if (typeof ann.annotation_data === 'string') {
+            notesMap[ann.page_number] = ann.annotation_data;
+          } else if (ann.annotation_data?.text) {
+            notesMap[ann.page_number] = ann.annotation_data.text;
+          }
+          // Note: Ignoring legacy object data (drawing paths) for text panel
+        } else {
+          pdfMap[ann.page_number] = ann.annotation_data;
+        }
       });
-      setTeacherAnnotations(prev => ({ ...prev, ...annotationsMap }));
+      
+      setPdfAnnotations(prev => ({ ...prev, ...pdfMap }));
+      setTextNotes(prev => ({ ...prev, ...notesMap }));
     }
   }, [isSuccess, fetchedAnnotations]);
 
-  // Handle page change - save current and load next
+  // Handle page change - save current paths to local state
   const handlePageChange = async (newPage: number) => {
     if (newPage < 1 || newPage > (numPages || 1)) return;
     
+    // Save current PDF canvas
     if (canvasRef.current) {
       const paths = await canvasRef.current.exportPaths();
-      
-      if (isReadOnly || isStudentMode) {
-        // In student mode (even if teacher is in student mode toggle), save to local student state
-        setStudentAnnotations(prev => ({ ...prev, [pageNumber]: paths }));
-      } else {
-        // Teacher mode - save to teacher state
-        setTeacherAnnotations(prev => ({ ...prev, [pageNumber]: paths }));
-      }
+      setPdfAnnotations(prev => ({ ...prev, [pageNumber]: paths }));
     }
     
     setPageNumber(newPage);
   };
 
-  // When pageNumber or data is ready, load the paths for the new page
+  // Load paths when pageNumber or data changes
   useEffect(() => {
-    if (isSuccess && pdfLoaded && canvasRef.current) {
-      // Merge teacher and student paths for display
-      const tPaths = teacherAnnotations[pageNumber] || [];
-      const sPaths = studentAnnotations[pageNumber] || [];
-      const mergedPaths = [...tPaths, ...sPaths];
-      
-      if (mergedPaths.length > 0) {
-        canvasRef.current.loadPaths(mergedPaths);
-      } else {
-        canvasRef.current.clearCanvas();
+    if (pdfLoaded) {
+      // Load PDF annotations
+      if (canvasRef.current) {
+        const pPaths = pdfAnnotations[pageNumber] || [];
+        if (pPaths.length > 0) {
+          canvasRef.current.loadPaths(pPaths);
+        } else {
+          canvasRef.current.clearCanvas();
+        }
       }
     }
-  }, [pageNumber, isSuccess, pdfLoaded, teacherAnnotations, studentAnnotations]);
+  }, [pageNumber, pdfLoaded, pdfAnnotations]);
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
@@ -136,24 +147,54 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   };
 
   const handleSave = async () => {
-    if (isReadOnly || !canvasRef.current) return;
-    
     setIsSaving(true);
     try {
-      const currentPaths = await canvasRef.current.exportPaths();
+      // 1. Sync current page to local state first
+      let currentPdfPaths = pdfAnnotations[pageNumber] || [];
+      const currentTextNote = textNotes[pageNumber] || "";
       
-      // Filter out student annotations if we ever distinguish them by property, 
-      // but for now, teacher saves 'teacherAnnotations' state.
-      // To be safe, we use the teacher-specific state for saving to DB.
-      const teacherPathsForThisPage = teacherAnnotations[pageNumber] || currentPaths;
+      if (canvasRef.current) {
+        currentPdfPaths = await canvasRef.current.exportPaths();
+        setPdfAnnotations(prev => ({ ...prev, [pageNumber]: currentPdfPaths }));
+      }
+      setTextNotes(prev => ({ ...prev, [pageNumber]: currentTextNote }));
+
+      // 2. Identify all pages that have data
+      const allPages = new Set([
+        ...Object.keys(pdfAnnotations).map(Number),
+        ...Object.keys(textNotes).map(Number),
+        pageNumber // Ensure current page is included
+      ]);
+
+      // 3. Prepare all save promises
+      const promises: Promise<any>[] = [];
       
-      await savePdfAnnotation(fileId, pageNumber, teacherPathsForThisPage);
-      setTeacherAnnotations(prev => ({ ...prev, [pageNumber]: teacherPathsForThisPage }));
+      allPages.forEach(pNum => {
+        const pPaths = pNum === pageNumber ? currentPdfPaths : (pdfAnnotations[pNum] || []);
+        const pNote = pNum === pageNumber ? currentTextNote : (textNotes[pNum] || "");
+
+        // Only save if there's actual data OR if it was previously saved (to allow clearing)
+        const hasExistingAnnotation = fetchedAnnotations.some(a => a.page_number === pNum && a.note_type === 'ANNOTATION');
+        const hasExistingNote = fetchedAnnotations.some(a => a.page_number === pNum && a.note_type === 'SCRATCHPAD');
+
+        if (pPaths.length > 0 || hasExistingAnnotation) {
+          promises.push(savePdfAnnotation(fileId, pNum, pPaths, 'ANNOTATION'));
+        }
+        if (pNote.trim().length > 0 || hasExistingNote) {
+          promises.push(savePdfAnnotation(fileId, pNum, pNote, 'SCRATCHPAD'));
+        }
+      });
       
-      toast.success("Teacher annotations saved to cloud!");
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        // 4. Invalidate cache to ensure refresh on reopen
+        await queryClient.invalidateQueries({ queryKey: ['pdf-annotations', fileId] });
+      }
+      
+      toast.success("All notes saved to cloud!");
     } catch (error) {
       console.error("Save error:", error);
-      toast.error("Failed to save annotations.");
+      toast.error("Failed to save some notes.");
     } finally {
       setIsSaving(false);
     }
@@ -166,17 +207,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     const toastId = toast.loading("Generating High-Performance PDF...");
     
     try {
-      // 1. Save current page state
-      if (canvasRef.current) {
-        const paths = await canvasRef.current.exportPaths();
-        if (isReadOnly || isStudentMode) {
-          setStudentAnnotations(prev => ({ ...prev, [pageNumber]: paths }));
-        } else {
-          setTeacherAnnotations(prev => ({ ...prev, [pageNumber]: paths }));
-        }
-      }
-
-      // 2. Fetch original PDF bytes
+      // 1. Fetch original PDF bytes
       const response = await fetch(fileUrl);
       const pdfBytes = await response.arrayBuffer();
       const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -191,24 +222,14 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       };
 
       // 3. Process each page with annotations
-      // Create local maps to avoid race conditions with React state updates
-      const localTeacherAnnotations = { ...teacherAnnotations };
-      const localStudentAnnotations = { ...studentAnnotations };
+      const localPdfAnnotations = { ...pdfAnnotations };
       
-      // Inject current exporter results into local maps
       if (canvasRef.current) {
-        const currentPaths = await canvasRef.current.exportPaths();
-        if (isReadOnly || isStudentMode) {
-          localStudentAnnotations[pageNumber] = currentPaths;
-        } else {
-          localTeacherAnnotations[pageNumber] = currentPaths;
-        }
+        localPdfAnnotations[pageNumber] = await canvasRef.current.exportPaths();
       }
 
       for (let i = 1; i <= numPages; i++) {
-        const tPaths = localTeacherAnnotations[i] || [];
-        const sPaths = localStudentAnnotations[i] || [];
-        const allPaths = [...tPaths, ...sPaths];
+        const allPaths = localPdfAnnotations[i] || [];
 
         if (allPaths.length === 0) continue;
 
@@ -278,15 +299,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   };
 
   const clearCanvas = () => {
-    if (canvasRef.current) {
-      canvasRef.current.clearCanvas();
-    }
+    if (canvasRef.current) canvasRef.current.clearCanvas();
+    setTextNotes(prev => ({ ...prev, [pageNumber]: "" }));
   };
 
   const undo = () => {
-    if (canvasRef.current) {
-      canvasRef.current.undo();
-    }
+    if (canvasRef.current) canvasRef.current.undo();
   };
 
   // Determine if we should show the loading overlay
@@ -353,37 +371,38 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {isReadOnly ? (
-            <Button 
-              size="sm" 
-              variant={isStudentMode ? "default" : "outline"}
-              className={isStudentMode ? "neon-glow" : ""}
-              onClick={() => setIsStudentMode(!isStudentMode)}
-            >
-              {isStudentMode ? <UserCircle className="w-4 h-4 mr-2" /> : <Users className="w-4 h-4 mr-2" />}
-              {isStudentMode ? "My Annotations: ON" : "Enable My Annotations"}
-            </Button>
-          ) : (
-            <Button 
-              size="sm" 
-              className="neon-glow" 
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? "Saving..." : "Save to Cloud"}
-            </Button>
-          )}
+          <Button 
+            size="sm" 
+            variant={isSplitView ? "default" : "outline"}
+            className={isSplitView ? "neon-glow" : ""}
+            onClick={() => setIsSplitView(!isSplitView)}
+            title="Toggle Split View"
+          >
+            <Columns2 className="w-4 h-4 mr-2" />
+            {isSplitView ? "Hide Notes" : "Split View"}
+          </Button>
 
           <Button 
             size="sm" 
-            variant="outline" 
-            onClick={handleDownload}
-            disabled={isDownloading}
+            className="neon-glow" 
+            onClick={handleSave}
+            disabled={isSaving}
           >
-            <Download className="w-4 h-4 mr-2" />
-            {isDownloading ? "Exporting..." : "Download PDF"}
+            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? "Saving..." : "Save Notes"}
           </Button>
+
+          {isReadOnly && (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={handleDownload}
+              disabled={isDownloading}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {isDownloading ? "Exporting..." : "Download PDF"}
+            </Button>
+          )}
 
           {/* Engagement Button (Teachers only) */}
           {!isReadOnly && sessionId && pdfLoaded && (
@@ -412,11 +431,10 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Toolbar - Annotation Tools */}
-        {(!isReadOnly || isStudentMode) && (
-          <div className="w-16 border-r border-border bg-card flex flex-col items-center py-4 gap-4 overflow-y-auto">
-            {isStudentMode && isReadOnly && (
-              <div className="text-[10px] text-primary font-bold uppercase mb-2">Student</div>
-            )}
+        <div className="w-16 border-r border-border bg-card flex flex-col items-center py-4 gap-4 overflow-y-auto">
+          {isReadOnly && (
+            <div className="text-[10px] text-primary font-bold uppercase mb-2">Student</div>
+          )}
             <Button 
               variant={tool === 'pencil' ? 'default' : 'ghost'} 
               size="icon" 
@@ -447,7 +465,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               onClick={() => setTool('eraser')}
               title="Eraser"
             >
-              <Eraser className="w-5 h-5" />
+              <EraserIcon className="w-5 h-5" />
             </Button>
             
             <div className="h-px w-8 bg-border my-2" />
@@ -471,11 +489,18 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               <X className="w-5 h-5 text-destructive" />
             </Button>
           </div>
-        )}
 
         {/* PDF Rendering Area */}
-        <div className="flex-1 overflow-auto bg-muted/30 p-4 flex justify-center items-start">
-          <div ref={pdfContainerRef} className="relative shadow-2xl bg-white" style={{ width: 'fit-content' }}>
+        <div className="flex-1 overflow-auto bg-muted/30 p-2 sm:p-4 flex flex-col md:flex-row gap-4 items-center md:items-start justify-center">
+          {/* Main PDF Page */}
+          <div 
+            ref={pdfContainerRef} 
+            className="relative shadow-2xl bg-white shrink-0" 
+            style={{ 
+              width: 'fit-content',
+              maxWidth: isSplitView ? '45%' : '100%' 
+            }}
+          >
             {isLoadingAnnotations && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/50">
                 <LoadingSpinner />
@@ -501,9 +526,10 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
             >
               <Page 
                 pageNumber={pageNumber} 
-                scale={scale} 
+                scale={isSplitView ? scale * 0.8 : scale} 
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
+                className="shadow-sm"
               />
             </Document>
             
@@ -516,12 +542,51 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                   strokeWidth: strokeWidth,
                   eraserWidth: strokeWidth * 2,
                   canvasColor: "transparent",
-                  readOnly: isReadOnly && !isStudentMode,
                   className: "w-full h-full pointer-events-auto"
                 } as any)}
               />
             </div>
+            
+            <div className="absolute -top-3 -left-3 z-30 px-2 py-1 bg-primary text-[10px] font-bold text-white rounded shadow-sm flex items-center gap-1">
+              <FileText className="w-3 h-3" /> PDF PAGE {pageNumber}
+            </div>
           </div>
+
+          {/* Text Notes Panel (Split View) */}
+          <AnimatePresence>
+            {isSplitView && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="relative bg-card shadow-2xl shrink-0 flex flex-col border border-border p-4 rounded-lg overflow-hidden"
+                style={{
+                  width: pdfContainerRef.current?.offsetWidth ? pdfContainerRef.current.offsetWidth * 0.9 : 500,
+                  height: pdfContainerRef.current?.offsetHeight ? pdfContainerRef.current.offsetHeight : 700,
+                  maxWidth: '45%'
+                }}
+              >
+                <div className="flex items-center gap-2 mb-4 border-b border-border pb-2">
+                  <Columns2 className="w-4 h-4 text-neon-blue" />
+                  <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Page {pageNumber} Notes</span>
+                </div>
+
+                <Textarea
+                  value={textNotes[pageNumber] || ""}
+                  onChange={(e) => setTextNotes(prev => ({ ...prev, [pageNumber]: e.target.value }))}
+                  placeholder={`Type your notes for page ${pageNumber} here...`}
+                  className="flex-1 resize-none bg-secondary/20 border-border/50 focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/20 transition-all text-sm leading-relaxed"
+                />
+
+                <div className="absolute top-4 right-4 px-2 py-0.5 bg-neon-blue/10 text-[10px] font-bold text-neon-blue rounded uppercase">
+                  Private
+                </div>
+
+                {/* Subtle visual touch */}
+                <div className="absolute bottom-0 right-0 w-32 h-32 bg-neon-blue/5 blur-[100px] -z-10 pointer-events-none" />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

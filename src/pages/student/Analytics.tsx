@@ -37,8 +37,11 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LayoutDashboard, BarChart3 } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
+import { engagementSocket } from "@/services/engagementSocket";
 import {
   getStudentStatsSummary,
   getStudentSubjectPerformance,
@@ -58,7 +61,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatePresence } from "framer-motion";
 import { engagementApi } from "@/services/engagementApi";
-import { EngagementHistory } from "@/components/engagement/EngagementHistory";
 
 const NEON_COLORS = {
   primary: "#8884d8",
@@ -69,6 +71,8 @@ const NEON_COLORS = {
 
 const StudentAnalytics = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "overview";
   const { profile, profileLoading } = useAuth();
 
   const queryClient = useQueryClient();
@@ -122,16 +126,7 @@ const StudentAnalytics = () => {
     enabled: !!profile,
   });
 
-  // Engagement History Query
-  const { data: engagementHistory = [], isLoading: engagementLoading } = useQuery({
-    queryKey: ["student-engagement-history", profile?.id],
-    queryFn: async () => {
-      const token = localStorage.getItem("access_token");
-      if (!token) return [];
-      return engagementApi.getStudentHistory(profile!.id, token);
-    },
-    enabled: !!profile?.id,
-  });
+
 
   const strengths = swData.strengths || [];
   const weaknesses = swData.weaknesses || [];
@@ -195,329 +190,335 @@ const StudentAnalytics = () => {
           </p>
         </div>
       </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(val) => setSearchParams({ tab: val })}
+        className="space-y-6"
       >
-        <div className="min-w-0">
-          <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">
-            My Performance 📈
-          </h1>
-          <p className="text-muted-foreground text-sm sm:text-base">
-            Track your academic progress
-          </p>
-        </div>
-      </motion.div>
+        <TabsList className="grid grid-cols-2 w-full max-w-xl h-auto p-1 bg-muted/20 backdrop-blur-sm border border-white/5 rounded-2xl">
+          <TabsTrigger value="overview" className="flex items-center gap-2 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="font-semibold">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="performance" className="flex items-center gap-2 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+            <BarChart3 className="w-4 h-4" />
+            <span className="font-semibold">Performance</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Overall Score", value: `${stats.overallPercentage}%`, color: "text-neon-purple", sub: "Average across all tests", icon: <TrendingUp className="w-3 h-3 mr-1" />, loading: statsLoading },
-          { label: "Tests Taken", value: stats.totalTests, color: "text-neon-cyan", sub: "Graded tests completed", loading: statsLoading },
-          { label: "Best Subject", value: stats.bestSubject, color: "text-neon-green", sub: "Highest average score", loading: statsLoading },
-          { label: "Attendance", value: `${stats.attendancePercentage}%`, color: "text-blue-500", sub: stats.attendancePercentage >= 90 ? "Excellent" : stats.attendancePercentage >= 75 ? "Good" : "Needs improvement", loading: statsLoading },
-        ].map((card, i) => (
-          <Card key={i} className="glass-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {card.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {card.loading ? (
-                <Skeleton className="h-8 w-24 mb-2" />
+        <TabsContent value="overview" className="space-y-8 mt-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Overall Score", value: `${stats.overallPercentage}%`, color: "text-neon-purple", sub: "Average across all tests", icon: <TrendingUp className="w-3 h-3 mr-1" />, loading: statsLoading },
+              { label: "Tests Taken", value: stats.totalTests, color: "text-neon-cyan", sub: "Graded tests completed", loading: statsLoading },
+              { label: "Best Subject", value: stats.bestSubject, color: "text-neon-green", sub: "Highest average score", loading: statsLoading },
+              { label: "Attendance", value: `${stats.attendancePercentage}%`, color: "text-blue-500", sub: stats.attendancePercentage >= 90 ? "Excellent" : stats.attendancePercentage >= 75 ? "Good" : "Needs improvement", loading: statsLoading },
+            ].map((card, i) => (
+              <Card key={i} className="glass-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {card.label}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {card.loading ? (
+                    <Skeleton className="h-8 w-24 mb-2" />
+                  ) : (
+                    <div className={`text-2xl font-bold ${card.color}`}>
+                      {card.value}
+                    </div>
+                  )}
+                  {card.loading ? (
+                    <Skeleton className="h-4 w-32" />
+                  ) : (
+                    <p className="text-xs text-muted-foreground flex items-center mt-1">
+                      {card.icon} {card.sub}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1 }}
+            >
+              {subjectLoading ? (
+                <Card className="glass-card h-[400px] flex items-center justify-center">
+                  <Skeleton className="h-[80%] w-[80%] rounded-full" />
+                </Card>
               ) : (
-                <div className={`text-2xl font-bold ${card.color}`}>
-                  {card.value}
-                </div>
+                <ExpandableChartWidget
+                  title="Subject Performance"
+                  description="Mastery across different subjects"
+                  insights="A higher score in specific subjects indicates strong conceptual understanding. Focus on subjects with lower scores to improve your overall average."
+                  isLoading={subjectLoading}
+                  className="h-[400px]"
+                  renderSmall={() =>
+                    radarData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart
+                          cx="50%"
+                          cy="50%"
+                          outerRadius="70%"
+                          data={radarData}
+                        >
+                          <PolarGrid stroke="#444" />
+                          <PolarAngleAxis
+                            dataKey="subject"
+                            stroke="#888"
+                            tick={{ fontSize: 10 }}
+                          />
+                          <PolarRadiusAxis
+                            angle={30}
+                            domain={[0, maxRadarValue]}
+                            stroke="#888"
+                            tick={false}
+                            axisLine={false}
+                          />
+                          <Radar
+                            name="My Score"
+                            dataKey="A"
+                            stroke="#8884d8"
+                            strokeWidth={3}
+                            fill="#8884d8"
+                            fillOpacity={0.5}
+                            activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#1a1a1a",
+                              border: "1px solid #333",
+                            }}
+                          />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No subject data available yet. Complete some tests to see your
+                        performance.
+                      </div>
+                    )
+                  }
+                  renderExpanded={() =>
+                    radarData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart
+                          cx="50%"
+                          cy="50%"
+                          outerRadius="80%"
+                          data={radarData}
+                        >
+                          <PolarGrid stroke="#555" gridType="polygon" />
+                          <PolarAngleAxis
+                            dataKey="subject"
+                            stroke="#CCC"
+                            tick={{ fontSize: 14, fontWeight: "bold" }}
+                          />
+                          <PolarRadiusAxis
+                            angle={30}
+                            domain={[0, maxRadarValue]}
+                            stroke="#888"
+                            tick={{ fill: "#888" }}
+                          />
+                          <Radar
+                            name="My Score"
+                            dataKey="A"
+                            stroke="#8884d8"
+                            strokeWidth={3}
+                            fill="#8884d8"
+                            fillOpacity={0.5}
+                            activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "rgba(26, 26, 26, 0.95)",
+                              border: "1px solid #333",
+                              borderRadius: "8px",
+                              padding: "12px",
+                              boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+                            }}
+                            itemStyle={{ color: "#fff", fontSize: "14px" }}
+                          />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No data available.
+                      </div>
+                    )
+                  }
+                />
               )}
-              {card.loading ? (
-                <Skeleton className="h-4 w-32" />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              {trendLoading ? (
+                <Card className="glass-card h-[400px] flex items-center justify-center">
+                  <Skeleton className="h-[70%] w-[90%]" />
+                </Card>
               ) : (
-                <p className="text-xs text-muted-foreground flex items-center mt-1">
-                  {card.icon} {card.sub}
-                </p>
+                <ExpandableChartWidget
+                  title="Progress Trend"
+                  description="Score progression over time"
+                  insights="Upward trends show consistent improvement. Use this to track your learning pace across different testing periods."
+                  isLoading={trendLoading}
+                  className="h-[400px]"
+                  renderSmall={() =>
+                    trendData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={trendData}>
+                          <defs>
+                            <linearGradient
+                              id="colorScoreStudent"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor={NEON_COLORS.secondary}
+                                stopOpacity={0.8}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor={NEON_COLORS.secondary}
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                          <XAxis
+                            dataKey="month"
+                            stroke="#888"
+                            tick={{ fontSize: 10 }}
+                          />
+                          <YAxis
+                            stroke="#888"
+                            domain={[0, 100]}
+                            tick={{ fontSize: 10 }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#1a1a1a",
+                              border: "1px solid #333",
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="score"
+                            stroke={NEON_COLORS.secondary}
+                            fillOpacity={1}
+                            fill="url(#colorScoreStudent)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No trend data available yet. Your progress will appear after
+                        completing tests.
+                      </div>
+                    )
+                  }
+                  renderExpanded={() =>
+                    trendData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                          data={trendData}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="colorScoreStudentExpanded"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor={NEON_COLORS.secondary}
+                                stopOpacity={0.6}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor={NEON_COLORS.secondary}
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#444"
+                            vertical={false}
+                          />
+                          <XAxis
+                            dataKey="month"
+                            stroke="#CCC"
+                            tick={{ fontSize: 14 }}
+                            tickMargin={12}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            stroke="#CCC"
+                            domain={[0, 100]}
+                            tick={{ fontSize: 14 }}
+                            tickFormatter={(val) => `${val}%`}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "rgba(26, 26, 26, 0.95)",
+                              border: "1px solid #333",
+                              borderRadius: "8px",
+                              padding: "12px",
+                              boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+                            }}
+                            itemStyle={{
+                              color: "#fff",
+                              fontSize: "14px",
+                              fontWeight: "bold",
+                            }}
+                            cursor={{
+                              stroke: "rgba(255,255,255,0.2)",
+                              strokeWidth: 1,
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="score"
+                            stroke={NEON_COLORS.secondary}
+                            strokeWidth={4}
+                            fillOpacity={1}
+                            fill="url(#colorScoreStudentExpanded)"
+                            activeDot={{ r: 8, stroke: "#fff", strokeWidth: 2 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No data available.
+                      </div>
+                    )
+                  }
+                />
               )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </motion.div>
+          </div>
+        </TabsContent>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          {subjectLoading ? (
-            <Card className="glass-card h-[400px] flex items-center justify-center">
-              <Skeleton className="h-[80%] w-[80%] rounded-full" />
-            </Card>
-          ) : (
-            <ExpandableChartWidget
-              title="Subject Performance"
-              description="Your strengths across different subjects"
-              insights="A balanced performance across subjects indicates a strong foundation. Focus on maintaining consistency in your top subjects while gradually improving others."
-              className="h-[400px]"
-              renderSmall={() =>
-                radarData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart
-                      cx="50%"
-                      cy="50%"
-                      outerRadius="70%"
-                      data={radarData}
-                    >
-                      <PolarGrid stroke="#444" />
-                      <PolarAngleAxis
-                        dataKey="subject"
-                        stroke="#888"
-                        tick={{ fontSize: 10 }}
-                      />
-                      <PolarRadiusAxis
-                        angle={30}
-                        domain={[0, maxRadarValue]}
-                        stroke="#888"
-                        tick={false}
-                        axisLine={false}
-                      />
-                      <Radar
-                        name="My Score"
-                        dataKey="A"
-                        stroke="#8884d8"
-                        strokeWidth={3}
-                        fill="#8884d8"
-                        fillOpacity={0.5}
-                        activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1a1a1a",
-                          border: "1px solid #333",
-                        }}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No subject data available yet. Complete some tests to see your
-                    performance.
-                  </div>
-                )
-              }
-              renderExpanded={() =>
-                radarData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart
-                      cx="50%"
-                      cy="50%"
-                      outerRadius="80%"
-                      data={radarData}
-                    >
-                      <PolarGrid stroke="#555" gridType="polygon" />
-                      <PolarAngleAxis
-                        dataKey="subject"
-                        stroke="#CCC"
-                        tick={{ fontSize: 14, fontWeight: "bold" }}
-                      />
-                      <PolarRadiusAxis
-                        angle={30}
-                        domain={[0, maxRadarValue]}
-                        stroke="#888"
-                        tick={{ fill: "#888" }}
-                      />
-                      <Radar
-                        name="My Score"
-                        dataKey="A"
-                        stroke="#8884d8"
-                        strokeWidth={3}
-                        fill="#8884d8"
-                        fillOpacity={0.5}
-                        activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "rgba(26, 26, 26, 0.95)",
-                          border: "1px solid #333",
-                          borderRadius: "8px",
-                          padding: "12px",
-                          boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-                        }}
-                        itemStyle={{ color: "#fff", fontSize: "14px" }}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No data available.
-                  </div>
-                )
-              }
-            />
-          )}
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          {trendLoading ? (
-            <Card className="glass-card h-[400px] flex items-center justify-center">
-              <Skeleton className="h-[70%] w-[90%]" />
-            </Card>
-          ) : (
-            <ExpandableChartWidget
-              title="Progress Trend"
-              description="Your overall score improvement over time"
-              insights="Your learning curve is looking positive! Consistent scores in recent months show good retention. Keep practicing to maintain this upward trajectory."
-              className="h-[400px]"
-              renderSmall={() =>
-                trendData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trendData}>
-                      <defs>
-                        <linearGradient
-                          id="colorScoreStudent"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor={NEON_COLORS.secondary}
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor={NEON_COLORS.secondary}
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                      <XAxis
-                        dataKey="month"
-                        stroke="#888"
-                        tick={{ fontSize: 10 }}
-                      />
-                      <YAxis
-                        stroke="#888"
-                        domain={[0, 100]}
-                        tick={{ fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1a1a1a",
-                          border: "1px solid #333",
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="score"
-                        stroke={NEON_COLORS.secondary}
-                        fillOpacity={1}
-                        fill="url(#colorScoreStudent)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No trend data available yet. Your progress will appear after
-                    completing tests.
-                  </div>
-                )
-              }
-              renderExpanded={() =>
-                trendData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={trendData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                    >
-                      <defs>
-                        <linearGradient
-                          id="colorScoreStudentExpanded"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor={NEON_COLORS.secondary}
-                            stopOpacity={0.6}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor={NEON_COLORS.secondary}
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#444"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="month"
-                        stroke="#CCC"
-                        tick={{ fontSize: 14 }}
-                        tickMargin={12}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        stroke="#CCC"
-                        domain={[0, 100]}
-                        tick={{ fontSize: 14 }}
-                        tickFormatter={(val) => `${val}%`}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "rgba(26, 26, 26, 0.95)",
-                          border: "1px solid #333",
-                          borderRadius: "8px",
-                          padding: "12px",
-                          boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-                        }}
-                        itemStyle={{
-                          color: "#fff",
-                          fontSize: "14px",
-                          fontWeight: "bold",
-                        }}
-                        cursor={{
-                          stroke: "rgba(255,255,255,0.2)",
-                          strokeWidth: 1,
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="score"
-                        stroke={NEON_COLORS.secondary}
-                        strokeWidth={4}
-                        fillOpacity={1}
-                        fill="url(#colorScoreStudentExpanded)"
-                        activeDot={{ r: 8, stroke: "#fff", strokeWidth: 2 }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No data available.
-                  </div>
-                )
-              }
-            />
-          )}
-        </motion.div>
-      </div>
+        <TabsContent value="performance" className="space-y-8 mt-6">
 
       {/* Strengths & Weaknesses */}
       <div className="space-y-4">
@@ -694,7 +695,8 @@ const StudentAnalytics = () => {
           <ExpandableChartWidget
             title="Chapter Performance"
             description="Average scores by chapter"
-            insights="Understanding chapter-wise performance helps identify specific knowledge gaps. Focus on chapters with lower scores."
+            insights="Identifying chapters with lower scores helps you prioritize which areas need more study time."
+            isLoading={ctLoading}
             className="h-[400px]"
             renderSmall={() =>
               chapterTopicData.chapters.length > 0 ? (
@@ -808,6 +810,10 @@ const StudentAnalytics = () => {
           />
 
           <ExpandableChartWidget
+            title="Topic Performance"
+            description="Average scores by topic"
+            insights="Topic-level analysis helps you pinpoint specific concepts that need further clarification."
+            isLoading={ctLoading}
             className="h-[400px]"
             renderSmall={() =>
               chapterTopicData.topics.length > 0 ? (
@@ -989,15 +995,10 @@ const StudentAnalytics = () => {
             </CardContent>
           </Card>
         )}
-
-        {/* Engagement History Section */}
-        <div className="mt-8">
-          <EngagementHistory 
-            history={engagementHistory} 
-            isLoading={engagementLoading} 
-          />
-        </div>
       </motion.div>
+    </TabsContent>
+
+      </Tabs>
     </div>
   );
 };

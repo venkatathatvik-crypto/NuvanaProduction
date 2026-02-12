@@ -116,7 +116,7 @@ const Dashboard = () => {
       path: "/student/attendance",
     },
     {
-      label: "Notes",
+      label: "Audio Notes",
       value: "Access",
       icon: StickyNote,
       color: "text-green-500",

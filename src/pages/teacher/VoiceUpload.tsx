@@ -255,7 +255,7 @@ const VoiceUpload = () => {
         audioRef.current.src = "";
       }
       setIsPlaying(false);
-      toast.success("Voice note uploaded successfully!");
+      toast.success("Audio note uploaded successfully!");
 
       // Invalidate queries to reflect new voice note
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) });
@@ -353,7 +353,7 @@ const VoiceUpload = () => {
       ) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
 
-      toast.success("Voice note uploaded successfully!");
+      toast.success("Audio note uploaded successfully!");
 
       // Invalidate queries to reflect new voice note
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) });
@@ -394,7 +394,7 @@ const VoiceUpload = () => {
         voiceNoteToDelete.storagePath,
         profile.id
       );
-      toast.success("Voice note deleted successfully");
+      toast.success("Audio note deleted successfully");
 
       // Invalidate queries using proper queryKeys
       queryClient.invalidateQueries({ 
@@ -426,7 +426,7 @@ const VoiceUpload = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      toast.success("Voice note downloaded successfully");
+      toast.success("Audio note downloaded successfully");
     } catch (error) {
       console.error("Error downloading voice note:", error);
       toast.error("Failed to download voice note.");
@@ -482,10 +482,10 @@ const VoiceUpload = () => {
             className="min-w-0"
           >
             <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">
-              Voice Notes 🎙️
+              Audio Notes 🎙️
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base">
-              Record and upload class sessions
+              Record and upload audio notes for class sessions
             </p>
           </motion.div>
         </div>
@@ -667,7 +667,7 @@ const VoiceUpload = () => {
               </div>
 
               <div className="mt-8 pt-6 border-t border-border">
-                <p className="text-sm font-medium mb-3">Or upload audio file</p>
+                <p className="text-sm font-medium mb-3">Or upload audio file as note</p>
                 {!uploadedFile ? (
                   <div className="flex gap-2">
                     <Input

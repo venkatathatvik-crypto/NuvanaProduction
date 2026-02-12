@@ -6,15 +6,17 @@ import { SaveAnnotationDto } from './dto/save-annotation.dto';
 export class PdfAnnotationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async saveAnnotation(dto: SaveAnnotationDto, schoolId: string) {
-    const { file_id, page_number, annotation_data } = dto;
+  async saveAnnotation(dto: SaveAnnotationDto, schoolId: string, profileId: string) {
+    const { file_id, page_number, annotation_data, note_type } = dto;
 
-    // Check if annotation already exists for this file and page
+    // Check if annotation already exists for this file, page, user, and type
     const existingAnnotation = await this.prisma.pdf_annotations.findFirst({
       where: {
         file_id,
         school_id: schoolId,
         page_number,
+        profile_id: profileId,
+        note_type,
       },
     });
 
@@ -33,16 +35,22 @@ export class PdfAnnotationsService {
         file_id,
         school_id: schoolId,
         page_number,
+        profile_id: profileId,
+        note_type,
         annotation_data,
       },
     });
   }
 
-  async getAnnotationsByFile(fileId: string, schoolId: string) {
+  async getAnnotationsByFile(fileId: string, schoolId: string, profileId: string) {
+    // Teachers and students see their own notes. 
+    // Students may also eventually see teacher's overlays (ANNOTATION type), 
+    // but for now, we'll return user-specific notes to keep it private as requested.
     return this.prisma.pdf_annotations.findMany({
       where: {
         file_id: fileId,
         school_id: schoolId,
+        profile_id: profileId,
       },
       orderBy: {
         page_number: 'asc',
@@ -50,11 +58,12 @@ export class PdfAnnotationsService {
     });
   }
 
-  async deleteAnnotationsByFile(fileId: string, schoolId: string) {
+  async deleteAnnotationsByFile(fileId: string, schoolId: string, profileId: string) {
     return this.prisma.pdf_annotations.deleteMany({
       where: {
         file_id: fileId,
         school_id: schoolId,
+        profile_id: profileId,
       },
     });
   }

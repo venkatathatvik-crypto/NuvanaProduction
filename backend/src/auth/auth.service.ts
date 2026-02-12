@@ -201,6 +201,31 @@ export class AuthService {
     };
   }
 
+  async logout(token: string) {
+    try {
+      // Decode token to get expiration
+      const payload = this.jwtService.decode(token) as any;
+      if (!payload || !payload.exp) return;
+
+      // Calculate remaining time in milliseconds
+      const now = Math.floor(Date.now() / 1000);
+      const remainingTime = payload.exp - now;
+
+      if (remainingTime > 0) {
+        // Store in Redis with TTL matching remaining token life
+        // Key format: blacklist:<token>
+        await this.cacheManager.set(`blacklist:${token}`, 'revoked', remainingTime * 1000);
+      }
+    } catch (error) {
+      console.error('Error blacklisting token during logout:', error);
+    }
+  }
+
+  async isTokenBlacklisted(token: string): Promise<boolean> {
+    const blacklisted = await this.cacheManager.get(`blacklist:${token}`);
+    return !!blacklisted;
+  }
+
   async resetPassword(dto: ResetPasswordDto) {
     // Find user
     const user = await this.prisma.profiles.findUnique({

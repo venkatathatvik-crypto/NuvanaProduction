@@ -169,7 +169,7 @@ const Notes = () => {
           >
             <h1 className="text-4xl font-bold neon-text">Audio Notes</h1>
             <p className="text-muted-foreground">
-              Listen to teacher's voice notes by subject
+              Listen to teacher's audio notes by subject
             </p>
           </motion.div>
         </div>
@@ -192,7 +192,7 @@ const Notes = () => {
               No Audio Notes Available
             </h2>
             <p className="text-muted-foreground">
-              There are no voice notes available for your class at the moment.
+              There are no audio notes available for your class at the moment.
             </p>
           </Card>
         ) : (
@@ -345,9 +345,9 @@ const Notes = () => {
               Study Tips
             </h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Listen to notes while commuting or during breaks</li>
-              <li>• Download notes for offline listening</li>
-              <li>• Review notes multiple times for better retention</li>
+              <li>• Listen to audio notes while commuting or during breaks</li>
+              <li>• Download audio notes for offline listening</li>
+              <li>• Review audio notes multiple times for better retention</li>
               <li>• Take notes while listening for active learning</li>
             </ul>
           </Card>
