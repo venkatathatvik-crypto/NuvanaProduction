@@ -38,3 +38,5 @@ build
 Thumbs.db
 
 .vercel
+
+backend/service-account.json
