@@ -19,7 +19,7 @@ import { FlattenedClass } from "@/schemas/academic";
 import { messagesService, type Message } from "@/services/messagesService";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { userService } from "@/services/userService";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { whatsappApi, type WhatsappMessage } from "@/services/whatsappApiService";
 
@@ -41,6 +41,8 @@ const TeacherCommunication = () => {
     const [selectedStudentId, setSelectedStudentId] = useState<string>('');
     const [students, setStudents] = useState<StudentAttendance[]>([]);
     const [studentsLoading, setStudentsLoading] = useState(false);
+    const [broadcastType, setBroadcastType] = useState<'template' | 'text'>('text');
+    const [historySearch, setHistorySearch] = useState('');
 
     // WhatsApp Broadcast History from Backend
     const { data: broadcastHistory = [], isLoading: historyLoading } = useQuery({
@@ -152,6 +154,34 @@ const TeacherCommunication = () => {
         }
     };
 
+    // Group history by date
+    const groupedHistory = React.useMemo(() => {
+        const filtered = broadcastHistory.filter((item: WhatsappMessage) => 
+            item.phone_number.toLowerCase().includes(historySearch.toLowerCase()) ||
+            item.message_text.toLowerCase().includes(historySearch.toLowerCase())
+        );
+
+        const groups: { [key: string]: WhatsappMessage[] } = {};
+        filtered.forEach((item: WhatsappMessage) => {
+            const date = new Date(item.created_at);
+            let dateKey = format(date, 'MMM dd, yyyy');
+            
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            if (format(date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
+                dateKey = 'Today';
+            } else if (format(date, 'yyyy-MM-dd') === format(yesterday, 'yyyy-MM-dd')) {
+                dateKey = 'Yesterday';
+            }
+            
+            if (!groups[dateKey]) groups[dateKey] = [];
+            groups[dateKey].push(item);
+        });
+        return groups;
+    }, [broadcastHistory, historySearch]);
+
     const handleSendToParents = async (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -195,8 +225,10 @@ const TeacherCommunication = () => {
 
                 await whatsappApi.sendBroadcast({
                     recipients,
-                    templateName: 'hello_world', // Phase 1: Using test template
-                    languageCode: 'en_US',
+                    messageType: broadcastType,
+                    message: broadcastType === 'text' ? parentMessage : undefined,
+                    templateName: broadcastType === 'template' ? 'hello_world' : undefined,
+                    languageCode: broadcastType === 'template' ? 'en_US' : undefined,
                     schoolId: profile?.school_id || 'test-school',
                     senderId: profile?.id || 'test-sender',
                 });
@@ -252,16 +284,16 @@ const TeacherCommunication = () => {
                     </div>
                 </div>
 
-                <Tabs defaultValue="send" className="w-full">
+                <Tabs defaultValue="parents" className="w-full">
                     <TabsList className="grid w-full grid-cols-3 lg:w-[600px] mb-8">
+                        <TabsTrigger value="parents" className="gap-2">
+                            <Users className="w-4 h-4" /> Parent Connect
+                        </TabsTrigger>
                         <TabsTrigger value="send" className="gap-2">
                             <Shield className="w-4 h-4" /> Admin Connect
                         </TabsTrigger>
                         <TabsTrigger value="history" className="gap-2">
                             <Clock className="w-4 h-4" /> Message History
-                        </TabsTrigger>
-                        <TabsTrigger value="parents" className="gap-2">
-                            <Users className="w-4 h-4" /> Parent Connect
                         </TabsTrigger>
                     </TabsList>
 
@@ -493,13 +525,38 @@ const TeacherCommunication = () => {
                                         )}
                                     </div>
 
+                                    {recipientType === 'class' && (
+                                        <div className="space-y-2 bg-secondary/20 p-4 rounded-xl border border-white/5">
+                                            <label className="text-sm font-medium">Broadcast Mode</label>
+                                            <RadioGroup 
+                                                defaultValue="text" 
+                                                value={broadcastType}
+                                                onValueChange={(val: any) => setBroadcastType(val)}
+                                                className="flex flex-col sm:flex-row gap-4 mt-2"
+                                            >
+                                                <div className="flex items-center space-x-2">
+                                                    <RadioGroupItem value="text" id="teacher-mode-text" />
+                                                    <Label htmlFor="teacher-mode-text" className="cursor-pointer text-sm">Plain Text (Immediate)</Label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <RadioGroupItem value="template" id="teacher-mode-template" />
+                                                    <Label htmlFor="teacher-mode-template" className="cursor-pointer text-sm">Official Template (Pre-approved)</Label>
+                                                </div>
+                                            </RadioGroup>
+                                        </div>
+                                    )}
+
                                     {classes.length === 0 && !classesLoading && (
                                         <p className="text-xs text-muted-foreground">
                                             You don't have any classes assigned. Contact admin to get assigned to classes.
                                         </p>
                                     )}
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Announcement Message</label>
+                                        <label className="text-sm font-medium">
+                                            {(recipientType === 'class' && broadcastType === 'text') || recipientType === 'individual' 
+                                                ? 'Message Content' 
+                                                : 'Template Message (Fallback)'}
+                                        </label>
                                         <Textarea
                                             placeholder="Dear Parents, regarding upcoming assignments..."
                                             className="min-h-[150px] bg-secondary/50 border-white/10"
@@ -531,60 +588,88 @@ const TeacherCommunication = () => {
                                     </div>
                                 ) : broadcastHistory.length > 0 ? (
                                     <div className="mt-12 space-y-6">
-                                        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
                                             <h3 className="text-xl font-bold flex items-center gap-2">
                                                 <History className="w-6 h-6 text-primary" />
                                                 Broadcast History
                                             </h3>
+                                            <div className="relative w-full sm:w-64">
+                                                <Input
+                                                    placeholder="Search messages..."
+                                                    value={historySearch}
+                                                    onChange={(e) => setHistorySearch(e.target.value)}
+                                                    className="pl-9 bg-secondary/30 border-white/5 h-9 text-sm"
+                                                />
+                                                <Users className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+                                            </div>
                                         </div>
-                                        <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                            {broadcastHistory.map((item: WhatsappMessage) => (
-                                                <motion.div 
-                                                    key={item.id} 
-                                                    initial={{ opacity: 0, x: -10 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl relative group overflow-hidden"
-                                                >
-                                                    <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                    <div className="relative z-10">
-                                                        <div className="flex items-start justify-between mb-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold uppercase text-[10px]">
-                                                                        {item.phone_number}
-                                                                    </Badge>
-                                                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                                                        {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {item.status === 'SENT' && (
-                                                                    <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        <Check className="w-3 h-3" /> Sent
-                                                                    </Badge>
-                                                                )}
-                                                                {item.status === 'DELIVERED' && (
-                                                                    <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        <CheckCheck className="w-3 h-3" /> Delivered
-                                                                    </Badge>
-                                                                )}
-                                                                {item.status === 'READ' && (
-                                                                    <Badge variant="outline" className="bg-blue-400/10 text-blue-400 border-blue-400/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        <CheckCheck className="w-3 h-3" /> Read
-                                                                    </Badge>
-                                                                )}
-                                                                {item.status === 'FAILED' && (
-                                                                    <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        Failed
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
+
+                                        <div className="space-y-8 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                                            {Object.keys(groupedHistory).length === 0 ? (
+                                                <div className="text-center py-12 text-muted-foreground">
+                                                    <p>No messages matching your search</p>
+                                                </div>
+                                            ) : (
+                                                Object.entries(groupedHistory).map(([date, items]) => (
+                                                    <div key={date} className="space-y-4">
+                                                        <div className="sticky top-0 z-20 py-1 flex items-center gap-4">
+                                                            <span className="text-xs font-bold uppercase tracking-widest text-primary/60 bg-background/80 backdrop-blur-md px-2 py-1 rounded">
+                                                                {date}
+                                                            </span>
+                                                            <div className="h-[1px] flex-1 bg-gradient-to-r from-primary/20 to-transparent" />
                                                         </div>
-                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message_text}</p>
+                                                        <div className="grid grid-cols-1 gap-4">
+                                                            {items.map((item: WhatsappMessage) => (
+                                                                <motion.div 
+                                                                    key={item.id} 
+                                                                    initial={{ opacity: 0, y: 10 }}
+                                                                    animate={{ opacity: 1, y: 0 }}
+                                                                    className="p-5 rounded-2xl bg-secondary/40 border border-white/10 backdrop-blur-xl relative group transition-all hover:bg-secondary/60 hover:border-primary/40 hover:shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]"
+                                                                >
+                                                                    <div className="flex items-start justify-between mb-3">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                                                                <Smartphone className="w-5 h-5 text-primary" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="font-bold text-sm text-white">{item.phone_number}</p>
+                                                                                <p className="text-[10px] text-muted-foreground font-medium">
+                                                                                    {format(new Date(item.created_at), 'hh:mm a')}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            {item.status === 'SENT' && (
+                                                                                <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                                    <Send className="w-3 h-3" /> Sent
+                                                                                </Badge>
+                                                                            )}
+                                                                            {item.status === 'DELIVERED' && (
+                                                                                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                                    <CheckCheck className="w-3 h-3" /> Delivered
+                                                                                </Badge>
+                                                                            )}
+                                                                            {item.status === 'READ' && (
+                                                                                <Badge variant="outline" className="bg-blue-400/10 text-blue-400 border-blue-400/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                                    <CheckCheck className="w-3 h-3 text-blue-400" /> Read
+                                                                                </Badge>
+                                                                            )}
+                                                                            {item.status === 'FAILED' && (
+                                                                                <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] uppercase font-bold px-2 py-0.5">
+                                                                                    Failed
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="bg-background/40 rounded-xl p-4 border border-white/5 shadow-inner">
+                                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message_text}</p>
+                                                                    </div>
+                                                                </motion.div>
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </motion.div>
-                                            ))}
+                                                ))
+                                            )}
                                         </div>
                                     </div>
                                 ) : (

@@ -181,6 +181,10 @@ All colors MUST be HSL.
     box-shadow: 0 0 20px hsl(var(--neon-purple) / 0.5);
   }
 
+  .neon-icon-glow {
+    filter: drop-shadow(0 0 10px hsl(var(--neon-purple) / 0.8));
+  }
+
   .neon-text {
     text-shadow: 0 0 10px hsl(var(--neon-purple) / 0.8);
   }

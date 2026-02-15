@@ -1,102 +1,71 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { ChatVertexAI } from '@langchain/google-vertexai';
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { LLMMessage, LLMProvider } from './llm.provider.interface';
 
-/**
- * Gemini Provider using LangChain ChatGoogleGenerativeAI
- * Migrated from raw REST API to LangChain for better abstraction and maintainability
- */
 @Injectable()
 export class GeminiProvider implements LLMProvider, OnModuleInit {
-    private apiKey: string | null = null;
     private modelName: string;
-    private model: ChatGoogleGenerativeAI | null = null;
-    private modelCache: Map<string, ChatGoogleGenerativeAI> = new Map();
+    private model: ChatVertexAI | null = null;
+    private modelCache: Map<string, ChatVertexAI> = new Map();
     private readonly logger = new Logger(GeminiProvider.name);
 
     constructor(private configService: ConfigService) {
-        const rawApiKey = this.configService.get<string>('GEMINI_API_KEY');
-        this.apiKey = rawApiKey ? rawApiKey.trim() : null;
-
-        // Use Gemini model (defaults to flash preview if not set)
+        // Use Gemini model (defaults to flash or pro)
         this.modelName = this.configService.get<string>('GEMINI_MODEL') || 
                         this.configService.get<string>('GEMINI_FLASH_MODEL') || 
-                        'gemini-3-flash-preview';
+                        'gemini-3-flash';
 
-        if (this.apiKey) {
-            this.logger.log(`Initialized Gemini with Key: ${this.apiKey.substring(0, 5)}...${this.apiKey.substring(this.apiKey.length - 4)}`);
-            this.logger.log(`Active Model: ${this.modelName}`);
-        } else {
-            this.logger.warn('GEMINI_API_KEY is not set. GeminiProvider will fail if used.');
-        }
+        const location = this.configService.get<string>('GCP_LOCATION') || 'us-central1';
+        this.logger.log(`Initializing Vertex AI with Location: ${location}`);
+        this.logger.log(`Active Model: ${this.modelName}`);
     }
 
     onModuleInit() {
-        if (!this.apiKey) return;
-
         try {
             // Initialize default model
             this.model = this.createModel(this.modelName);
-            this.logger.log(`✓ Gemini Provider ready (v1beta) - Model: ${this.modelName}`);
+            this.logger.log(`✓ Vertex AI Provider ready - Model: ${this.modelName}`);
         } catch (error) {
-            this.logger.error(`❌ Failed to initialize Gemini model [${this.modelName}]:`, error);
+            this.logger.error(`❌ Failed to initialize Vertex AI model [${this.modelName}]:`, error);
         }
     }
 
-    private createModel(modelName: string): ChatGoogleGenerativeAI {
-        return new ChatGoogleGenerativeAI({
+    private createModel(modelName: string): ChatVertexAI {
+        const location = this.configService.get<string>('GCP_LOCATION') || 'us-central1';
+
+        // NOTE: 'project' property is not supported in this version's constructor.
+        // It should be set in GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_CLOUD_PROJECT environment variables.
+        return new ChatVertexAI({
             model: modelName,
-            apiKey: this.apiKey!,
-            apiVersion: 'v1beta', // Required for Gemini 3 preview models
+            location: location,
             temperature: 0.7,
             maxOutputTokens: 8192,
         });
     }
 
-    // Simplified: No Pro vs Flash routing for these models
-
     /**
-     * Merges system messages into the first human message for better API compatibility
+     * Converts generic LLM messages to LangChain messages
      */
-    private convertMessages(messages: LLMMessage[]): (HumanMessage | SystemMessage)[] {
-        const systemPrompts = messages
-            .filter(msg => msg.role === 'system')
-            .map(msg => msg.content)
-            .join('\n\n');
-
-        const langchainMessages: (HumanMessage | SystemMessage)[] = [];
-        let firstHumanPassed = false;
-
-        messages.forEach(msg => {
-            if (msg.role === 'user') {
-                if (!firstHumanPassed && systemPrompts) {
-                    langchainMessages.push(new HumanMessage(`${systemPrompts}\n\n---\n\n${msg.content}`));
-                    firstHumanPassed = true;
-                } else {
-                    langchainMessages.push(new HumanMessage(msg.content));
-                    firstHumanPassed = true;
-                }
-            } else if (msg.role === 'assistant') {
-                langchainMessages.push(new HumanMessage(msg.content));
+    private convertMessages(messages: LLMMessage[]): (HumanMessage | SystemMessage | AIMessage)[] {
+        return messages.map(msg => {
+            switch (msg.role) {
+                case 'system':
+                    return new SystemMessage(msg.content);
+                case 'user':
+                    return new HumanMessage(msg.content);
+                case 'assistant':
+                    return new AIMessage(msg.content);
+                default:
+                    return new HumanMessage(msg.content);
             }
         });
-
-        if (!firstHumanPassed && systemPrompts) {
-            langchainMessages.push(new HumanMessage(systemPrompts));
-        }
-
-        return langchainMessages;
     }
 
     async generate(messages: LLMMessage[], modelOverride?: string): Promise<string> {
-        if (!this.apiKey) {
-            throw new Error('Gemini API key not initialized.');
-        }
-
         let targetModelName = modelOverride || this.modelName;
-        let activeModel: ChatGoogleGenerativeAI | null = null;
+        let activeModel: ChatVertexAI | null = null;
 
         // Use override if provided, otherwise use default
         if (modelOverride) {
@@ -111,25 +80,27 @@ export class GeminiProvider implements LLMProvider, OnModuleInit {
         }
 
         if (!activeModel) {
-            throw new Error(`Gemini model [${targetModelName}] failed to initialize.`);
+            throw new Error(`Vertex AI model [${targetModelName}] failed to initialize.`);
         }
 
         try {
-            this.logger.log(`[Gemini] Processing with: ${targetModelName}`);
+            this.logger.log(`[Vertex AI] Processing with: ${targetModelName}`);
             const langchainMessages = this.convertMessages(messages);
-            const response = await activeModel.invoke(langchainMessages);
+            
+            // Cast to any to resolve @langchain/core version conflicts ([MESSAGE_SYMBOL] mismatch)
+            const response = await activeModel.invoke(langchainMessages as any);
 
             const text = typeof response.content === 'string' 
                 ? response.content 
                 : JSON.stringify(response.content);
 
             if (!text || text.trim().length === 0) {
-                throw new Error('Gemini returned empty text.');
+                throw new Error('Vertex AI returned empty text.');
             }
 
             return text;
         } catch (error: any) {
-            this.logger.error(`[Gemini] Generation failed (${targetModelName}):`, error.message);
+            this.logger.error(`[Vertex AI] Generation failed (${targetModelName}):`, error.message);
             throw error;
         }
     }

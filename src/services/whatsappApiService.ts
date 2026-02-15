@@ -8,9 +8,11 @@ export interface WhatsappRecipient {
 
 export interface BroadcastParams {
   recipients: WhatsappRecipient[];
-  templateName: string;
-  languageCode: string;
+  templateName?: string;
+  languageCode?: string;
   components?: any[];
+  message?: string;
+  messageType?: 'template' | 'text';
   senderId?: string;
   schoolId?: string;
 }

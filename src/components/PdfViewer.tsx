@@ -20,7 +20,11 @@ import {
   Target,
   Columns2,
   FileText,
-  Eraser as EraserIcon
+  Eraser as EraserIcon,
+  Mic,
+  Square,
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -35,6 +39,8 @@ import {
 } from 'pdf-lib';
 import { QuestionPanel } from './engagement/QuestionPanel';
 import { useAuth } from '@/auth/AuthContext';
+import { uploadTeacherVoiceNote } from '@/services/academic';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // Configure pdfjs worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -46,6 +52,7 @@ interface PdfViewerProps {
   isReadOnly?: boolean;
   fileName?: string;
   classId?: string;
+  gradeSubjectId?: string; // Added gradeSubjectId
   sessionId?: string;
 }
 
@@ -56,9 +63,151 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   isReadOnly = false,
   fileName,
   classId,
+  gradeSubjectId, // Added gradeSubjectId
   sessionId
 }) => {
+  const isTeacherView = !isReadOnly; // Teacher mode if not read-only
+  const isStudentView = isReadOnly;
+
+  // Audio Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const timerRef = useRef<any>(null);
+
+  // Navigation Guard for recording
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRecording || audioBlob) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isRecording, audioBlob]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+            ? "audio/mp4"
+            : "audio/ogg",
+      });
+
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+        setAudioBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+
+        // Stop all tracks
+        stream.getTracks().forEach((track) => track.stop());
+        toast.success("Recording caught! Saving...");
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+
+      toast.info("Recording started...");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      toast.error("Failed to access microphone. Please check permissions.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    }
+  };
+
+  const handleClose = () => {
+    if (isRecording || audioBlob) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleAudioUpload = async () => {
+    if (!audioBlob) {
+      toast.error("No audio recorded to save.");
+      return;
+    }
+    if (!profile) {
+      toast.error("User profile not found.");
+      return;
+    }
+    if (!classId || !gradeSubjectId) {
+      console.error("Missing IDs:", { classId, gradeSubjectId });
+      toast.error(`Missing metadata for upload: ${!classId ? 'Class ID' : 'Subject ID'} is missing.`);
+      return;
+    }
+
+    setIsUploadingAudio(true);
+    try {
+      const title = `${fileName || "PDF Note"} - ${new Date().toLocaleTimeString()} (Page ${pageNumber})`;
+      await uploadTeacherVoiceNote({
+        file: audioBlob,
+        title,
+        classId,
+        gradeSubjectId,
+        teacherId: profile.id,
+        schoolId: profile.school_id,
+        durationSeconds: recordingTime,
+      });
+
+      toast.success("Audio note saved successfully!");
+      setAudioBlob(null);
+      setAudioUrl(null);
+      setRecordingTime(0);
+
+      // Invalidate queries to reflect new voice note on the audio notes page
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) 
+      });
+      queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload audio note.");
+    } finally {
+      setIsUploadingAudio(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
   const { profile } = useAuth();
+
   const queryClient = useQueryClient();
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -74,6 +223,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   
   const [pdfAnnotations, setPdfAnnotations] = useState<Record<number, any>>({});
   const [textNotes, setTextNotes] = useState<Record<number, string>>({});
+  const [teacherNotes, setTeacherNotes] = useState<Record<number, string>>({});
   
   const [isSplitView, setIsSplitView] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -82,36 +232,58 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Load annotations from backend using React Query
   const { data: fetchedAnnotations = [], isLoading: isLoadingAnnotations, isSuccess } = useQuery({
-    queryKey: ['pdf-annotations', fileId],
+    queryKey: ['pdf-annotations', fileId, profile?.id], // Added profile?.id to avoid cache collision
     queryFn: () => getPdfAnnotations(fileId),
-    enabled: !!fileId,
+    enabled: !!fileId && !!profile?.id,
     staleTime: 5 * 60 * 1000,
   });
 
+
   // Sync fetched annotations to state when they arrive
   useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess && profile) {
       const pdfMap: Record<number, any> = {};
       const notesMap: Record<number, string> = {};
+      const tNotesMap: Record<number, string> = {};
       
       fetchedAnnotations.forEach(ann => {
+        // Categorize note content based on owner
+        const isOwnNote = ann.profile_id === profile.id;
+
         if (ann.note_type === 'SCRATCHPAD') {
-          // Strictly extract text: handle string or {text: ""}
+          let noteText = "";
           if (typeof ann.annotation_data === 'string') {
-            notesMap[ann.page_number] = ann.annotation_data;
+            noteText = ann.annotation_data;
           } else if (ann.annotation_data?.text) {
-            notesMap[ann.page_number] = ann.annotation_data.text;
+            noteText = ann.annotation_data.text;
           }
-          // Note: Ignoring legacy object data (drawing paths) for text panel
-        } else {
+
+          if (isOwnNote) {
+            notesMap[ann.page_number] = noteText;
+          } else if (!isTeacherView) { // Only students see "Teacher's Note"
+            tNotesMap[ann.page_number] = noteText;
+          }
+        } else if (isOwnNote) {
+          // Only sync own drawing annotations
           pdfMap[ann.page_number] = ann.annotation_data;
         }
       });
       
       setPdfAnnotations(prev => ({ ...prev, ...pdfMap }));
-      setTextNotes(prev => ({ ...prev, ...notesMap }));
+      setTextNotes(prev => {
+        // Only update if current text is empty to avoid overwriting user typing
+        const newMap = { ...prev };
+        Object.keys(notesMap).forEach(key => {
+          const pNum = Number(key);
+          if (!newMap[pNum]) {
+            newMap[pNum] = notesMap[pNum];
+          }
+        });
+        return newMap;
+      });
+      setTeacherNotes(tNotesMap);
     }
-  }, [isSuccess, fetchedAnnotations]);
+  }, [isSuccess, fetchedAnnotations, profile?.id]);
 
   // Handle page change - save current paths to local state
   const handlePageChange = async (newPage: number) => {
@@ -342,7 +514,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       {/* Header / Toolbar */}
       <div className="flex items-center justify-between p-4 border-b border-border bg-card shadow-sm">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" onClick={handleClose}>
             <X className="w-5 h-5" />
           </Button>
           <h2 className="text-lg font-semibold truncate max-w-[200px] sm:max-w-md">PDF Annotator</h2>
@@ -412,8 +584,57 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               onClick={() => setShowEngagementPanel(true)}
             >
               <Target className="w-4 h-4 mr-2" />
-              Ask Question
+              Nuva Pulse
             </Button>
+          )}
+
+          {/* Audio Note (Teachers only) */}
+          {!isReadOnly && pdfLoaded && (
+            <div className="flex items-center gap-2 border-l pl-2 border-border ml-2">
+              {!isRecording && !audioBlob && (
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="text-primary border-primary/30 hover:bg-primary/10"
+                  onClick={startRecording}
+                >
+                  <Mic className="w-4 h-4" />
+                </Button>
+              )}
+              
+              {isRecording && (
+                <div className="flex items-center gap-2 bg-destructive/10 px-3 py-1 rounded-full border border-destructive/20 animate-pulse">
+                  <Square className="w-4 h-4 text-destructive cursor-pointer" onClick={stopRecording} />
+                  <span className="text-destructive text-xs font-bold font-mono w-10">{formatTime(recordingTime)}</span>
+                </div>
+              )}
+
+              {audioBlob && !isRecording && (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 text-primary text-xs font-medium bg-primary/10 px-2 py-1 rounded-md">
+                    <Clock className="w-3 h-3" />
+                    {formatTime(recordingTime)}
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="neon-glow"
+                    onClick={handleAudioUpload}
+                    disabled={isUploadingAudio}
+                  >
+                    {isUploadingAudio ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    {isUploadingAudio ? "Saving..." : "Save Voice"}
+                  </Button>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="text-muted-foreground w-8 h-8 rounded-full"
+                    onClick={() => { setAudioBlob(null); setAudioUrl(null); }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="flex items-center gap-1 border-l pl-2 border-border ml-2">
@@ -571,6 +792,21 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                   <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Page {pageNumber} Notes</span>
                 </div>
 
+                {teacherNotes[pageNumber] && (
+                  <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-md">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users className="w-3 h-3 text-primary" />
+                      <span className="text-[10px] font-bold text-primary uppercase">Teacher's Note</span>
+                    </div>
+                    <p className="text-sm leading-relaxed italic text-foreground/80">
+                      {teacherNotes[pageNumber]}
+                    </p>
+                  </div>
+                )}
+
+                <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1 flex items-center gap-1">
+                  <UserCircle className="w-3 h-3" /> My Private Note
+                </div>
                 <Textarea
                   value={textNotes[pageNumber] || ""}
                   onChange={(e) => setTextNotes(prev => ({ ...prev, [pageNumber]: e.target.value }))}
@@ -579,7 +815,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 />
 
                 <div className="absolute top-4 right-4 px-2 py-0.5 bg-neon-blue/10 text-[10px] font-bold text-neon-blue rounded uppercase">
-                  Private
+                  Shared View
                 </div>
 
                 {/* Subtle visual touch */}
@@ -597,6 +833,19 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           onClose={() => setShowEngagementPanel(false)}
           fileName={fileName}
           pageNumber={pageNumber}
+        />
+      )}
+
+      {showCloseConfirm && (
+        <ConfirmDialog
+          open={showCloseConfirm}
+          onOpenChange={setShowCloseConfirm}
+          onConfirm={onClose}
+          title="Unsaved Recording"
+          description="You have an unsaved recording. Are you sure you want to close the viewer? Your recording will be lost."
+          confirmText="Close Anyway"
+          cancelText="Stay"
+          variant="destructive"
         />
       )}
     </div>

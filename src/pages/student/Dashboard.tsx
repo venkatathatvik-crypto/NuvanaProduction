@@ -47,7 +47,18 @@ const Dashboard = () => {
   // 2. Fetch Announcements
   const { data: announcements = [], isLoading: loadingAnnouncements } = useQuery({
     queryKey: ['student-announcements', studentClassId],
-    queryFn: () => getStudentAnnouncements(studentClassId!),
+    queryFn: async () => {
+      const data = await getStudentAnnouncements(studentClassId!);
+      // Expiry logic
+      const expiryDays = parseInt(import.meta.env.VITE_ANNOUNCEMENT_EXPIRY_DAYS || "7");
+      const expiryMs = expiryDays * 24 * 60 * 60 * 1000;
+      const now = new Date().getTime();
+      
+      return data.filter(announcement => {
+        const createdTime = new Date(announcement.createdAt).getTime();
+        return (now - createdTime) < expiryMs;
+      });
+    },
     enabled: !!studentClassId,
   });
 
@@ -158,7 +169,7 @@ const Dashboard = () => {
       path: "/student/events",
     },
     {
-      label: "Average Marks",
+      label: "Report Card",
       value: loadingMarks ? null : `${averageMarks}%`,
       icon: Award,
       color: "text-green-500",

@@ -40,12 +40,13 @@ export class SchoolsController {
   }
 
   @Get()
+  @Roles('super_admin')
   findAll() {
     return this.schoolsService.findAll();
   }
 
   @Get(':id')
-  @Roles('school_admin', 'teacher', 'super_admin')
+  @Roles('school_admin', 'teacher', 'super_admin', 'student')
   findOne(@Param('id') id: string) {
     return this.schoolsService.findOne(id);
   }

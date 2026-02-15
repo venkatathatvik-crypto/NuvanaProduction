@@ -1,11 +1,13 @@
-// File upload, download, and management services
 import { apiClient } from "@/lib/apiClient";
+import { NamedEntity, FILES_BUCKET } from "./types";
 
 export interface TeacherFileItem {
   id: string;
   name: string;
   class: string;
+  classId: string; // Added classId
   subject: string;
+  gradeSubjectId: string; // Added gradeSubjectId
   category: string;
   storageUrl: string;
   storagePath: string;
@@ -90,8 +92,10 @@ export const getTeacherFiles = async (
     const data = await apiClient.get<Array<{
       id: string;
       name: string;
+      classId: string; // Added classId
       class: string;
       subject: string;
+      gradeSubjectId: string; // Added gradeSubjectId
       category: string;
       storageUrl: string;
       storagePath: string;
@@ -105,7 +109,9 @@ export const getTeacherFiles = async (
       id: record.id,
       name: record.name,
       class: record.class,
+      classId: record.classId, // Map classId
       subject: record.subject,
+      gradeSubjectId: record.gradeSubjectId, // Map gradeSubjectId
       category: record.category,
       storageUrl: record.storageUrl,
       storagePath: record.storagePath,
@@ -142,8 +148,10 @@ export const uploadTeacherFile = async (
     const data = await apiClient.uploadFile<{
       id: string;
       name: string;
+      classId: string; // Added classId
       class: string;
       subject: string;
+      gradeSubjectId: string; // Added gradeSubjectId
       category: string;
       storageUrl: string;
       storagePath: string;
@@ -157,7 +165,9 @@ export const uploadTeacherFile = async (
       id: data.id,
       name: data.name,
       class: data.class,
+      classId: data.classId, // Added classId
       subject: data.subject,
+      gradeSubjectId: data.gradeSubjectId, // Added gradeSubjectId
       category: data.category,
       storageUrl: data.storageUrl,
       storagePath: data.storagePath,

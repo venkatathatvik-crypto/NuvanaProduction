@@ -88,7 +88,7 @@ export const QuestionPanel: React.FC<QuestionPanelProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Target className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Quick Question</h2>
+              <h2 className="text-lg font-semibold">Nuva Pulse Question</h2>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="w-4 h-4" />

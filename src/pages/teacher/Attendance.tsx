@@ -453,12 +453,21 @@ const TeacherAttendance = () => {
       return;
     }
     
-    // Validate that the selected date is not in the future
+    // Validate that the selected date is within the last 7 days and not in the future
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    oneWeekAgo.setHours(0, 0, 0, 0);
+
     if (date > today) {
       toast.error("Cannot select future dates");
+      return;
+    }
+
+    if (date < oneWeekAgo) {
+      toast.error("Cannot select dates older than 1 week");
       return;
     }
 
@@ -720,9 +729,16 @@ const TeacherAttendance = () => {
                           const now = new Date();
                           const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                           
+                          const oneWeekAgo = new Date();
+                          oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                          oneWeekAgo.setHours(0, 0, 0, 0);
+
                           // Disable future dates
                           if (date > localToday) return true;
                           
+                          // Disable dates older than 1 week
+                          if (date < oneWeekAgo) return true;
+
                           // Disable Sundays
                           return date.getDay() === 0;
                         }}
@@ -743,8 +759,15 @@ const TeacherAttendance = () => {
                             const now = new Date();
                             const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                             
+                            const oneWeekAgo = new Date();
+                            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                            oneWeekAgo.setHours(0, 0, 0, 0);
+
                             // Disable future dates
                             if (date > localToday) return true;
+
+                            // Disable dates older than 1 week
+                            if (date < oneWeekAgo) return true;
                             
                             // Disable Sundays
                             return date.getDay() === 0;

@@ -13,7 +13,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
     imports: [
-        ConfigModule,   // 👈 REQUIRED for GEMINI_API_KEY
+        ConfigModule,   // 👈 REQUIRED for GCP credentials
         PrismaModule,   // 👈 REQUIRED for database access (MasteryService, TopicsService)
         RagModule,
         AnalyticsModule, // 👈 REQUIRED for performance data

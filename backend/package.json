@@ -26,11 +26,14 @@
         "@bull-board/api": "^6.16.4",
         "@bull-board/express": "^6.16.4",
         "@bull-board/nestjs": "^6.16.4",
+        "@google-cloud/vertexai": "^1.10.0",
+        "@google/genai": "^1.41.0",
         "@google/generative-ai": "^0.24.1",
         "@keyv/redis": "^5.1.5",
         "@langchain/community": "^1.1.1",
         "@langchain/core": "^1.1.7",
         "@langchain/google-genai": "^2.1.2",
+        "@langchain/google-vertexai": "^2.1.18",
         "@langchain/textsplitters": "^1.0.1",
         "@nestjs/bullmq": "^11.0.4",
         "@nestjs/cache-manager": "^3.1.0",
@@ -47,6 +50,7 @@
         "@prisma/adapter-pg": "^7.1.0",
         "@prisma/client": "^7.1.0",
         "@supabase/supabase-js": "^2.87.1",
+        "@types/uuid": "^10.0.0",
         "bcrypt": "^6.0.0",
         "bullmq": "^5.66.4",
         "cache-manager": "^7.2.7",
@@ -64,7 +68,8 @@
         "redis": "^5.10.0",
         "reflect-metadata": "^0.1.13",
         "rxjs": "^7.8.1",
-        "socket.io": "^4.7.2"
+        "socket.io": "^4.7.2",
+        "uuid": "^13.0.0"
     },
     "devDependencies": {
         "@nestjs/cli": "^10.0.0",

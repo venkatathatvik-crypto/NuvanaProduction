@@ -78,7 +78,7 @@ const TEACHER_ACTION_MODES = [
   },
   {
     id: "create_quiz",
-    label: "Create Quiz",
+    label: "Generate Paper",
     icon: FileCode,
     color: "text-green-500",
     desc: "Generate test questions",

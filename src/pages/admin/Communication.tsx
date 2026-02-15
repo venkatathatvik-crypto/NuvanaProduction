@@ -10,36 +10,79 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/auth/AuthContext";
 import { messagesService, type Message, type Conversation } from "@/services/messagesService";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { userService } from "@/services/userService";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { whatsappApi, type WhatsappMessage } from "@/services/whatsappApiService";
 import { getClasses } from "@/services/classService";
 import { FlattenedClass } from "@/schemas/academic";
+
+const ChatSkeleton = () => (
+    <div className="space-y-4 animate-in fade-in duration-500">
+        <div className="space-y-3 h-[450px] overflow-y-auto p-2">
+            {[1, 2, 3].map((i) => (
+                <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
+                    <Skeleton className={`h-16 w-2/3 rounded-2xl ${i % 2 === 0 ? 'rounded-tr-none' : 'rounded-tl-none'}`} />
+                </div>
+            ))}
+        </div>
+        <div className="border-t border-white/10 pt-4 space-y-3">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-10 w-full" />
+        </div>
+    </div>
+);
 
 const AdminCommunication = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
     const queryClient = useQueryClient();
+
+    // Chat states
+    const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+
+    // Fetch selected conversation details
+    const { data: selectedConversationDetail, isLoading: conversationLoading } = useQuery({
+        queryKey: ['messages-conversation', selectedConversation?.userId],
+        queryFn: () => selectedConversation ? messagesService.getConversation(selectedConversation.userId) : null,
+        enabled: !!selectedConversation,
+    });
+
+    const [activeTab, setActiveTab] = useState('send');
+    const [replyMessage, setReplyMessage] = useState("");
+    const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(false);
+    
+    // Form states
+    const [selectedTeacher, setSelectedTeacher] = useState('');
+    const [teacherSubject, setTeacherSubject] = useState('');
+    const [teacherMessage, setTeacherMessage] = useState('');
+    const [parentClass, setParentClass] = useState('');
+    const [parentMessage, setParentMessage] = useState('');
+    const [broadcastType, setBroadcastType] = useState<'template' | 'text'>('text');
+    const [historySearch, setHistorySearch] = useState('');
+
+    // Data states
     const [teachers, setTeachers] = useState<any[]>([]);
     const [teachersLoading, setTeachersLoading] = useState(true);
     const [classes, setClasses] = useState<FlattenedClass[]>([]);
     const [classesLoading, setClassesLoading] = useState(true);
 
-    // Form states for new message to teacher
-    const [selectedTeacher, setSelectedTeacher] = useState('');
-    const [teacherSubject, setTeacherSubject] = useState('');
-    const [teacherMessage, setTeacherMessage] = useState('');
+    const messageEndRef = React.useRef<HTMLDivElement>(null);
 
-    // Form states for parent broadcast
-    const [parentClass, setParentClass] = useState('');
-    const [parentMessage, setParentMessage] = useState('');
+    // Auto-scroll to bottom
+    const scrollToBottom = () => {
+        messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
 
-    // WhatsApp Broadcast History from Backend
+    // Queries
     const { data: broadcastHistory = [], isLoading: historyLoading } = useQuery({
         queryKey: ['whatsapp-history', profile?.school_id],
         queryFn: () => profile?.school_id ? whatsappApi.getHistory(profile.school_id) : [],
@@ -47,12 +90,17 @@ const AdminCommunication = () => {
         refetchInterval: 10000,
     });
 
-    // Fetch all conversations
     const { data: conversations = [], isLoading: conversationsLoading } = useQuery({
         queryKey: ['messages-conversations'],
         queryFn: () => messagesService.getConversations(),
         enabled: !!profile,
     });
+
+    useEffect(() => {
+        if (selectedConversationDetail) {
+            scrollToBottom();
+        }
+    }, [selectedConversationDetail]);
 
     // Fetch teachers
     useEffect(() => {
@@ -119,12 +167,31 @@ const AdminCommunication = () => {
             });
             
             toast.success("Message sent to teacher successfully!");
+            
+            // Find the teacher details to set as active conversation
+            const teacher = teachers.find(t => t.id === selectedTeacher);
+            if (teacher) {
+                const newConv: Conversation = {
+                    userId: teacher.id,
+                    userName: teacher.name,
+                    userEmail: teacher.email,
+                    userRole: 3, // Teacher role
+                    lastMessage: teacherMessage,
+                    lastMessageTime: new Date().toISOString(),
+                    unreadCount: 0
+                };
+                setSelectedConversation(newConv);
+            }
+
             setSelectedTeacher('');
             setTeacherSubject('');
             setTeacherMessage('');
             
             // Invalidate queries to refresh
             queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
+            
+            // Switch to inbox tab to see the chat
+            setActiveTab('inbox');
         } catch (error: any) {
             console.error("Error sending message:", error);
             toast.error(error.message || "Failed to send message");
@@ -154,8 +221,10 @@ const AdminCommunication = () => {
 
             await whatsappApi.sendBroadcast({
                 recipients,
-                templateName: 'hello_world', // Phase 1: Using test template
-                languageCode: 'en_US',
+                messageType: broadcastType,
+                message: broadcastType === 'text' ? parentMessage : undefined,
+                templateName: broadcastType === 'template' ? 'hello_world' : undefined,
+                languageCode: broadcastType === 'template' ? 'en_US' : undefined,
                 schoolId: profile?.school_id || 'test-school',
                 senderId: profile?.id || 'test-sender',
             });
@@ -173,6 +242,75 @@ const AdminCommunication = () => {
             setLoading(false);
         }
     };
+
+    const handleSendReply = async () => {
+        if (!selectedConversation || !replyMessage.trim()) return;
+
+        setSending(true);
+        try {
+            await messagesService.sendMessage({
+                recipientId: selectedConversation.userId,
+                subject: `Re: ${selectedConversationDetail?.messages && selectedConversationDetail.messages.length > 0 ? selectedConversationDetail.messages[selectedConversationDetail.messages.length - 1]?.subject : 'Message'}`,
+                message: replyMessage,
+                isUrgent: false,
+            });
+
+            toast.success("Reply sent successfully!");
+            setReplyMessage("");
+
+            // Invalidate queries to refresh
+            queryClient.invalidateQueries({ queryKey: ['messages-conversation', selectedConversation.userId] });
+            queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
+        } catch (error: any) {
+            console.error("Error sending reply:", error);
+            toast.error(error.message || "Failed to send reply");
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const handleSelectConversation = async (conv: Conversation) => {
+        setSelectedConversation(conv);
+
+        // Mark unread messages as read
+        if (conv.unreadCount > 0) {
+            try {
+                // In a real app, you'd mark specific messages as read
+                // Here we'll just invalidate to clear the red badge on refresh
+                queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
+            } catch (error) {
+                console.error("Error marking messages as read:", error);
+            }
+        }
+    };
+
+    // Group history by date
+    const groupedHistory = React.useMemo(() => {
+        const filtered = broadcastHistory.filter((item: WhatsappMessage) => 
+            item.phone_number.toLowerCase().includes(historySearch.toLowerCase()) ||
+            item.message_text.toLowerCase().includes(historySearch.toLowerCase())
+        );
+
+        const groups: { [key: string]: WhatsappMessage[] } = {};
+        filtered.forEach((item: WhatsappMessage) => {
+            const date = new Date(item.created_at);
+            let dateKey = format(date, 'MMM dd, yyyy');
+            
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            if (format(date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
+                dateKey = 'Today';
+            } else if (format(date, 'yyyy-MM-dd') === format(yesterday, 'yyyy-MM-dd')) {
+                dateKey = 'Yesterday';
+            }
+            
+            if (!groups[dateKey]) groups[dateKey] = [];
+            groups[dateKey].push(item);
+        });
+        return groups;
+    }, [broadcastHistory, historySearch]);
 
     return (
         <div className="min-h-screen p-4 sm:p-6 relative overflow-hidden">
@@ -204,16 +342,16 @@ const AdminCommunication = () => {
                     </div>
                 </div>
 
-                <Tabs defaultValue="inbox" className="w-full">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-3 lg:w-[600px] mb-8">
-                        <TabsTrigger value="inbox" className="gap-2">
-                            <Mail className="w-4 h-4" /> Inbox
-                        </TabsTrigger>
                         <TabsTrigger value="send" className="gap-2">
                             <Shield className="w-4 h-4" /> Message Teacher
                         </TabsTrigger>
                         <TabsTrigger value="parents" className="gap-2">
                             <Users className="w-4 h-4" /> Parent Broadcast
+                        </TabsTrigger>
+                        <TabsTrigger value="inbox" className="gap-2">
+                            <Mail className="w-4 h-4" /> Inbox
                         </TabsTrigger>
                     </TabsList>
 
@@ -247,7 +385,12 @@ const AdminCommunication = () => {
                                             {conversations.map((conv: Conversation) => (
                                                 <div
                                                     key={conv.userId}
-                                                    className="p-3 rounded-lg border bg-secondary/20 border-border/50 cursor-pointer transition-all hover:bg-secondary/50"
+                                                    onClick={() => handleSelectConversation(conv)}
+                                                    className={`p-3 rounded-lg border cursor-pointer transition-all hover:bg-secondary/50 ${
+                                                        selectedConversation?.userId === conv.userId
+                                                          ? 'bg-primary/10 border-primary/50'
+                                                          : 'bg-secondary/20 border-border/50'
+                                                      }`}
                                                 >
                                                     <div className="flex items-start justify-between mb-1">
                                                         <div className="flex items-center gap-2">
@@ -286,21 +429,96 @@ const AdminCommunication = () => {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-center py-12 text-muted-foreground">
-                                        <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                                        <p className="text-lg mb-2">Select a conversation to view details</p>
-                                        <p className="text-sm">
-                                            Click on a conversation from the list to read and reply to messages
-                                        </p>
-                                        <Button
-                                            variant="outline"
-                                            className="mt-4"
-                                            onClick={() => navigate("/admin/messages")}
-                                        >
-                                            <Mail className="w-4 h-4 mr-2" />
-                                            Go to Full Messages View
-                                        </Button>
-                                    </div>
+                                    {!selectedConversation ? (
+                                        <div className="text-center py-12 text-muted-foreground">
+                                            <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                                            <p className="text-lg mb-2">Select a conversation to view details</p>
+                                            <p className="text-sm">
+                                                Click on a conversation from the list to read and reply to messages
+                                            </p>
+                                        </div>
+                                    ) : conversationLoading ? (
+                                        <ChatSkeleton />
+                                    ) : (
+                                        <div className="flex flex-col h-[550px]">
+                                            {/* Messages */}
+                                            <div className="flex-1 space-y-3 overflow-y-auto p-2 scrollbar-thin scroll-smooth pr-4">
+                                                {selectedConversationDetail?.messages?.map((msg: Message) => (
+                                                    <div
+                                                        key={msg.id}
+                                                        className={`flex flex-col ${msg.isFromMe ? 'items-end' : 'items-start'}`}
+                                                    >
+                                                        <div
+                                                            className={`p-3 rounded-2xl max-w-[85%] sm:max-w-[70%] border ${
+                                                                msg.isFromMe
+                                                                    ? 'bg-primary/20 border-primary/30 rounded-tr-none'
+                                                                    : 'bg-secondary/40 border-border/50 rounded-tl-none'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center justify-between gap-4 mb-1">
+                                                                <p className="font-bold text-[11px] text-primary uppercase tracking-tight">
+                                                                    {msg.isFromMe ? 'Admin' : selectedConversation.userName}
+                                                                </p>
+                                                                <p className="text-[9px] text-muted-foreground font-medium">
+                                                                    {formatDistanceToNow(new Date(msg.sentAt), { addSuffix: true })}
+                                                                </p>
+                                                            </div>
+                                                            {msg.subject && msg.subject !== "No Subject" && (
+                                                                <p className="font-bold text-xs mb-1 text-white/90">{msg.subject}</p>
+                                                            )}
+                                                            <p className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed">
+                                                                {msg.message}
+                                                            </p>
+                                                            {msg.isUrgent && (
+                                                                <div className="mt-2 text-right">
+                                                                    <Badge variant="destructive" className="text-[8px] uppercase h-4 font-bold px-1.5 leading-none">
+                                                                        Urgent
+                                                                    </Badge>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                <div ref={messageEndRef} />
+                                            </div>
+
+                                            {/* Reply Box */}
+                                            <div className="border-t border-white/10 pt-4 mt-auto space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">Reply to {selectedConversation.userName}</label>
+                                                </div>
+                                                <Textarea
+                                                    placeholder="Write your response..."
+                                                    value={replyMessage}
+                                                    onChange={(e) => setReplyMessage(e.target.value)}
+                                                    className="min-h-[80px] bg-secondary/30 border-white/5 focus:border-primary/50 transition-all rounded-xl text-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && e.ctrlKey) {
+                                                            handleSendReply();
+                                                        }
+                                                    }}
+                                                />
+                                                <div className="flex justify-between items-center gap-4">
+                                                    <p className="text-[10px] text-muted-foreground italic">Press Ctrl + Enter to send</p>
+                                                    <Button
+                                                        onClick={handleSendReply}
+                                                        disabled={sending || !replyMessage.trim()}
+                                                        size="sm"
+                                                        className="px-6 rounded-full shadow-lg shadow-primary/20"
+                                                    >
+                                                        {sending ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                <Send className="w-3 h-3 mr-2" />
+                                                                Send
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </div>
@@ -416,8 +634,28 @@ const AdminCommunication = () => {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    <div className="space-y-2 bg-secondary/20 p-4 rounded-xl border border-white/5">
+                                        <label className="text-sm font-medium">Broadcast Mode</label>
+                                        <RadioGroup 
+                                            defaultValue="text" 
+                                            value={broadcastType}
+                                            onValueChange={(val: any) => setBroadcastType(val)}
+                                            className="flex flex-col sm:flex-row gap-4 mt-2"
+                                        >
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="text" id="mode-text" />
+                                                <Label htmlFor="mode-text" className="cursor-pointer text-sm">Plain Text (Immediate)</Label>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="template" id="mode-template" />
+                                                <Label htmlFor="mode-template" className="cursor-pointer text-sm">Official Template (Pre-approved)</Label>
+                                            </div>
+                                        </RadioGroup>
+                                    </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Announcement Message</label>
+                                        <label className="text-sm font-medium">
+                                            {broadcastType === 'text' ? 'Announcement Message' : 'Template Message (Fallback)'}
+                                        </label>
                                         <Textarea
                                             placeholder="Dear Parents, we would like to inform you that..."
                                             className="min-h-[150px] bg-secondary/50 border-white/10"
@@ -444,60 +682,88 @@ const AdminCommunication = () => {
                                     </div>
                                 ) : broadcastHistory.length > 0 ? (
                                     <div className="mt-12 space-y-6">
-                                        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
                                             <h3 className="text-xl font-bold flex items-center gap-2">
                                                 <History className="w-6 h-6 text-primary" />
                                                 Broadcast History
                                             </h3>
+                                            <div className="relative w-full sm:w-64">
+                                                <Input
+                                                    placeholder="Search messages..."
+                                                    value={historySearch}
+                                                    onChange={(e) => setHistorySearch(e.target.value)}
+                                                    className="pl-9 bg-secondary/30 border-white/5 h-9 text-sm"
+                                                />
+                                                <Users className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+                                            </div>
                                         </div>
-                                        <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                            {broadcastHistory.map((item: WhatsappMessage) => (
-                                                <motion.div 
-                                                    key={item.id} 
-                                                    initial={{ opacity: 0, x: -10 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl relative group overflow-hidden"
-                                                >
-                                                    <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                    <div className="relative z-10">
-                                                        <div className="flex items-start justify-between mb-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold uppercase text-[10px]">
-                                                                        {item.phone_number}
-                                                                    </Badge>
-                                                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                                                        {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {item.status === 'SENT' && (
-                                                                    <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        <Check className="w-3 h-3" /> Sent
-                                                                    </Badge>
-                                                                )}
-                                                                {item.status === 'DELIVERED' && (
-                                                                    <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        <CheckCheck className="w-3 h-3" /> Delivered
-                                                                    </Badge>
-                                                                )}
-                                                                {item.status === 'READ' && (
-                                                                    <Badge variant="outline" className="bg-blue-400/10 text-blue-400 border-blue-400/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        <CheckCheck className="w-3 h-3" /> Read
-                                                                    </Badge>
-                                                                )}
-                                                                {item.status === 'FAILED' && (
-                                                                    <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
-                                                                        Failed
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
+
+                                        <div className="space-y-8 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                                            {Object.keys(groupedHistory).length === 0 ? (
+                                                <div className="text-center py-12 text-muted-foreground">
+                                                    <p>No messages matching your search</p>
+                                                </div>
+                                            ) : (
+                                                Object.entries(groupedHistory).map(([date, items]) => (
+                                                    <div key={date} className="space-y-4">
+                                                        <div className="sticky top-0 z-20 py-1 flex items-center gap-4">
+                                                            <span className="text-xs font-bold uppercase tracking-widest text-primary/60 bg-background/80 backdrop-blur-md px-2 py-1 rounded">
+                                                                {date}
+                                                            </span>
+                                                            <div className="h-[1px] flex-1 bg-gradient-to-r from-primary/20 to-transparent" />
                                                         </div>
-                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message_text}</p>
+                                                        <div className="grid grid-cols-1 gap-4">
+                                                            {items.map((item: WhatsappMessage) => (
+                                                                <motion.div 
+                                                                    key={item.id} 
+                                                                    initial={{ opacity: 0, y: 10 }}
+                                                                    animate={{ opacity: 1, y: 0 }}
+                                                                    className="p-5 rounded-2xl bg-secondary/40 border border-white/10 backdrop-blur-xl relative group transition-all hover:bg-secondary/60 hover:border-primary/40 hover:shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]"
+                                                                >
+                                                                    <div className="flex items-start justify-between mb-3">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                                                                <Smartphone className="w-5 h-5 text-primary" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="font-bold text-sm text-white">{item.phone_number}</p>
+                                                                                <p className="text-[10px] text-muted-foreground font-medium">
+                                                                                    {format(new Date(item.created_at), 'hh:mm a')}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            {item.status === 'SENT' && (
+                                                                                <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                                    <Send className="w-3 h-3" /> Sent
+                                                                                </Badge>
+                                                                            )}
+                                                                            {item.status === 'DELIVERED' && (
+                                                                                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                                    <CheckCheck className="w-3 h-3" /> Delivered
+                                                                                </Badge>
+                                                                            )}
+                                                                            {item.status === 'READ' && (
+                                                                                <Badge variant="outline" className="bg-blue-400/10 text-blue-400 border-blue-400/20 text-[10px] uppercase font-bold px-2 py-0.5 flex items-center gap-1.5">
+                                                                                    <CheckCheck className="w-3 h-3 text-blue-400" /> Read
+                                                                                </Badge>
+                                                                            )}
+                                                                            {item.status === 'FAILED' && (
+                                                                                <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] uppercase font-bold px-2 py-0.5">
+                                                                                    Failed
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="bg-background/40 rounded-xl p-4 border border-white/5 shadow-inner">
+                                                                        <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{item.message_text}</p>
+                                                                    </div>
+                                                                </motion.div>
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </motion.div>
-                                            ))}
+                                                ))
+                                            )}
                                         </div>
                                     </div>
                                 ) : (

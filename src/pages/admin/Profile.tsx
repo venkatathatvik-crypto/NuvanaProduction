@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { User, Mail, Shield, ArrowLeft, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
+import { User, Mail, Shield, ArrowLeft, Upload, Image as ImageIcon, Loader2, School } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,56 @@ import { useState, useRef } from "react";
 import { schoolService } from "@/services/schoolService";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { queryKeys } from "@/lib/queryKeys";
+
+const ProfileSkeleton = () => (
+  <div className="min-h-screen p-3 sm:p-6 animate-in fade-in duration-500">
+    <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-60" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="glass-card p-6 lg:col-span-2 space-y-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-20 h-20 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t border-border">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="w-5 h-5 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-5 w-40" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="glass-card p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-5 h-5 rounded-full" />
+            <Skeleton className="h-6 w-32" />
+          </div>
+          <div className="aspect-square w-full max-w-[200px] mx-auto rounded-xl border-2 border-dashed border-border flex items-center justify-center">
+            <Skeleton className="w-12 h-12 rounded-full" />
+          </div>
+          <Skeleton className="h-10 w-full" />
+        </Card>
+      </div>
+    </div>
+  </div>
+);
 
 export default function AdminProfile() {
   const navigate = useNavigate();
@@ -76,6 +125,10 @@ export default function AdminProfile() {
     fileInputRef.current?.click();
   };
 
+  if (schoolLoading || !profile) {
+    return <ProfileSkeleton />;
+  }
+
   return (
     <div className="min-h-screen p-3 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
@@ -127,6 +180,15 @@ export default function AdminProfile() {
                     <p className="font-medium">School Admin</p>
                   </div>
                 </div>
+                {schoolData?.name && (
+                  <div className="flex items-center gap-3">
+                    <School className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">School</p>
+                      <p className="font-medium">{schoolData.name}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
