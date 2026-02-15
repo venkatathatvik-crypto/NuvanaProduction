@@ -29,7 +29,7 @@ export class WhatsappProcessor extends WorkerHost {
     const { phoneNumber, templateName, languageCode, components, senderId, schoolId } = job.data;
 
     try {
-      this.logger.log(`Sending WhatsApp broadcast to ${phoneNumber}`);
+      this.logger.log(`[Job ${job.id}] Sending WhatsApp template "${templateName}" to ${phoneNumber}`);
       
       const result = await this.whatsappService.sendTemplateMessage({
         phoneNumber,
@@ -40,10 +40,11 @@ export class WhatsappProcessor extends WorkerHost {
         schoolId,
       });
 
-      this.logger.log(`Successfully processed job ${job.id} for ${phoneNumber}`);
+      this.logger.log(`[Job ${job.id}] Successfully sent template to ${phoneNumber}`);
       return result;
     } catch (error) {
-      this.logger.error(`Job ${job.id} for ${phoneNumber} failed: ${error.message}`);
+      const attempt = job.attemptsMade + 1;
+      this.logger.error(`[Job ${job.id}] Attempt ${attempt} failed for ${phoneNumber}: ${error.message}`);
       throw error;
     }
   }
@@ -52,7 +53,7 @@ export class WhatsappProcessor extends WorkerHost {
     const { phoneNumber, message, senderId, schoolId } = job.data;
 
     try {
-      this.logger.log(`Sending plain text WhatsApp message to ${phoneNumber}`);
+      this.logger.log(`[Job ${job.id}] Sending plain text WhatsApp message to ${phoneNumber}`);
       
       const result = await this.whatsappService.sendTextMessage({
         phoneNumber,
@@ -61,10 +62,11 @@ export class WhatsappProcessor extends WorkerHost {
         schoolId,
       });
 
-      this.logger.log(`Successfully processed text job ${job.id} for ${phoneNumber}`);
+      this.logger.log(`[Job ${job.id}] Successfully sent text message to ${phoneNumber}`);
       return result;
     } catch (error) {
-      this.logger.error(`Text job ${job.id} for ${phoneNumber} failed: ${error.message}`);
+      const attempt = job.attemptsMade + 1;
+      this.logger.error(`[Job ${job.id}] Text job attempt ${attempt} failed for ${phoneNumber}: ${error.message}`);
       throw error;
     }
   }

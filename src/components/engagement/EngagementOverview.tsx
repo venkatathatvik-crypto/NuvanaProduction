@@ -155,15 +155,15 @@ export const EngagementOverview: React.FC = () => {
               <div className="h-4 w-64 bg-primary/5 animate-pulse rounded mt-2" />
             ) : selectedSessionId 
               ? `Reviewing deep-dive data for: ${focusedSession?.session_name || focusedSession?.id.slice(0, 8)}`
-              : "Monitor live participation metrics and track student performance trends."}
+              : "Monitor live participation metrics and track student Engagement."}
           </div>
         </div>
-        <div className="flex gap-3">
+        {/* <div className="flex gap-3">
            <Button className="neon-glow rounded-xl h-11 px-6 font-bold" onClick={() => navigate('/teacher/files')}>
              <Play className="w-4 h-4 mr-2" />
              Start New Session
            </Button>
-        </div>
+        </div> */}
       </div>
 
       {!selectedSessionId && <EngagementStats stats={stats} isLoading={sessionsLoading} />}

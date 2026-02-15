@@ -74,6 +74,9 @@ const VoiceUpload = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [voiceNoteToDelete, setVoiceNoteToDelete] = useState<TeacherVoiceNote | null>(null);
 
+  // Navigation guard state
+  const [navigationDialogOpen, setNavigationDialogOpen] = useState(false);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch ALL classes where teacher teaches (both as class teacher and subject teacher)
@@ -133,6 +136,26 @@ const VoiceUpload = () => {
       }
     };
   }, [audioUrl]);
+
+  // Browser-level navigation guard
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRecording || audioBlob) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isRecording, audioBlob]);
+
+  const handleBack = () => {
+    if (isRecording || audioBlob) {
+      setNavigationDialogOpen(true);
+    } else {
+      navigate("/teacher");
+    }
+  };
 
   const startRecording = async () => {
     if (!selectedGradeSubjectId || selectedTargetClassIds.length === 0) {
@@ -471,7 +494,7 @@ const VoiceUpload = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/teacher")}
+            onClick={handleBack}
             className="shrink-0"
           >
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -882,6 +905,18 @@ const VoiceUpload = () => {
         }
         confirmText="Delete"
         cancelText="Cancel"
+        variant="destructive"
+      />
+
+      {/* Navigation Confirmation Dialog */}
+      <ConfirmDialog
+        open={navigationDialogOpen}
+        onOpenChange={setNavigationDialogOpen}
+        onConfirm={() => navigate("/teacher")}
+        title="Discard Recording?"
+        description="You have an active recording or an unsaved audio note. Moving back will discard it. Are you sure you want to continue?"
+        confirmText="Discard & Go Back"
+        cancelText="Stay"
         variant="destructive"
       />
     </div>

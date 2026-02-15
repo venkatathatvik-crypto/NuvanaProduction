@@ -452,7 +452,7 @@ const TeacherFiles = () => {
           >
             <h1 className="text-xl sm:text-4xl font-bold neon-text truncate">Upload Files</h1>
             <p className="text-muted-foreground text-sm sm:text-base">
-              Share books, audio notes, and materials
+              Share books and Learning materials
             </p>
           </motion.div>
         </div>
@@ -909,6 +909,8 @@ const TeacherFiles = () => {
           fileId={annotatingFile.id}
           fileUrl={annotatingFile.storageUrl}
           fileName={annotatingFile.name}
+          classId={annotatingFile.classId}
+          gradeSubjectId={annotatingFile.gradeSubjectId}
           sessionId={engagementSessionId || undefined}
           onClose={async () => {
             // End engagement session if exists

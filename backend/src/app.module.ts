@@ -114,6 +114,7 @@ import { ExpressAdapter } from '@bull-board/express';
                             password: url.password,
                             username: url.username,
                         },
+                        prefix: `nuvana-dev-saite`, // Isolate your local jobs from staging/prod
                     };
                 } catch (error) {
                     console.error('❌ Failed to parse REDIS_URL for BullMQ:', error.message);

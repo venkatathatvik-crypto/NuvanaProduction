@@ -16,9 +16,60 @@ import {
     TestResult,
     StudentSubmission,
 } from "@/services/academic";
-import LoadingSpinner from "@/components/LoadingSpinner";
 import { useQueryClient } from "@tanstack/react-query";
 import { StudentTestPlayer } from "@/components/mcq/StudentTestPlayer";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const TestTakeSkeleton = () => {
+    return (
+        <div className="max-w-4xl mx-auto space-y-6 p-4 md:p-8">
+            {/* Header Skeleton */}
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-card p-4 rounded-lg border shadow-sm">
+                <div className="space-y-2">
+                    <Skeleton className="h-6 w-48" />
+                    <Skeleton className="h-4 w-32" />
+                </div>
+                <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-end space-y-2">
+                        <Skeleton className="h-8 w-24" />
+                        <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-10 w-28" />
+                </div>
+            </div>
+
+            <Skeleton className="h-2 w-full" />
+
+            {/* Question Card Skeleton */}
+            <Card className="glass-card min-h-[400px] flex flex-col">
+                <CardHeader className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <Skeleton className="h-5 w-24" />
+                        <Skeleton className="h-5 w-20" />
+                    </div>
+                    <Skeleton className="h-8 w-3/4" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                </CardContent>
+            </Card>
+
+            {/* Navigation Skeleton */}
+            <div className="flex justify-between items-center">
+                <Skeleton className="h-10 w-32" />
+                <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <Skeleton key={i} className="h-8 w-8 rounded-full" />
+                    ))}
+                </div>
+                <Skeleton className="h-10 w-32" />
+            </div>
+        </div>
+    );
+};
 
 const TestTake = () => {
     const { testId } = useParams();
@@ -145,11 +196,7 @@ const TestTake = () => {
     };
 
     if (loading || profileLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <LoadingSpinner />
-            </div>
-        );
+        return <TestTakeSkeleton />;
     }
 
     if (!test && !result && !pendingSubmission) {

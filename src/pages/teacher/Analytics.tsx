@@ -693,19 +693,20 @@ const AnalyticsDashboard = () => {
             <span className="hidden sm:inline">Student Analysis</span>
             <span className="sm:hidden">Students</span>
           </TabsTrigger>
-          <TabsTrigger
-            value="test"
-            className="text-xs sm:text-sm px-1 sm:px-3 py-2"
-          >
-            <span className="hidden sm:inline">Test Metrics</span>
-            <span className="sm:hidden">Tests</span>
-          </TabsTrigger>
+          
           <TabsTrigger
             value="engagement"
             className="text-xs sm:text-sm px-1 sm:px-3 py-2"
           >
             <span className="hidden sm:inline">Engagement</span>
             <span className="sm:hidden">Engage</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="test"
+            className="text-xs sm:text-sm px-1 sm:px-3 py-2"
+          >
+            <span className="hidden sm:inline">Test Metrics</span>
+            <span className="sm:hidden">Tests</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1640,7 +1641,7 @@ const AnalyticsDashboard = () => {
                                   )}
                                   
                                   {/* Topic Filter (dynamic based on chapter) */}
-                                  {availableTopics.length > 0 && (
+                                  {/* {availableTopics.length > 0 && (
                                     <Select value={studentAnalysisTopicFilter} onValueChange={setStudentAnalysisTopicFilter}>
                                       <SelectTrigger className="w-full sm:w-[180px]">
                                         <SelectValue placeholder="Topic" />
@@ -1652,7 +1653,7 @@ const AnalyticsDashboard = () => {
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                  )}
+                                  )} */}
                                   
                                   {/* Score Threshold */}
                                   <Select value={studentAnalysisScoreThreshold.toString()} onValueChange={(v) => setStudentAnalysisScoreThreshold(Number(v))}>
@@ -2487,7 +2488,7 @@ const AnalyticsDashboard = () => {
                             )}
                             
                             {/* Topic Filter */}
-                            {availableTopics.length > 0 && (
+                            {/* {availableTopics.length > 0 && (
                               <Select value={topicsTabTopicFilter} onValueChange={setTopicsTabTopicFilter}>
                                 <SelectTrigger className="w-full sm:w-[180px]">
                                   <SelectValue placeholder="Topic" />
@@ -2501,7 +2502,7 @@ const AnalyticsDashboard = () => {
                                   ))}
                                 </SelectContent>
                               </Select>
-                            )}
+                            )} */}
                             
                             {/* Clear Filters Button */}
                             {(topicsTabSubjectFilter !== "all" || topicsTabChapterFilter !== "all" || topicsTabTopicFilter !== "all") && (
@@ -2885,7 +2886,7 @@ const AnalyticsDashboard = () => {
                   </Select>
                   
                   {/* Topic Filter */}
-                  <Select value={weakAreasTopicFilter} onValueChange={setWeakAreasTopicFilter}>
+                  {/* <Select value={weakAreasTopicFilter} onValueChange={setWeakAreasTopicFilter}>
                     <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder="Topic" />
                     </SelectTrigger>
@@ -2909,7 +2910,7 @@ const AnalyticsDashboard = () => {
                         ));
                       })()}
                     </SelectContent>
-                  </Select>
+                  </Select> */}
                   
                   {/* Score Threshold */}
                   <Select value={weakAreasScoreThreshold.toString()} onValueChange={(v) => setWeakAreasScoreThreshold(Number(v))}>

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class WhatsappService {
@@ -42,34 +43,52 @@ export class WhatsappService {
    */
   async queueBroadcast(data: {
     recipients: { phoneNumber: string; recipientId?: string }[];
-    templateName: string;
-    languageCode: string;
+    templateName?: string;
+    languageCode?: string;
     components?: any[];
+    message?: string;
+    messageType?: 'template' | 'text';
     senderId: string;
     schoolId: string;
   }) {
-    this.logger.log(`Queueing broadcast for ${data.recipients.length} recipients`);
+    const type = data.messageType || 'template';
+    this.logger.log(`Queueing ${type} broadcast for ${data.recipients.length} recipients`);
     const jobIds: string[] = [];
 
     for (const recipient of data.recipients) {
       const normalizedPhone = this.normalizePhoneNumber(recipient.phoneNumber);
-      this.logger.debug(`Adding job for ${normalizedPhone}`);
+      this.logger.debug(`Adding ${type} job for ${normalizedPhone}`);
       
+      const jobName = type === 'text' ? 'send-text' : 'send-template';
+      const jobData = type === 'text' 
+        ? {
+            phoneNumber: normalizedPhone,
+            message: data.message,
+            senderId: data.senderId,
+            schoolId: data.schoolId,
+          }
+        : {
+            phoneNumber: normalizedPhone,
+            templateName: data.templateName,
+            languageCode: data.languageCode,
+            components: data.components,
+            recipientId: recipient.recipientId,
+            senderId: data.senderId,
+            schoolId: data.schoolId,
+          };
+
       const job = await this.broadcastQueue.add(
-        'send-template',
+        jobName,
+        jobData,
         {
-          phoneNumber: normalizedPhone,
-          templateName: data.templateName,
-          languageCode: data.languageCode,
-          components: data.components,
-          recipientId: recipient.recipientId,
-          senderId: data.senderId,
-          schoolId: data.schoolId,
-        },
-        {
-          jobId: `wa-${Date.now()}-${normalizedPhone}`,
-          removeOnComplete: true,
-          removeOnFail: false,
+          jobId: `wa-${uuidv4()}`,
+          removeOnComplete: { count: 100 }, // Keep last 100 completed jobs
+          removeOnFail: { count: 500 },     // Keep last 500 failed jobs
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
         },
       );
       jobIds.push(job.id!);
@@ -113,7 +132,7 @@ export class WhatsappService {
         sender_id: data.senderId,
         school_id: data.schoolId,
         direction: 'OUTGOING',
-        status: 'SENT',
+        status: 'SENT', // We keep SENT as initial "queued for delivery" status
         metadata: { template: data.templateName, language: data.languageCode },
       },
     });
@@ -140,13 +159,22 @@ export class WhatsappService {
         }),
       });
 
-      const result = await response.json();
+      let result;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(`Invalid response from Meta API: ${text.substring(0, 100)}`);
+      }
+
       this.logger.log(`WhatsApp template message sent successfully for ${data.phoneNumber}`);
       this.logger.log(`Response : ${JSON.stringify(result, null, 2)}`);
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to send WhatsApp message');
+        const errorMessage = result.error?.message || `Failed to send WhatsApp message (Status: ${response.status})`;
+        throw new Error(errorMessage);
       }
 
       // Update log with Meta's message ID
@@ -194,13 +222,18 @@ export class WhatsappService {
       {
         phoneNumber: normalizedPhone,
         message: data.message,
-        senderId: data.senderId || 'test-sender',
-        schoolId: data.schoolId || 'test-school',
+        senderId: data.senderId,
+        schoolId: data.schoolId,
       },
       {
-        jobId: `wa-text-${Date.now()}-${normalizedPhone}`,
-        removeOnComplete: true,
-        removeOnFail: false,
+        jobId: `wa-text-${uuidv4()}`,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 500 },
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
       },
     );
 
@@ -259,13 +292,22 @@ export class WhatsappService {
         }),
       });
 
-      const result = await response.json();
+      let result;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(`Invalid response from Meta API: ${text.substring(0, 100)}`);
+      }
+
       this.logger.log(`WhatsApp text message sent successfully for ${data.phoneNumber}`);
       this.logger.log(`Response : ${JSON.stringify(result, null, 2)}`);
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to send WhatsApp message');
+        const errorMessage = result.error?.message || `Failed to send WhatsApp message (Status: ${response.status})`;
+        throw new Error(errorMessage);
       }
 
       await this.prisma.whatsapp_messages.update({

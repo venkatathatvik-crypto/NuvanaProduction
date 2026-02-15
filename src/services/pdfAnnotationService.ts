@@ -3,12 +3,14 @@ import { apiClient } from "@/lib/apiClient";
 export interface PdfAnnotation {
   id: string;
   file_id: string;
+  profile_id: string;
   page_number: number;
   annotation_data: any;
   note_type: 'ANNOTATION' | 'SCRATCHPAD';
   created_at?: string;
   updated_at?: string;
 }
+
 
 export const savePdfAnnotation = async (
   fileId: string,

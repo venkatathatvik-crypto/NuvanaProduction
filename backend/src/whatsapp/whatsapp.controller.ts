@@ -25,8 +25,10 @@ export class WhatsappController {
         templateName: body.templateName,
         languageCode: body.languageCode,
         components: body.components,
-        senderId: body.senderId || 'test-sender',
-        schoolId: body.schoolId || 'test-school',
+        message: body.message,
+        messageType: body.messageType,
+        senderId: body.senderId,
+        schoolId: body.schoolId,
       });
       console.log('Result:', JSON.stringify(result));
       return result;

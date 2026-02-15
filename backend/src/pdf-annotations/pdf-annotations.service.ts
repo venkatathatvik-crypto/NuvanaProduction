@@ -43,20 +43,48 @@ export class PdfAnnotationsService {
   }
 
   async getAnnotationsByFile(fileId: string, schoolId: string, profileId: string) {
-    // Teachers and students see their own notes. 
-    // Students may also eventually see teacher's overlays (ANNOTATION type), 
-    // but for now, we'll return user-specific notes to keep it private as requested.
+    // 1. Identify the file and its assigned teacher
+    const file = await this.prisma.files.findUnique({
+      where: { id: fileId },
+      select: { teacher_id: true }
+    });
+
+    const assignedTeacherId = file?.teacher_id;
+    const isOwnerTeacher = assignedTeacherId === profileId;
+
+    // 2. Fetch annotations based on user context
+    // We'll use a safer approach:
+    // If the viewing user is the assigned teacher, they ONLY get their own notes.
+    if (isOwnerTeacher) {
+      return this.prisma.pdf_annotations.findMany({
+        where: {
+          file_id: fileId,
+          school_id: schoolId,
+          profile_id: profileId,
+        },
+        orderBy: { page_number: 'asc' },
+      });
+    }
+
+    // If the viewer is NOT the assigned teacher (likely a student),
+    // they get their own notes OR the assigned teacher's SCRATCHPAD notes.
     return this.prisma.pdf_annotations.findMany({
       where: {
         file_id: fileId,
         school_id: schoolId,
-        profile_id: profileId,
+        OR: [
+          { profile_id: profileId },
+          { 
+            profile_id: assignedTeacherId, 
+            note_type: 'SCRATCHPAD' 
+          }
+        ],
       },
-      orderBy: {
-        page_number: 'asc',
-      },
+      orderBy: { page_number: 'asc' },
     });
   }
+
+
 
   async deleteAnnotationsByFile(fileId: string, schoolId: string, profileId: string) {
     return this.prisma.pdf_annotations.deleteMany({

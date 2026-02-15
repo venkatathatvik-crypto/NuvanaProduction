@@ -40,7 +40,9 @@ export interface TeacherFileItem {
   id: string;
   name: string;
   class: string;
+  classId: string; // Added classId
   subject: string;
+  gradeSubjectId: string; // Added gradeSubjectId
   category: string;
   storageUrl: string;
   storagePath: string;

@@ -10,6 +10,7 @@ import {
   Calendar,
   Camera,
   ArrowLeft,
+  School,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,58 @@ import { academicService } from "@/services/academicApiService";
 import { uploadProfilePhoto } from "@/services/profileService";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
+import { schoolService } from "@/services/schoolService";
+import { queryKeys } from "@/lib/queryKeys";
+
+const ProfileSkeleton = () => (
+  <div className="min-h-screen p-6 animate-in fade-in duration-500">
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <Skeleton className="h-10 w-64" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="glass-card p-6 flex flex-col items-center space-y-4">
+          <Skeleton className="w-32 h-32 rounded-full" />
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-24" />
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+        </Card>
+        <Card className="glass-card p-6 md:col-span-2 space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30">
+                <Skeleton className="w-5 h-5 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-5 w-40" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[1, 2].map((i) => (
+          <Card key={i} className="glass-card p-6 space-y-4">
+            <Skeleton className="h-6 w-32" />
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3].map((j) => (
+                <Skeleton key={j} className="h-8 w-24 rounded-md" />
+              ))}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
 const TeacherProfile = () => {
   const navigate = useNavigate();
@@ -61,6 +114,16 @@ const TeacherProfile = () => {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
+  // Fetch school details
+  const { data: schoolData } = useQuery({
+    queryKey: queryKeys.school.details(profile?.school_id ?? ""),
+    queryFn: async () => {
+      if (!profile?.school_id) return null;
+      return await schoolService.getSchool(profile.school_id);
+    },
+    enabled: !!profile?.school_id,
+  });
+
   const loading = loadingClasses || loadingSubjects;
 
   const handlePhotoUpload = async (
@@ -98,12 +161,8 @@ const TeacherProfile = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+  if (loading || !profile) {
+    return <ProfileSkeleton />;
   }
 
   return (
@@ -216,6 +275,15 @@ const TeacherProfile = () => {
                     <p className="font-medium">{profile?.role || "Teacher"}</p>
                   </div>
                 </div>
+                {schoolData?.name && (
+                  <div className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30">
+                    <School className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">School</p>
+                      <p className="font-medium">{schoolData.name}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           </motion.div>
