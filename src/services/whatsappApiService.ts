@@ -1,20 +1,32 @@
 import { apiClient } from '@/lib/apiClient';
 
 // ==================== TYPES ====================
+export interface SchoolAnnouncementData {
+  parentName: string;
+  studentName: string;
+  messageText: string;
+  schoolName: string;
+}
+
+export interface TemplateDataMap {
+  school_announcement: SchoolAnnouncementData;
+}
+
+export type UseCase = keyof TemplateDataMap;
+
 export interface WhatsappRecipient {
   phoneNumber: string;
   recipientId?: string;
+  data?: any;
 }
 
-export interface BroadcastParams {
-  recipients: WhatsappRecipient[];
-  templateName?: string;
-  languageCode?: string;
-  components?: any[];
-  message?: string;
-  messageType?: 'template' | 'text';
-  senderId?: string;
-  schoolId?: string;
+export interface SendUnifiedParams<T extends UseCase> {
+  useCase: T;
+  data: TemplateDataMap[T];
+  phoneNumber?: string;
+  recipients?: WhatsappRecipient[];
+  senderId: string;
+  schoolId: string;
 }
 
 export interface WhatsappMessage {
@@ -37,10 +49,10 @@ export interface WhatsappMessage {
 // ==================== WHATSAPP API SERVICE ====================
 export const whatsappApi = {
   /**
-   * Send a WhatsApp broadcast to multiple recipients
+   * Unified method to send WhatsApp messages (Individual or Broadcast)
    */
-  async sendBroadcast(params: BroadcastParams): Promise<{ success: boolean; count: number; jobIds?: string[] }> {
-    return apiClient.post('/whatsapp/broadcast', params);
+  async sendUnified<T extends UseCase>(params: SendUnifiedParams<T>): Promise<{ success: boolean; count: number; jobIds?: string[] }> {
+    return apiClient.post('/whatsapp/send', params);
   },
 
   /**
@@ -48,18 +60,6 @@ export const whatsappApi = {
    */
   async getHistory(schoolId: string, limit: number = 50): Promise<WhatsappMessage[]> {
     return apiClient.get(`/whatsapp/history?schoolId=${schoolId}&limit=${limit}`);
-  },
-
-  /**
-   * Send a plain text WhatsApp message (no template)
-   */
-  async sendTextMessage(params: { 
-    phoneNumber: string; 
-    message: string;
-    senderId?: string;
-    schoolId?: string;
-  }): Promise<{ success: boolean; jobId: string }> {
-    return apiClient.post('/whatsapp/send-text', params);
   },
 
   /**
@@ -74,13 +74,5 @@ export const whatsappApi = {
    */
   async getStudentRecipient(studentId: string): Promise<{ phoneNumber: string; recipientId: string; studentName: string } | null> {
     return apiClient.get(`/whatsapp/recipients/student/${studentId}`);
-  },
-
-  /**
-   * Verify Webhook (mainly for backend setup, but included for completeness)
-   */
-  async verifyWebhook(params: { mode: string; token: string; challenge: string }): Promise<string> {
-    const query = new URLSearchParams(params).toString();
-    return apiClient.get(`/whatsapp/webhook?${query}`);
   },
 };

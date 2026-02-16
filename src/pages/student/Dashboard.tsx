@@ -126,12 +126,12 @@ const Dashboard = () => {
       color: "text-neon-blue",
       path: "/student/attendance",
     },
-    {
-      label: "Audio Notes",
-      value: "Access",
-      icon: StickyNote,
-      color: "text-green-500",
-      path: "/student/notes"
+   {
+      label: "My Tests",
+      value: loadingTests ? null : (pendingTests > 0 ? `${pendingTests} Pending` : "Take"),
+      icon: FileText,
+      color: "text-neon-purple",
+      path: "/student/tests",
     },
     {
       label: "Books",
@@ -148,11 +148,11 @@ const Dashboard = () => {
       path: "/student/analytics",
     },
     {
-      label: "My Tests",
-      value: loadingTests ? null : (pendingTests > 0 ? `${pendingTests} Pending` : "Take"),
-      icon: FileText,
-      color: "text-neon-purple",
-      path: "/student/tests",
+      label: "Audio Notes",
+      value: "Access",
+      icon: StickyNote,
+      color: "text-green-500",
+      path: "/student/notes"
     },
     {
       label: "Timetable",

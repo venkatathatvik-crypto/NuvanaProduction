@@ -87,7 +87,7 @@ export class AiService {
             let studentClassId = dto.classId;
             let autoClassBand: string | undefined;
 
-            // OPTIMIZATION: Check if we can skip RAG/Profile for quick reply turns
+            // OPTIMIZATION: Check if we can skip RAG/Profile for quick reply turns or specific tasks
             // We only need RAG and Mastery for the FINAL quiz generation, not for asking "How many questions?"
             const isQuizTask = taskType === AiTaskType.MOCK_TEST;
             const needsQuickReplies = isTeacher && isQuizTask && (
@@ -96,10 +96,16 @@ export class AiService {
                 !dto.quizParams?.difficulty
             );
 
+            // SPECIAL CASE: No RAG for Email Drafts (per user request)
+            const skipRag = taskType === AiTaskType.TEACHER_EMAIL_DRAFT;
+
             // OPTIMIZATION: Parallelize profile, RAG, and mastery queries
             console.log(`[AI Service] Step 0-2: Fetching profile, RAG context, and mastery in parallel...`);
             if (needsQuickReplies) {
                 console.log(`[AI Service] ⚡ Skipping RAG/Profile fetching for parameter collection turn`);
+            }
+            if (skipRag) {
+                console.log(`[AI Service] ⚡ Skipping RAG retrieval for Email Draft task`);
             }
             const parallelStartTime = Date.now();
 
@@ -133,8 +139,8 @@ export class AiService {
                     }
                 })() : Promise.resolve({ success: true, profile: null }),
 
-                // 1. RAG Context Retrieval (skip if needsQuickReplies)
-                (!needsQuickReplies) ? (async () => {
+                // 1. RAG Context Retrieval (skip if needsQuickReplies or skipRag)
+                (!needsQuickReplies && !skipRag) ? (async () => {
                     try {
                         const context = await this.ragService.retrieve(
                             query,
@@ -147,7 +153,7 @@ export class AiService {
                         console.error(`[AI Service] ❌ RAG Retrieval failed:`, error);
                         return '[NO RELEVANT CONTENT FOUND]';
                     }
-                })() : Promise.resolve('[SKIPPED]'),
+                })() : Promise.resolve(skipRag ? '[SKIPPED: EMAIL DRAFT]' : '[SKIPPED]'),
 
                 // 2. Student Mastery Profile (skip if needsQuickReplies)
                 (studentId && subject && !needsQuickReplies) ? (async () => {
@@ -472,8 +478,8 @@ export class AiService {
  
  ${analyticsContext ? `ANALYTICS CONTEXT:\n${analyticsContext}\n` : ''}
 
-RAG CONTEXT:
-${ragContext}`;
+${!skipRag ? `RAG CONTEXT:
+${ragContext}` : ''}`;
             
             const rawContent = await this.llmProvider.generate([
                 { role: 'system', content: systemMessage },

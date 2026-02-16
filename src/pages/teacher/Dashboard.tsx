@@ -108,7 +108,7 @@ const TeacherDashboard = () => {
 
   const quickActions = [
     { label: "Post Attendance", icon: Users, color: "text-blue-500", path: "/teacher/attendance" },
-    { label: "Upload Files", icon: FileText, color: "text-green-500", path: "/teacher/files" },
+    { label: "Access Files", icon: FileText, color: "text-green-500", path: "/teacher/files" },
     { label: "Send Announcement", icon: Bell, color: "text-blue-500", path: "/teacher/announcements" },
     { label: "Manage Tests", icon: FileText, color: "text-green-500", path: "/teacher/tests" },
     { label: "Analytics", icon: BarChart2, color: "text-blue-500", path: "/teacher/analytics" },

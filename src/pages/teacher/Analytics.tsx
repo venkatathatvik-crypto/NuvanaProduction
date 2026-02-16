@@ -1709,7 +1709,7 @@ const AnalyticsDashboard = () => {
                                   {fullyFilteredStrengths.map((item, index) => (
                                     <div
                                       key={index}
-                                      className="flex justify-between items-center p-3 bg-secondary/10 rounded-lg"
+                                      className="flex justify-between items-center p-3 border border-green-200/2 rounded-lg"
                                     >
                                       <div>
                                         <p className="font-semibold text-sm">
@@ -1758,7 +1758,7 @@ const AnalyticsDashboard = () => {
                                   {fullyFilteredWeaknesses.map((item, index) => (
                                     <div
                                       key={index}
-                                      className="flex justify-between items-center p-3 bg-red-50/50 rounded-lg"
+                                      className="flex justify-between items-center p-3 rounded-lg border-red-300/3 border"
                                     >
                                       <div>
                                         <p className="font-semibold text-sm">

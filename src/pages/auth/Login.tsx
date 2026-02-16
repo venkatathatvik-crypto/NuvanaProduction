@@ -115,7 +115,6 @@ const Login = () => {
           <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-muted-foreground">
             Sign in to access Nuvana360 <br />
-            <span className="text-xs text-primary">(Demo Mode: Just click Sign In)</span>
           </p>
         </div>
 
