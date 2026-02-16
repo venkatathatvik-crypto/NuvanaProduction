@@ -4,6 +4,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
+import { UseCase, TemplateDataMap } from './whatsapp.types';
+import { WHATSAPP_REGISTRY } from './whatsapp.registry';
 
 @Injectable()
 export class WhatsappService {
@@ -42,48 +44,46 @@ export class WhatsappService {
    * Queue a broadcast to multiple recipients
    */
   async queueBroadcast(data: {
-    recipients: { phoneNumber: string; recipientId?: string }[];
-    templateName?: string;
-    languageCode?: string;
+    recipients: { phoneNumber: string; recipientId?: string; data?: any }[];
+    templateName: string;
+    languageCode: string;
     components?: any[];
-    message?: string;
-    messageType?: 'template' | 'text';
+    useCase?: UseCase;
+    baseData?: any;
     senderId: string;
     schoolId: string;
   }) {
-    const type = data.messageType || 'template';
-    this.logger.log(`Queueing ${type} broadcast for ${data.recipients.length} recipients`);
+    this.logger.log(`Queueing template broadcast for ${data.recipients.length} recipients`);
     const jobIds: string[] = [];
+
+    const registryEntry = data.useCase ? WHATSAPP_REGISTRY[data.useCase] : null;
 
     for (const recipient of data.recipients) {
       const normalizedPhone = this.normalizePhoneNumber(recipient.phoneNumber);
-      this.logger.debug(`Adding ${type} job for ${normalizedPhone}`);
+      this.logger.debug(`Adding template job for ${normalizedPhone}`);
       
-      const jobName = type === 'text' ? 'send-text' : 'send-template';
-      const jobData = type === 'text' 
-        ? {
-            phoneNumber: normalizedPhone,
-            message: data.message,
-            senderId: data.senderId,
-            schoolId: data.schoolId,
-          }
-        : {
-            phoneNumber: normalizedPhone,
-            templateName: data.templateName,
-            languageCode: data.languageCode,
-            components: data.components,
-            recipientId: recipient.recipientId,
-            senderId: data.senderId,
-            schoolId: data.schoolId,
-          };
+      // Build components: either pre-built or per-recipient
+      let components = data.components;
+      if (registryEntry && (data.baseData || recipient.data)) {
+        const mergedData = { ...data.baseData, ...(recipient.data || {}) };
+        components = registryEntry.build(mergedData);
+      }
 
       const job = await this.broadcastQueue.add(
-        jobName,
-        jobData,
+        'send-template',
+        {
+          phoneNumber: normalizedPhone,
+          templateName: data.templateName,
+          languageCode: data.languageCode,
+          components,
+          recipientId: recipient.recipientId,
+          senderId: data.senderId,
+          schoolId: data.schoolId,
+        },
         {
           jobId: `wa-${uuidv4()}`,
-          removeOnComplete: { count: 100 }, // Keep last 100 completed jobs
-          removeOnFail: { count: 500 },     // Keep last 500 failed jobs
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 500 },
           attempts: 3,
           backoff: {
             type: 'exponential',
@@ -93,12 +93,52 @@ export class WhatsappService {
       );
       jobIds.push(job.id!);
       
-      // Small delay between adding jobs to prevent potential bursts
       await new Promise(resolve => setTimeout(resolve, 50));
     }
 
     this.logger.log(`Successfully queued ${jobIds.length} jobs`);
     return { success: true, count: data.recipients.length, jobIds };
+  }
+
+  /**
+   * Unified method to send a message (Individual or Broadcast) using a Template Use Case
+   */
+  async queueUnified<T extends UseCase>(data: {
+    useCase: T;
+    data: TemplateDataMap[T];
+    phoneNumber?: string;
+    recipients?: { phoneNumber: string; recipientId?: string; data?: any }[];
+    senderId: string;
+    schoolId: string;
+  }) {
+    // 1. Fetch template from DB
+    const templateRow = await this.prisma.whatsapp_templates.findFirst({
+      where: { template_name: data.useCase as string, is_active: true },
+    });
+
+    if (!templateRow) {
+      throw new Error(`WhatsApp template mapping for template name "${data.useCase}" not found or inactive`);
+    }
+
+    // 2. Determine recipients
+    const recipients = data.phoneNumber 
+      ? [{ phoneNumber: data.phoneNumber, data: data.data }] 
+      : (data.recipients || []);
+
+    if (recipients.length === 0) {
+      throw new Error('No recipients provided for WhatsApp message');
+    }
+
+    // 3. Queue jobs (Passing useCase and baseData for per-recipient building)
+    return this.queueBroadcast({
+      recipients,
+      templateName: templateRow.template_name,
+      languageCode: templateRow.language_code || 'en_US',
+      useCase: data.useCase,
+      baseData: data.data,
+      senderId: data.senderId,
+      schoolId: data.schoolId,
+    });
   }
 
   /**
@@ -137,6 +177,21 @@ export class WhatsappService {
       },
     });
 
+    const requestBody = {
+      messaging_product: 'whatsapp',
+      to: data.phoneNumber,
+      type: 'template',
+      template: {
+        name: data.templateName,
+        language: {
+          code: data.languageCode,
+        },
+        components: data.components || [],
+      },
+    };
+
+    this.logger.debug(`[Job ${messageLog.id}] Requesting Meta API: ${JSON.stringify(requestBody)}`);
+
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -145,18 +200,7 @@ export class WhatsappService {
           'Content-Type': 'application/json',
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: data.phoneNumber,
-          type: 'template',
-          template: {
-            name: data.templateName,
-            language: {
-              code: data.languageCode,
-            },
-            components: data.components || [],
-          },
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       let result;
@@ -165,11 +209,11 @@ export class WhatsappService {
         result = await response.json();
       } else {
         const text = await response.text();
+        this.logger.error(`[Job ${messageLog.id}] Non-JSON response from Meta: ${text}`);
         throw new Error(`Invalid response from Meta API: ${text.substring(0, 100)}`);
       }
 
-      this.logger.log(`WhatsApp template message sent successfully for ${data.phoneNumber}`);
-      this.logger.log(`Response : ${JSON.stringify(result, null, 2)}`);
+      this.logger.log(`[Job ${messageLog.id}] WhatsApp response (Status ${response.status}): ${JSON.stringify(result)}`);
       clearTimeout(timeoutId);
 
       if (!response.ok) {
@@ -203,159 +247,6 @@ export class WhatsappService {
       
       throw error;
     }
-  }
-
-  /**
-   * Queue a plain text message
-   */
-  async queueTextMessage(data: {
-    phoneNumber: string;
-    message: string;
-    senderId?: string;
-    schoolId?: string;
-  }) {
-    const normalizedPhone = this.normalizePhoneNumber(data.phoneNumber);
-    this.logger.log(`Queueing plain text message for ${normalizedPhone}`);
-    
-    const job = await this.broadcastQueue.add(
-      'send-text',
-      {
-        phoneNumber: normalizedPhone,
-        message: data.message,
-        senderId: data.senderId,
-        schoolId: data.schoolId,
-      },
-      {
-        jobId: `wa-text-${uuidv4()}`,
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 500 },
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
-      },
-    );
-
-    return { success: true, jobId: job.id };
-  }
-
-  /**
-   * Send a plain text message via Meta API
-   */
-  async sendTextMessage(data: {
-    phoneNumber: string;
-    message: string;
-    senderId?: string;
-    schoolId?: string;
-  }) {
-    const accessToken = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
-    const phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID');
-
-    if (!accessToken || !phoneNumberId) {
-      throw new Error('WhatsApp configuration missing');
-    }
-
-    const url = `${this.baseUrl}/${phoneNumberId}/messages`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    const messageLog = await this.prisma.whatsapp_messages.create({
-      data: {
-        phone_number: data.phoneNumber,
-        message_text: data.message,
-        sender_id: data.senderId,
-        school_id: data.schoolId,
-        direction: 'OUTGOING',
-        status: 'SENT',
-        metadata: { type: 'text' },
-      },
-    });
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: data.phoneNumber,
-          type: 'text',
-          text: {
-            preview_url: false,
-            body: data.message,
-          },
-        }),
-      });
-
-      let result;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        throw new Error(`Invalid response from Meta API: ${text.substring(0, 100)}`);
-      }
-
-      this.logger.log(`WhatsApp text message sent successfully for ${data.phoneNumber}`);
-      this.logger.log(`Response : ${JSON.stringify(result, null, 2)}`);
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorMessage = result.error?.message || `Failed to send WhatsApp message (Status: ${response.status})`;
-        throw new Error(errorMessage);
-      }
-
-      await this.prisma.whatsapp_messages.update({
-        where: { id: messageLog.id },
-        data: {
-          wa_message_id: result.messages?.[0]?.id,
-          status: 'SENT',
-        },
-      });
-
-      return result;
-    } catch (error) {
-      this.logger.error(`Error sending WhatsApp text message: ${error.message}`);
-      
-      await this.prisma.whatsapp_messages.update({
-        where: { id: messageLog.id },
-        data: {
-          status: 'FAILED',
-          metadata: { error: error.message, type: 'text' },
-        },
-      });
-      
-      throw error;
-    }
-  }
-
-  /**
-   * Update message status from Webhook
-   */
-  async updateMessageStatus(waMessageId: string, status: any) {
-    // Map Meta status to our internal enum if needed
-    // Meta statuses: sent, delivered, read, failed
-    const statusMap: Record<string, any> = {
-      'sent': 'SENT',
-      'delivered': 'DELIVERED',
-      'read': 'READ',
-      'failed': 'FAILED',
-    };
-
-    const newStatus = statusMap[status] || 'SENT';
-
-    return this.prisma.whatsapp_messages.updateMany({
-      where: { wa_message_id: waMessageId },
-      data: {
-        status: newStatus,
-        updated_at: new Date(),
-      },
-    });
   }
 
   /**

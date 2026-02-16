@@ -10,8 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/auth/AuthContext";
 import { messagesService, type Message, type Conversation } from "@/services/messagesService";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,7 +64,6 @@ const AdminCommunication = () => {
     const [teacherMessage, setTeacherMessage] = useState('');
     const [parentClass, setParentClass] = useState('');
     const [parentMessage, setParentMessage] = useState('');
-    const [broadcastType, setBroadcastType] = useState<'template' | 'text'>('text');
     const [historySearch, setHistorySearch] = useState('');
 
     // Data states
@@ -211,7 +208,11 @@ const AdminCommunication = () => {
         setLoading(true);
         try {
             const classRecipients = await whatsappApi.getClassRecipients(parentClass);
-            const recipients = classRecipients.map(r => ({ phoneNumber: r.phoneNumber, recipientId: r.recipientId }));
+            const recipients = classRecipients.map(r => ({ 
+                phoneNumber: r.phoneNumber, 
+                recipientId: r.recipientId,
+                data: { studentName: r.studentName }
+            }));
 
             if (recipients.length === 0) {
                 toast.error("No valid parent contacts found for this class");
@@ -219,12 +220,15 @@ const AdminCommunication = () => {
                 return;
             }
 
-            await whatsappApi.sendBroadcast({
+            await whatsappApi.sendUnified({
+                useCase: 'school_announcement',
+                data: {
+                    parentName: 'Parent',
+                    studentName: 'Student', // Fallback, will be overridden by per-recipient data
+                    messageText: parentMessage,
+                    schoolName: (profile as any)?.school?.name || 'School',
+                },
                 recipients,
-                messageType: broadcastType,
-                message: broadcastType === 'text' ? parentMessage : undefined,
-                templateName: broadcastType === 'template' ? 'hello_world' : undefined,
-                languageCode: broadcastType === 'template' ? 'en_US' : undefined,
                 schoolId: profile?.school_id || 'test-school',
                 senderId: profile?.id || 'test-sender',
             });
@@ -634,27 +638,9 @@ const AdminCommunication = () => {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="space-y-2 bg-secondary/20 p-4 rounded-xl border border-white/5">
-                                        <label className="text-sm font-medium">Broadcast Mode</label>
-                                        <RadioGroup 
-                                            defaultValue="text" 
-                                            value={broadcastType}
-                                            onValueChange={(val: any) => setBroadcastType(val)}
-                                            className="flex flex-col sm:flex-row gap-4 mt-2"
-                                        >
-                                            <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="text" id="mode-text" />
-                                                <Label htmlFor="mode-text" className="cursor-pointer text-sm">Plain Text (Immediate)</Label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="template" id="mode-template" />
-                                                <Label htmlFor="mode-template" className="cursor-pointer text-sm">Official Template (Pre-approved)</Label>
-                                            </div>
-                                        </RadioGroup>
-                                    </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">
-                                            {broadcastType === 'text' ? 'Announcement Message' : 'Template Message (Fallback)'}
+                                            Announcement Message
                                         </label>
                                         <Textarea
                                             placeholder="Dear Parents, we would like to inform you that..."

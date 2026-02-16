@@ -26,6 +26,7 @@ import {
 import type { FlattenedClass } from "@/schemas/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useAuth } from "@/auth/AuthContext";
+import { formatDistanceToNow, isToday, isYesterday } from "date-fns";
 
 const TeacherAnnouncements = () => {
   const navigate = useNavigate();
@@ -251,13 +252,20 @@ const TeacherAnnouncements = () => {
                 <p className="text-sm text-muted-foreground">Urgent</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-secondary">
+                <p className="text-3xl font-bold text-primary">
                   {announcements.reduce((acc, a) => acc + (a.views ?? 0), 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">Total Views</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-accent">Today</p>
+                <p className="text-3xl font-bold text-primary">
+                  {announcements.length > 0 ? (() => {
+                    const lastDate = new Date(Math.max(...announcements.map(a => new Date(a.createdAt).getTime())));
+                    if (isToday(lastDate)) return "Today";
+                    if (isYesterday(lastDate)) return "Yesterday";
+                    return formatDistanceToNow(lastDate, { addSuffix: true });
+                  })() : "N/A"}
+                </p>
                 <p className="text-sm text-muted-foreground">Last Posted</p>
               </div>
             </div>

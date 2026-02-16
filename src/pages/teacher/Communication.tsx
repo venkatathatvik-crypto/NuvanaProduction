@@ -41,7 +41,6 @@ const TeacherCommunication = () => {
     const [selectedStudentId, setSelectedStudentId] = useState<string>('');
     const [students, setStudents] = useState<StudentAttendance[]>([]);
     const [studentsLoading, setStudentsLoading] = useState(false);
-    const [broadcastType, setBroadcastType] = useState<'template' | 'text'>('text');
     const [historySearch, setHistorySearch] = useState('');
 
     // WhatsApp Broadcast History from Backend
@@ -202,11 +201,17 @@ const TeacherCommunication = () => {
                 }
                 const recipient = await whatsappApi.getStudentRecipient(selectedStudentId);
                 if (recipient) {
-                    await whatsappApi.sendTextMessage({
+                    await whatsappApi.sendUnified({
+                        useCase: 'school_announcement',
+                        data: {
+                            parentName: 'Parent',
+                            studentName: recipient.studentName,
+                            messageText: parentMessage,
+                            schoolName: (profile as any)?.school?.name || 'School',
+                        },
                         phoneNumber: recipient.phoneNumber,
-                        message: parentMessage,
-                        senderId: profile?.id || 'test-sender',
                         schoolId: profile?.school_id || 'test-school',
+                        senderId: profile?.id || 'test-sender',
                     });
                 } else {
                     toast.error("This student does not have a registered parent contact number.");
@@ -215,7 +220,11 @@ const TeacherCommunication = () => {
                 }
             } else {
                 const classRecipients = await whatsappApi.getClassRecipients(parentClass);
-                const recipients = classRecipients.map(r => ({ phoneNumber: r.phoneNumber, recipientId: r.recipientId }));
+                const recipients = classRecipients.map(r => ({ 
+                    phoneNumber: r.phoneNumber, 
+                    recipientId: r.recipientId, 
+                    data: { studentName: r.studentName } 
+                }));
                 
                 if (recipients.length === 0) {
                     toast.error("No valid parent contacts found for selection");
@@ -223,12 +232,15 @@ const TeacherCommunication = () => {
                     return;
                 }
 
-                await whatsappApi.sendBroadcast({
+                await whatsappApi.sendUnified({
+                    useCase: 'school_announcement',
+                    data: {
+                        parentName: 'Parent',
+                        studentName: 'Student', // Fallback
+                        messageText: parentMessage,
+                        schoolName: (profile as any)?.school?.name || 'School',
+                    },
                     recipients,
-                    messageType: broadcastType,
-                    message: broadcastType === 'text' ? parentMessage : undefined,
-                    templateName: broadcastType === 'template' ? 'hello_world' : undefined,
-                    languageCode: broadcastType === 'template' ? 'en_US' : undefined,
                     schoolId: profile?.school_id || 'test-school',
                     senderId: profile?.id || 'test-sender',
                 });
@@ -525,26 +537,6 @@ const TeacherCommunication = () => {
                                         )}
                                     </div>
 
-                                    {recipientType === 'class' && (
-                                        <div className="space-y-2 bg-secondary/20 p-4 rounded-xl border border-white/5">
-                                            <label className="text-sm font-medium">Broadcast Mode</label>
-                                            <RadioGroup 
-                                                defaultValue="text" 
-                                                value={broadcastType}
-                                                onValueChange={(val: any) => setBroadcastType(val)}
-                                                className="flex flex-col sm:flex-row gap-4 mt-2"
-                                            >
-                                                <div className="flex items-center space-x-2">
-                                                    <RadioGroupItem value="text" id="teacher-mode-text" />
-                                                    <Label htmlFor="teacher-mode-text" className="cursor-pointer text-sm">Plain Text (Immediate)</Label>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <RadioGroupItem value="template" id="teacher-mode-template" />
-                                                    <Label htmlFor="teacher-mode-template" className="cursor-pointer text-sm">Official Template (Pre-approved)</Label>
-                                                </div>
-                                            </RadioGroup>
-                                        </div>
-                                    )}
 
                                     {classes.length === 0 && !classesLoading && (
                                         <p className="text-xs text-muted-foreground">
@@ -553,9 +545,7 @@ const TeacherCommunication = () => {
                                     )}
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">
-                                            {(recipientType === 'class' && broadcastType === 'text') || recipientType === 'individual' 
-                                                ? 'Message Content' 
-                                                : 'Template Message (Fallback)'}
+                                            Message Content
                                         </label>
                                         <Textarea
                                             placeholder="Dear Parents, regarding upcoming assignments..."
@@ -571,7 +561,7 @@ const TeacherCommunication = () => {
                                     <Button type="submit" disabled={loading} className={`w-full sm:w-auto shadow-lg ${
                                         recipientType === 'class' 
                                             ? 'bg-green-600 hover:bg-green-700 shadow-green-500/20' 
-                                            : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+                                            : 'bg-green-600 hover:bg-green-700 shadow-green-500/20'
                                     } text-white`}>
                                         {loading ? "Processing..." : (
                                             <>

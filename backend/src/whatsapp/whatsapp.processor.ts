@@ -17,8 +17,6 @@ export class WhatsappProcessor extends WorkerHost {
     switch (job.name) {
       case 'send-template':
         return this.handleSendTemplate(job);
-      case 'send-text':
-        return this.handleSendText(job);
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
         break;
@@ -45,28 +43,6 @@ export class WhatsappProcessor extends WorkerHost {
     } catch (error) {
       const attempt = job.attemptsMade + 1;
       this.logger.error(`[Job ${job.id}] Attempt ${attempt} failed for ${phoneNumber}: ${error.message}`);
-      throw error;
-    }
-  }
-
-  private async handleSendText(job: Job<any>) {
-    const { phoneNumber, message, senderId, schoolId } = job.data;
-
-    try {
-      this.logger.log(`[Job ${job.id}] Sending plain text WhatsApp message to ${phoneNumber}`);
-      
-      const result = await this.whatsappService.sendTextMessage({
-        phoneNumber,
-        message,
-        senderId,
-        schoolId,
-      });
-
-      this.logger.log(`[Job ${job.id}] Successfully sent text message to ${phoneNumber}`);
-      return result;
-    } catch (error) {
-      const attempt = job.attemptsMade + 1;
-      this.logger.error(`[Job ${job.id}] Text job attempt ${attempt} failed for ${phoneNumber}: ${error.message}`);
       throw error;
     }
   }

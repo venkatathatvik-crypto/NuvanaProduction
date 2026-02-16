@@ -584,7 +584,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               onClick={() => setShowEngagementPanel(true)}
             >
               <Target className="w-4 h-4 mr-2" />
-              Nuva Pulse
+              NuvaPulse
             </Button>
           )}
 
@@ -805,7 +805,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 )}
 
                 <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1 flex items-center gap-1">
-                  <UserCircle className="w-3 h-3" /> My Private Note
+                  <UserCircle className="w-3 h-3" /> Add Notes
                 </div>
                 <Textarea
                   value={textNotes[pageNumber] || ""}
