@@ -1,10 +1,12 @@
-import { Controller, Post, Get, Body, Query, Param } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Param, Logger } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { ConfigService } from '@nestjs/config';
 import { UseCase } from './whatsapp.types';
 
 @Controller('whatsapp')
 export class WhatsappController {
+  private readonly logger = new Logger(WhatsappController.name);
+
   constructor(
     private whatsappService: WhatsappService,
     private configService: ConfigService,
@@ -22,8 +24,7 @@ export class WhatsappController {
     senderId: string;
     schoolId: string;
   }) {
-    console.log('--- WhatsApp Unified Send Request Received ---');
-    console.log('Body:', JSON.stringify(body, null, 2));
+    this.logger.log(`WhatsApp send request: useCase=${body.useCase}, schoolId=${body.schoolId}`);
 
     try {
       const result = await this.whatsappService.queueUnified({
@@ -34,10 +35,10 @@ export class WhatsappController {
         senderId: body.senderId,
         schoolId: body.schoolId,
       });
-      console.log('Result:', JSON.stringify(result));
+      this.logger.log(`WhatsApp send result: ${JSON.stringify(result)}`);
       return result;
     } catch (error) {
-      console.error('Error in WhatsApp unified send controller:', error);
+      this.logger.error('Error in WhatsApp unified send controller:', error);
       throw error;
     }
   }

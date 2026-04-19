@@ -8,6 +8,7 @@ import { Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { academicService } from '@/services/academicApiService';
+import { logger } from '@/lib/logger';
 
 interface GradingApprovalModalProps {
   isOpen: boolean;
@@ -58,7 +59,7 @@ export const GradingApprovalModal: React.FC<GradingApprovalModalProps> = ({
         const studentsData = await academicService.getStudentsByClass(selectedClassId);
         setStudents(studentsData || []);
       } catch (error) {
-        console.error('Failed to load students:', error);
+        logger.error('Failed to load students:', error);
         toast.error('Failed to load students');
       } finally {
         setLoadingStudents(false);
@@ -101,7 +102,7 @@ export const GradingApprovalModal: React.FC<GradingApprovalModalProps> = ({
       
       onClose();
     } catch (error: any) {
-      console.error('Failed to save grading:', error);
+      logger.error('Failed to save grading:', error);
       toast.error('Failed to save grading', {
         description: error?.response?.data?.message || 'Please try again',
       });

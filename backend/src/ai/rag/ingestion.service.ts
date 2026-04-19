@@ -4,6 +4,7 @@ import { RecursiveCharacterTextSplitter } from '@langchain/classic/text_splitter
 import { Document } from '@langchain/core/documents';
 import { EmbeddingService } from './embedding.service';
 import { RagService } from './rag.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class IngestionService {
@@ -18,6 +19,7 @@ export class IngestionService {
     constructor(
         private embeddingService: EmbeddingService,
         private ragService: RagService,
+        private prisma: PrismaService,
     ) {
         // Initialize LangChain text splitter with similar chunking behavior
         // Using character-based splitting with overlap to approximate word-based chunking
@@ -34,18 +36,20 @@ export class IngestionService {
      */
     async processFile(buffer: Buffer, metadata: {
         file_id: string;
-        class_id: string;
-        subject: string;
+        class_id?: string;
+        subject?: string;
         classBand?: string;
         school_id: string;
+        source?: string;
+        category?: string;
     }): Promise<{ chunksProcessed: number; totalChunks: number; skipped: number }> {
         const startTime = Date.now();
-        console.log(`[PDF Processing] Starting processing for file_id: ${metadata.file_id}`);
-        console.log(`[PDF Processing] Metadata:`, JSON.stringify(metadata, null, 2));
+        this.logger.log(`[PDF Processing] Starting processing for file_id: ${metadata.file_id}`);
+        this.logger.log(`[PDF Processing] Metadata:`, JSON.stringify(metadata, null, 2));
 
         try {
             // 1. Extract Text from PDF
-            console.log(`[PDF Processing] Step 1: Extracting text from PDF...`);
+            this.logger.log(`[PDF Processing] Step 1: Extracting text from PDF...`);
         const data = await pdf(buffer);
             let fullText = data.text.trim();
 
@@ -55,14 +59,14 @@ export class IngestionService {
             fullText = fullText.trim();
             
             if (!fullText || fullText.length === 0) {
-                console.warn(`[PDF Processing] ⚠️ No text extracted from PDF (file_id: ${metadata.file_id})`);
+                this.logger.warn(`[PDF Processing] No text extracted from PDF (file_id: ${metadata.file_id})`);
                 return { chunksProcessed: 0, totalChunks: 0, skipped: 0 };
             }
 
-            console.log(`[PDF Processing] ✓ Extracted ${fullText.length} characters from PDF (cleaned)`);
+            this.logger.log(`[PDF Processing] Extracted ${fullText.length} characters from PDF (cleaned)`);
 
             // 2. Chunk Text using LangChain text splitter
-            console.log(`[PDF Processing] Step 2: Chunking text with LangChain...`);
+            this.logger.log(`[PDF Processing] Step 2: Chunking text with LangChain...`);
             // Create LangChain Document with metadata
             const document = new Document({
                 pageContent: fullText,
@@ -76,22 +80,22 @@ export class IngestionService {
             });
             // Use LangChain's text splitter for better semantic boundaries
             const langchainChunks = await this.textSplitter.splitDocuments([document]);
-            console.log(`[PDF Processing] ✓ Created ${langchainChunks.length} chunks using LangChain text splitter`);
+            this.logger.log(`[PDF Processing] Created ${langchainChunks.length} chunks using LangChain text splitter`);
 
             if (langchainChunks.length === 0) {
-                console.warn(`[PDF Processing] ⚠️ No chunks created from text`);
+                this.logger.warn(`[PDF Processing] No chunks created from text`);
                 return { chunksProcessed: 0, totalChunks: 0, skipped: 0 };
             }
 
             // 3. Generate Embeddings & Store
-            console.log(`[PDF Processing] Step 3: Generating embeddings and storing chunks...`);
+            this.logger.log(`[PDF Processing] Step 3: Generating embeddings and storing chunks...`);
         let processedCount = 0;
             let skippedCount = 0;
 
             for (let i = 0; i < langchainChunks.length; i++) {
                 const chunkDoc = langchainChunks[i];
                 const chunkContent = chunkDoc.pageContent;
-                console.log(`[PDF Processing] Processing chunk ${i + 1}/${langchainChunks.length} (${chunkContent.length} chars)...`);
+                this.logger.log(`[PDF Processing] Processing chunk ${i + 1}/${langchainChunks.length} (${chunkContent.length} chars)...`);
 
                 try {
                     // Generate embedding
@@ -99,12 +103,12 @@ export class IngestionService {
 
                     // Graceful degradation: Skip if embeddings unavailable
                     if (!vector || vector.length === 0) {
-                        console.warn(`[PDF Processing] ⚠️ Embedding unavailable for chunk ${i + 1}, skipping...`);
+                        this.logger.warn(`[PDF Processing] Embedding unavailable for chunk ${i + 1}, skipping...`);
                         skippedCount++;
                         continue;
                     }
 
-                    console.log(`[PDF Processing] ✓ Generated embedding (${vector.length} dimensions) for chunk ${i + 1}`);
+                    this.logger.log(`[PDF Processing] Generated embedding (${vector.length} dimensions) for chunk ${i + 1}`);
 
                     // Store in vector database with metadata
                     // Merge chunk document metadata with file metadata
@@ -119,70 +123,50 @@ export class IngestionService {
                     await this.ragService.storeVector(vector, chunkContent, chunkMetadata);
                     processedCount++;
 
-                    console.log(`[PDF Processing] ✓ Stored chunk ${i + 1}/${langchainChunks.length} in vector database`);
+                    this.logger.log(`[PDF Processing] Stored chunk ${i + 1}/${langchainChunks.length} in vector database`);
 
                     // Small delay to avoid rate limiting
                     if (i < langchainChunks.length - 1) {
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 } catch (error) {
-                    console.error(`[PDF Processing] ❌ Error processing chunk ${i + 1}:`, error);
+                    this.logger.error(`[PDF Processing] Error processing chunk ${i + 1}:`, error);
                     skippedCount++;
                     // Continue with next chunk
                 }
             }
 
             const duration = Date.now() - startTime;
-            console.log(`[PDF Processing] ✅ Processing complete!`);
-            console.log(`[PDF Processing] Summary: ${processedCount} processed, ${skippedCount} skipped, ${langchainChunks.length} total`);
-            console.log(`[PDF Processing] Duration: ${duration}ms`);
+            this.logger.log(`[PDF Processing] Processing complete!`);
+            this.logger.log(`[PDF Processing] Summary: ${processedCount} processed, ${skippedCount} skipped, ${langchainChunks.length} total`);
+            this.logger.log(`[PDF Processing] Duration: ${duration}ms`);
+
+            // Update RAG status to completed
+            await this.prisma.files.update({
+                where: { id: metadata.file_id },
+                data: { rag_status: 'completed' },
+            }).catch(e => this.logger.error(`Failed to update RAG status for ${metadata.file_id}`, e));
 
             return {
                 chunksProcessed: processedCount,
                 totalChunks: langchainChunks.length,
                 skipped: skippedCount,
             };
-        } catch (error) {
-            console.error(`[PDF Processing] ❌ Fatal error processing PDF (file_id: ${metadata.file_id}):`, error);
+        } catch (error: any) {
+            this.logger.error(`[PDF Processing] Fatal error processing PDF (file_id: ${metadata.file_id}):`, error);
             this.logger.error('PDF processing failed', error);
+
+            // Update RAG status to failed
+            await this.prisma.files.update({
+                where: { id: metadata.file_id },
+                data: { 
+                    rag_status: 'failed',
+                    rag_error: error.message || 'Unknown error during PDF processing'
+                },
+            }).catch(e => this.logger.error(`Failed to update RAG error status for ${metadata.file_id}`, e));
+
             throw error;
         }
     }
 
-    /**
-     * Chunk text by words (not characters) for better semantic boundaries
-     * Uses overlap to preserve context between chunks
-     */
-    private chunkText(text: string, chunkSizeWords: number, overlapWords: number): string[] {
-        console.log(`[PDF Processing] Chunking text: ${text.length} chars, target: ${chunkSizeWords} words/chunk, overlap: ${overlapWords} words`);
-
-        // Split text into words
-        const words = text.split(/\s+/).filter(w => w.length > 0);
-        const totalWords = words.length;
-        console.log(`[PDF Processing] Total words: ${totalWords}`);
-
-        if (totalWords === 0) {
-            return [];
-        }
-
-        const chunks: string[] = [];
-        const stepSize = chunkSizeWords - overlapWords; // How many new words per chunk
-
-        for (let i = 0; i < totalWords; i += stepSize) {
-            const chunkWords = words.slice(i, i + chunkSizeWords);
-            const chunkText = chunkWords.join(' ').trim();
-
-            if (chunkText.length > 0) {
-                chunks.push(chunkText);
-            }
-
-            // Stop if we've covered all words
-            if (i + chunkSizeWords >= totalWords) {
-                break;
-        }
-        }
-
-        console.log(`[PDF Processing] Created ${chunks.length} chunks from ${totalWords} words`);
-        return chunks;
-    }
 }

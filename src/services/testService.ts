@@ -233,7 +233,7 @@ export const updateTeacherTest = async (
         normalizedDueDate = dateString;
       }
     } catch (error) {
-      console.warn('[updateTeacherTest] Error normalizing dueDate, ignoring:', error);
+      logger.warn('[updateTeacherTest] Error normalizing dueDate, ignoring:', error);
     }
   }
 
@@ -425,33 +425,33 @@ export const getGradeSubjectIdBySubjectName = async (
   try {
     const { apiClient } = await import('@/lib/apiClient');
     const result = await apiClient.get(`/academic/helper/grade-subject/${classId}/${encodeURIComponent(subjectName)}`);
-    console.log('[getGradeSubjectIdBySubjectName] API response:', result);
-    console.log('[getGradeSubjectIdBySubjectName] Response type:', typeof result);
+    logger.log('[getGradeSubjectIdBySubjectName] API response:', result);
+    logger.log('[getGradeSubjectIdBySubjectName] Response type:', typeof result);
     
     // Handle if result is an object with id property
     if (result && typeof result === 'object' && result !== null && 'id' in result) {
       const id = result.id;
       if (id === null || id === undefined) {
-        console.warn('[getGradeSubjectIdBySubjectName] ID is null or undefined');
+        logger.warn('[getGradeSubjectIdBySubjectName] ID is null or undefined');
         return null;
       }
-      console.log('[getGradeSubjectIdBySubjectName] Extracting ID from object:', id);
+      logger.log('[getGradeSubjectIdBySubjectName] Extracting ID from object:', id);
       return String(id);
     }
     
     // Handle if result is already a string ID
     if (typeof result === 'string') {
-      console.log('[getGradeSubjectIdBySubjectName] Using string ID directly:', result);
+      logger.log('[getGradeSubjectIdBySubjectName] Using string ID directly:', result);
       return result;
     }
     
-    console.warn('[getGradeSubjectIdBySubjectName] Unexpected response format:', result);
+    logger.warn('[getGradeSubjectIdBySubjectName] Unexpected response format:', result);
     return null;
   } catch (error) {
-    console.error('[getGradeSubjectIdBySubjectName] Error:', error);
+    logger.error('[getGradeSubjectIdBySubjectName] Error:', error);
     if (error instanceof Error) {
-      console.error('[getGradeSubjectIdBySubjectName] Error message:', error.message);
-      console.error('[getGradeSubjectIdBySubjectName] Error stack:', error.stack);
+      logger.error('[getGradeSubjectIdBySubjectName] Error message:', error.message);
+      logger.error('[getGradeSubjectIdBySubjectName] Error stack:', error.stack);
     }
     return null;
   }
@@ -463,25 +463,25 @@ export const getExamTypeIdByName = async (
   try {
     const { apiClient } = await import('@/lib/apiClient');
     const result = await apiClient.get(`/academic/helper/exam-type/${examTypeName}`);
-    console.log('[getExamTypeIdByName] API response:', result);
-    console.log('[getExamTypeIdByName] Response type:', typeof result);
+    logger.log('[getExamTypeIdByName] API response:', result);
+    logger.log('[getExamTypeIdByName] Response type:', typeof result);
     
     // Handle if result is an object with id property
     if (result && typeof result === 'object' && 'id' in result) {
-      console.log('[getExamTypeIdByName] Extracting ID from object:', result.id);
+      logger.log('[getExamTypeIdByName] Extracting ID from object:', result.id);
       return result.id as number | null;
     }
     
     // Handle if result is already a number
     if (typeof result === 'number') {
-      console.log('[getExamTypeIdByName] Using number ID directly:', result);
+      logger.log('[getExamTypeIdByName] Using number ID directly:', result);
       return result;
     }
     
-    console.warn('[getExamTypeIdByName] Unexpected response format:', result);
+    logger.warn('[getExamTypeIdByName] Unexpected response format:', result);
     return null;
   } catch (error) {
-    console.error('[getExamTypeIdByName] Error:', error);
+    logger.error('[getExamTypeIdByName] Error:', error);
     return null;
   }
 };
@@ -522,7 +522,7 @@ export const getStudentSubmission = async (
       })),
     };
   } catch (error) {
-    console.error('[getStudentSubmission] Error:', error);
+    logger.error('[getStudentSubmission] Error:', error);
     return null;
   }
 };
@@ -590,7 +590,7 @@ export const getTestResult = async (
       questions,
     };
   } catch (error) {
-    console.error('[getTestResult] Error:', error);
+    logger.error('[getTestResult] Error:', error);
     return null;
   }
 };
@@ -624,7 +624,7 @@ export const getStudentGradedTests = async (
       percentage: t.percentage,
     }));
   } catch (error) {
-    console.error('[getStudentGradedTests] Error:', error);
+    logger.error('[getStudentGradedTests] Error:', error);
     return [];
   }
 };
@@ -660,7 +660,7 @@ export const getTeacherGradingQueue = async (
       createdAt: item.created_at,
     }));
   } catch (error) {
-    console.error('[getTeacherGradingQueue] Error:', error);
+    logger.error('[getTeacherGradingQueue] Error:', error);
     return [];
   }
 };
@@ -723,7 +723,7 @@ export const getTestSubmissionsForGrading = async (
       })),
     }));
   } catch (error) {
-    console.error('[getTestSubmissionsForGrading] Error:', error);
+    logger.error('[getTestSubmissionsForGrading] Error:', error);
     return [];
   }
 };
@@ -745,7 +745,7 @@ export const finalizeSubmissionGrading = async (
   try {
     await testApi.gradeSubmission(teacherId, submissionId, answers);
   } catch (error) {
-    console.error('[finalizeSubmissionGrading] Error:', error);
+    logger.error('[finalizeSubmissionGrading] Error:', error);
     throw error;
   }
 };

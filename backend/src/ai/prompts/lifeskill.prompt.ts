@@ -4,10 +4,20 @@ import { ClassBandStyles } from './classband.styles';
  * Life Skills Prompt
  * Provides age-appropriate mentoring on study habits, time management, stress, etc.
  */
-export const LifeSkillPrompt = (query: string, category: string) => {
+export const LifeSkillPrompt = (query: string, category: string, ragContext?: string) => {
+  const ragSection = ragContext ? `
+REFERENCE MATERIAL FROM YOUR SCHOOL'S LIFE COACH LIBRARY:
+"""
+${ragContext}
+"""
+Use the above reference material to ground your advice. Cite specific ideas from the material when relevant.
+
+` : '';
+
   return `TASK: Provide supportive, age-appropriate life skills guidance for: "${query}"
 
 CATEGORY: ${category}
+${ragSection}
 TONE: Warm, encouraging, mentor-like (not preachy)
 
 CRITICAL INSTRUCTIONS:

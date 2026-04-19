@@ -40,6 +40,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AssignmentResult {
   success: { id: string; name: string }[];
@@ -106,56 +107,56 @@ export default function AdminAssignments() {
     queryKey: ['assignments-classes'],
     queryFn: () => academicService.getClasses(),
     enabled: !!profile?.school_id,
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 60 * 1000,
   });
 
   const { data: teachers = [], isLoading: teachersLoading } = useQuery({
     queryKey: ['assignments-teachers'],
     queryFn: () => userService.getTeachers(),
     enabled: !!profile?.school_id,
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 60 * 1000,
   });
 
   const { data: students = [], isLoading: studentsLoading } = useQuery({
     queryKey: ['assignments-students'],
     queryFn: () => userService.getStudents(),
     enabled: !!profile?.school_id,
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 60 * 1000,
   });
 
   const { data: subjects = [], isLoading: subjectsLoading } = useQuery({
     queryKey: ['assignments-subjects'],
     queryFn: () => academicService.getSubjects(),
     enabled: !!profile?.school_id,
-    staleTime: 0,
+    staleTime: 60 * 1000,
   });
 
   const { data: gradeSubjects = [], isLoading: gradeSubjectsLoading } = useQuery({
     queryKey: ['assignments-gradeSubjects'],
     queryFn: () => academicService.getGradeSubjects(),
     enabled: !!profile?.school_id,
-    staleTime: 0,
+    staleTime: 60 * 1000,
   });
 
   const { data: teacherClasses = [], isLoading: teacherClassesLoading } = useQuery({
     queryKey: ['assignments-teacherClasses'],
     queryFn: () => academicService.getTeacherClasses(),
     enabled: !!profile?.school_id,
-    staleTime: 0,
+    staleTime: 60 * 1000,
   });
 
   const { data: gradeLevels = [], isLoading: gradeLevelsLoading } = useQuery({
     queryKey: ['assignments-gradeLevels'],
     queryFn: () => academicService.getGrades(),
     enabled: !!profile?.school_id,
-    staleTime: 0,
+    staleTime: 60 * 1000,
   });
 
   const { data: teacherSubjects = [], isLoading: teacherSubjectsLoading } = useQuery({
     queryKey: ['assignments-teacherSubjects'],
     queryFn: () => academicService.getTeacherSubjects(),
     enabled: !!profile?.school_id,
-    staleTime: 0,
+    staleTime: 60 * 1000,
   });
 
   const loading = classesLoading || teachersLoading || studentsLoading || subjectsLoading || gradeSubjectsLoading || teacherClassesLoading || gradeLevelsLoading || teacherSubjectsLoading;
@@ -656,8 +657,21 @@ export default function AdminAssignments() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Skeleton className="h-10 w-10 rounded" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-full max-w-sm rounded" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Skeleton className="h-72 rounded-xl" />
+            <Skeleton className="h-72 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -1433,7 +1447,7 @@ export default function AdminAssignments() {
                   <>
                     {/* Grade Level Selection */}
                     <div>
-                      <Label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                      <Label className="text-sm font-medium mb-2 flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-primary" />
                         Select Grade Level(s) <span className="text-destructive">*</span>
                       </Label>

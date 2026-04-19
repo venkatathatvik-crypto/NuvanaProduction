@@ -6,10 +6,17 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateSchoolDto } from "./dto/create-school.dto";
 import { UpdateSchoolDto } from "./dto/update-school.dto";
+import { MailService } from "../mail/mail.service";
+import { Logger } from "@nestjs/common";
 
 @Injectable()
 export class SchoolsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(SchoolsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService
+  ) {}
 
   async create(createSchoolDto: CreateSchoolDto) {
     const school = await this.prisma.schools.create({
@@ -84,6 +91,12 @@ export class SchoolsService {
         },
       };
     });
+
+    // Send welcome email to the newly created school admin
+    this.mailService.sendWelcomeEmail(
+      { email: dto.admin_email, name: dto.admin_name },
+      dto.admin_password,
+    ).catch(e => this.logger.error(`Failed to queue school admin welcome email: ${e.message}`));
 
     return {
       message: "School and admin created successfully",

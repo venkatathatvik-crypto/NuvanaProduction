@@ -15,7 +15,7 @@ interface ExportOptions {
 
 export async function exportAnalyticsPDF({
   elementId = "analytics-pdf-root",
-  logoUrl = "/logo.png",
+  logoUrl = `${import.meta.env.BASE_URL}logo.png`,
   schoolName = "Nuvana Academy",
   watermarkOpacity = 0.05,
   watermarkWidth = 100,

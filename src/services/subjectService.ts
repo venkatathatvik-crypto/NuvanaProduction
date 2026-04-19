@@ -13,7 +13,7 @@ export const getSubjectsWithMaterials = async (classId: string): Promise<string[
         logger.log('[Subject Service] Subjects with uploaded materials for class', classId, ':', subjects);
         return subjects || [];
     } catch (error: any) {
-        console.error('[Subject Service] Error fetching subjects with materials:', error);
+        logger.error('[Subject Service] Error fetching subjects with materials:', error);
         return [];
     }
 };

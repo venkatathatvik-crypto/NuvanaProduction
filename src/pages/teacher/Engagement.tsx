@@ -9,7 +9,9 @@ import {
   TrendingUp, 
   Users,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  Zap,
+  Award
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -27,25 +29,45 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { engagementSocket } from '@/services/engagementSocket';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { SessionInsights } from '@/components/engagement/SessionInsights';
+import { logger } from '@/lib/logger';
+
 const TeacherEngagement = () => {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
+  const token = localStorage.getItem('access_token') || '';
   const [activeTab, setActiveTab] = useState<'overview' | 'sessions'>('overview');
   const [liveResponses, setLiveResponses] = useState<Response[]>([]);
 
   const { data: sessions = [], isLoading: loadingSessions } = useQuery({
     queryKey: ['teacher-sessions', profile?.id],
     queryFn: async () => {
-      const data = await engagementApi.getTeacherSessions(profile!.id, localStorage.getItem('access_token') || '');
-      console.log('[DEBUG] Fetched Teacher Sessions:', data);
+      const data = await engagementApi.getTeacherSessions(profile!.id, token);
+      logger.log('[DEBUG] Fetched Teacher Sessions:', data);
       return data;
     },
     enabled: !!profile?.id,
   });
 
   const sessionsArr = Array.isArray(sessions) ? sessions : (sessions as any)?.data || [];
+
+  const focusedSession = useMemo(() => {
+    if (sessionId) {
+      return sessionsArr.find((s: any) => s.id === sessionId);
+    }
+    return sessionsArr.find((s: any) => s.status === 'active');
+  }, [sessionsArr, sessionId]);
+
+  // ── Session Insights Query ──
+  const { data: sessionDashboard, isLoading: loadingDashboard } = useQuery({
+    queryKey: ['session-dashboard', focusedSession?.id],
+    queryFn: () => engagementApi.getTeacherSessionDashboard(focusedSession!.id, token),
+    enabled: !!focusedSession?.id,
+  });
+
+  const dashboardData = (sessionDashboard as any)?.data || sessionDashboard;
 
   const studentSummary = useMemo(() => {
     if (!sessionsArr.length) return { participation: 0, accuracy: 0, totalQuestions: 0 };
@@ -78,19 +100,12 @@ const TeacherEngagement = () => {
     };
   }, [sessionsArr]);
 
-  const focusedSession = useMemo(() => {
-    if (sessionId) {
-      return sessionsArr.find((s: any) => s.id === sessionId);
-    }
-    return sessionsArr.find((s: any) => s.status === 'active');
-  }, [sessionsArr, sessionId]);
-
-  const stats = {
-    totalSessions: sessionsArr.length,
-    totalQuestions: studentSummary.totalQuestions,
-    avgParticipation: `${studentSummary.participation}%`,
-    avgAccuracy: `${studentSummary.accuracy}%`,
-  };
+  const stats = [
+    { label: 'Total Sessions', value: sessionsArr.length, icon: Target, color: 'text-primary' },
+    { label: 'Questions', value: studentSummary.totalQuestions, icon: Zap, color: 'text-yellow-500' },
+    { label: 'Participation', value: `${studentSummary.participation}%`, icon: Users, color: 'text-blue-500' },
+    { label: 'Avg Accuracy', value: `${studentSummary.accuracy}%`, icon: Award, color: 'text-green-500' },
+  ];
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -101,14 +116,13 @@ const TeacherEngagement = () => {
     }
 
     const handleResponse = (data: any) => {
-      console.log('[TeacherEngagement] New live response:', data);
-      // Capture live response immediately to avoid losing it during sub-component re-renders
+      logger.log('[TeacherEngagement] New live response:', data);
       setLiveResponses(prev => [data, ...prev]);
       
-      // Still invalidate to get the latest historical/aggregated data
       queryClient.invalidateQueries({ queryKey: ['teacher-sessions'] });
       if (focusedSession?.id) {
         queryClient.invalidateQueries({ queryKey: ['session-details', focusedSession.id] });
+        queryClient.invalidateQueries({ queryKey: ['session-dashboard', focusedSession.id] });
       }
     };
 
@@ -178,12 +192,22 @@ const TeacherEngagement = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
             {focusedSession ? (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {focusedSession.status !== 'active' && (
                   <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 px-4 py-1">
                     Viewing Historical Session: {focusedSession.session_name || focusedSession.id.slice(0, 8)}
                   </Badge>
                 )}
+                
+                {/* ── SESSION INSIGHTS (TOP LEVEL) ── */}
+                {dashboardData && (
+                  <SessionInsights 
+                    topicHealth={dashboardData.topicHealth || []}
+                    atRiskStudents={dashboardData.atRiskStudents || []}
+                    isLoading={loadingDashboard}
+                  />
+                )}
+
                 <LiveResponseFeed 
                   sessionId={focusedSession.id} 
                   externalLiveResponses={liveResponses}

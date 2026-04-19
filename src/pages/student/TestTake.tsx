@@ -19,6 +19,9 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { StudentTestPlayer } from "@/components/mcq/StudentTestPlayer";
 import { Skeleton } from "@/components/ui/skeleton";
+import { logger } from '@/lib/logger';
+import { OfflineEmptyState } from "@/components/OfflineEmptyState";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 
 const TestTakeSkeleton = () => {
     return (
@@ -76,6 +79,7 @@ const TestTake = () => {
     const navigate = useNavigate();
     const { profile, profileLoading } = useAuth();
     const queryClient = useQueryClient();
+    const { isOnline } = useNetworkStatus();
     const [test, setTest] = useState<StudentTestWithQuestions | null>(null);
     const [result, setResult] = useState<TestResult | null>(null);
     const [pendingSubmission, setPendingSubmission] = useState<StudentSubmission | null>(null);
@@ -128,7 +132,7 @@ const TestTake = () => {
                     navigate("/student/tests");
                 }
             } catch (error: any) {
-                console.error("Error fetching test:", error);
+                logger.error("Error fetching test:", error);
                 toast.error("Failed to load test");
                 navigate("/student/tests");
             } finally {
@@ -142,9 +146,9 @@ const TestTake = () => {
     const handleComplete = async (answers: Record<string, number | string>, timeTakenSeconds: number) => {
         if (!profile || !testId) return;
 
-        console.log('[TestTake] handleComplete called with answers:', answers);
-        console.log('[TestTake] Answers keys:', Object.keys(answers));
-        console.log('[TestTake] Answers entries:', Object.entries(answers).map(([key, value]) => ({
+        logger.log('[TestTake] handleComplete called with answers:', answers);
+        logger.log('[TestTake] Answers keys:', Object.keys(answers));
+        logger.log('[TestTake] Answers entries:', Object.entries(answers).map(([key, value]) => ({
             questionId: key,
             value,
             type: typeof value,
@@ -171,7 +175,7 @@ const TestTake = () => {
                         target_url: "/teacher/marks",
                     });
                 } catch (notifError) {
-                    console.error("Failed to send notification:", notifError);
+                    logger.error("Failed to send notification:", notifError);
                 }
             }
 
@@ -188,12 +192,20 @@ const TestTake = () => {
 
             toast.success("Test submitted successfully! Awaiting teacher grading.");
         } catch (error: any) {
-            console.error("Error submitting test:", error);
+            logger.error("Error submitting test:", error);
             toast.error(error.message || "Failed to submit test");
         } finally {
             setSubmitting(false);
         }
     };
+
+    if (!isOnline && loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <OfflineEmptyState pageName="Test" />
+            </div>
+        );
+    }
 
     if (loading || profileLoading) {
         return <TestTakeSkeleton />;

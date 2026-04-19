@@ -30,6 +30,8 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
+import { logger } from '@/lib/logger';
 
 const TeacherTests = () => {
   const navigate = useNavigate();
@@ -54,6 +56,7 @@ const TeacherTests = () => {
   });
 
   const loading = testsLoading || classesLoading;
+  const offlineLoading = useOfflineLoading(loading);
 
   // Filter tests based on selected tab and class
   const filteredTests = useMemo(() => {
@@ -93,7 +96,7 @@ const TeacherTests = () => {
       
       toast.success("Test deleted successfully");
     } catch (error: any) {
-      console.error("Error deleting test:", error);
+      logger.error("Error deleting test:", error);
       toast.error(error.message || "Failed to delete test");
     } finally {
       setTestToDelete(null);
@@ -125,7 +128,7 @@ const TeacherTests = () => {
             target_url: "/student/tests",
           });
         } catch (notifError) {
-          console.error("Failed to send notifications:", notifError);
+          logger.error("Failed to send notifications:", notifError);
         }
 
         // Send email notifications
@@ -137,11 +140,11 @@ const TeacherTests = () => {
             test.className || 'your class'
           );
         } catch (emailError) {
-          console.error("Failed to send emails:", emailError);
+          logger.error("Failed to send emails:", emailError);
         }
       }
     } catch (error: any) {
-      console.error("Error updating test status:", error);
+      logger.error("Error updating test status:", error);
       toast.error(error.message || "Failed to update test status");
     }
   };
@@ -181,7 +184,9 @@ const TeacherTests = () => {
         </div>
       </motion.div>
 
-      {loading ? (
+      {offlineLoading ? (
+        <OfflineEmptyState pageName="Tests" />
+      ) : loading ? (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <Skeleton className="h-10 w-[300px]" />

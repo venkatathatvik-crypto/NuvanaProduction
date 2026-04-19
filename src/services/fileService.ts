@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/apiClient";
 import { NamedEntity, FILES_BUCKET } from "./types";
+import { logger } from '@/lib/logger';
 
 export interface TeacherFileItem {
   id: string;
@@ -121,7 +122,7 @@ export const getTeacherFiles = async (
       size: record.size,
     }));
   } catch (error) {
-    console.error("Error fetching teacher files:", error);
+    logger.error("Error fetching teacher files:", error);
     throw new Error("Failed to load uploaded files.");
   }
 };
@@ -177,7 +178,7 @@ export const uploadTeacherFile = async (
       size: data.size,
     };
   } catch (error: any) {
-    console.error("Error uploading file:", error);
+    logger.error("Error uploading file:", error);
     throw new Error(error.message || "Failed to upload file.");
   }
 };
@@ -212,7 +213,7 @@ export const deleteTeacherFile = async (
   try {
     await apiClient.delete(`/file-upload/files/${fileId}`);
   } catch (error: any) {
-    console.error("Error deleting file:", error);
+    logger.error("Error deleting file:", error);
     throw new Error(error.message || "Failed to delete file.");
   }
 };
@@ -226,7 +227,7 @@ export const incrementFileDownload = async (
     );
     return data.downloadCount;
   } catch (error: any) {
-    console.error("Error incrementing download count:", error);
+    logger.error("Error incrementing download count:", error);
     throw new Error(error.message || "Failed to update download count.");
   }
 };
@@ -266,7 +267,7 @@ export const getStudentFiles = async (
       fileType: record.fileType as 'pdf' | 'video',
     }));
   } catch (error: any) {
-    console.error("Error fetching student files:", error);
+    logger.error("Error fetching student files:", error);
     throw new Error(error.message || "Failed to load files.");
   }
 };

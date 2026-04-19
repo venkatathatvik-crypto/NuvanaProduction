@@ -37,6 +37,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { engagementApi } from "@/services/engagementApi";
 import { engagementSocket } from "@/services/engagementSocket";
+import { logger } from '@/lib/logger';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
@@ -273,7 +274,7 @@ const TeacherFiles = () => {
             cls.class_name
           );
         } catch (err) {
-          console.error(`Failed to send alerts for class ${cls.class_name}:`, err);
+          logger.error(`Failed to send alerts for class ${cls.class_name}:`, err);
         }
       }
 
@@ -297,7 +298,7 @@ const TeacherFiles = () => {
         fileInputRef.current.value = "";
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      logger.error("Upload error:", error);
       const message =
         error instanceof Error ? error.message : "Failed to upload file.";
       toast.error(message);
@@ -335,7 +336,7 @@ const TeacherFiles = () => {
         queryKey: queryKeys.teacher.files(profile?.id ?? '', profile?.school_id ?? '') 
       });
     } catch (error) {
-      console.error("Delete error:", error);
+      logger.error("Delete error:", error);
       const message =
         error instanceof Error ? error.message : "Failed to delete file.";
       toast.error(message);
@@ -373,7 +374,7 @@ const TeacherFiles = () => {
 
       toast.success("File downloaded successfully");
     } catch (error) {
-      console.error("Download error:", error);
+      logger.error("Download error:", error);
       toast.error("Failed to download file.");
     }
   };
@@ -853,11 +854,11 @@ const TeacherFiles = () => {
                                   engagementSocket.connect(profile.id, 'teacher');
                                   engagementSocket.joinSession(session.data?.id || session.id, profile.id);
                                 } else {
-                                  console.warn('Could not find class for engagement session');
+                                  logger.warn('Could not find class for engagement session');
                                 }
                               }
                             } catch (error) {
-                              console.error('Failed to create engagement session:', error);
+                              logger.error('Failed to create engagement session:', error);
                               // Continue opening PDF even if session creation fails
                             }
                             
@@ -921,7 +922,7 @@ const TeacherFiles = () => {
                   await engagementApi.endSession(engagementSessionId, token);
                 }
               } catch (error) {
-                console.error('Failed to end engagement session:', error);
+                logger.error('Failed to end engagement session:', error);
               }
               setEngagementSessionId(null);
             }

@@ -12,7 +12,7 @@ const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
             <div
                 className="absolute inset-0 opacity-60 bg-cover bg-center pointer-events-none"
                 style={{
-                    backgroundImage: "url('/doodle-bg.png')",
+                    backgroundImage: `url('${import.meta.env.BASE_URL}doodle-bg.png')`,
                 }}
             />
 

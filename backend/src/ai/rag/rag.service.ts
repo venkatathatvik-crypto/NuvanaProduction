@@ -40,14 +40,14 @@ export class RagService implements OnModuleInit {
             return;
         }
 
-        this.logger.log('🚀 Initializing RAG Database connection...');
+        this.logger.log('Initializing RAG Database connection...');
         try {
             // Test connection
             const startTime = Date.now();
             await this.pool.query('SELECT 1');
             const duration = Date.now() - startTime;
             this.isConnected = true;  // Now we know connection works
-            this.logger.log(`✅ RAG Database connected successfully in ${duration}ms`);
+            this.logger.log(`RAG Database connected successfully in ${duration}ms`);
 
             // Check if pgvector extension exists
             const extResult = await this.pool.query(
@@ -58,7 +58,7 @@ export class RagService implements OnModuleInit {
                 this.logger.warn('pgvector extension not found. Attempting to create...');
                 try {
                     await this.pool.query(`CREATE EXTENSION IF NOT EXISTS vector;`);
-                    this.logger.log('✓ pgvector extension created');
+                    this.logger.log('pgvector extension created');
                 } catch (error) {
                     this.logger.error('Failed to create pgvector extension:', error);
                     this.logger.error('Please install pgvector: CREATE EXTENSION vector;');
@@ -88,7 +88,7 @@ export class RagService implements OnModuleInit {
                 const rowCount = parseInt(dimCheck.rows[0]?.row_count || '0');
                 const embeddingType = dimCheck.rows[0]?.embedding_type || '';
 
-                console.log(`[RAG] Documents table exists. Row count: ${rowCount}, Type: ${embeddingType}`);
+                this.logger.log(`[RAG] Documents table exists. Row count: ${rowCount}, Type: ${embeddingType}`);
 
                 // If table has rows, check dimension from existing data
                 if (rowCount > 0) {
@@ -99,10 +99,10 @@ export class RagService implements OnModuleInit {
                     `).catch(() => ({ rows: [{ dim: null }] }));
 
                     const existingDim = sampleDim.rows[0]?.dim;
-                    console.log(`[RAG] Existing embedding dimension: ${existingDim}`);
+                    this.logger.log(`[RAG] Existing embedding dimension: ${existingDim}`);
 
                     if (existingDim && existingDim !== 768) {
-                        this.logger.warn(`⚠️ Table has ${existingDim}-dimensional vectors, but Gemini returns 768.`);
+                        this.logger.warn(`Table has ${existingDim}-dimensional vectors, but Gemini returns 768.`);
                         this.logger.warn(`   You may need to drop and recreate the table, or use a different embedding model.`);
                         // For now, we'll try to alter the column (this may fail if there's data)
                         try {
@@ -110,7 +110,7 @@ export class RagService implements OnModuleInit {
                                 ALTER TABLE documents 
                                 ALTER COLUMN embedding TYPE vector(768);
                             `);
-                            this.logger.log('✓ Updated embedding column to 768 dimensions');
+                            this.logger.log('Updated embedding column to 768 dimensions');
                         } catch (alterError) {
                             this.logger.error('Failed to alter embedding column. You may need to drop the table and recreate it.');
                             this.logger.error('SQL: DROP TABLE IF EXISTS documents; (then restart the app)');
@@ -123,10 +123,10 @@ export class RagService implements OnModuleInit {
                             ALTER TABLE documents 
                             ALTER COLUMN embedding TYPE vector(768);
                         `);
-                        console.log(`[RAG] ✓ Updated empty table to 768 dimensions`);
+                        this.logger.log(`[RAG] Updated empty table to 768 dimensions`);
                     } catch (alterError) {
                         // If alter fails, try to recreate
-                        console.log(`[RAG] Attempting to recreate table with correct dimension...`);
+                        this.logger.log(`[RAG] Attempting to recreate table with correct dimension...`);
                         await this.pool.query(`DROP TABLE IF EXISTS documents CASCADE;`);
                         await this.pool.query(`
                             CREATE TABLE documents (
@@ -136,7 +136,7 @@ export class RagService implements OnModuleInit {
                                 embedding vector(768)
                             );
                         `);
-                        console.log(`[RAG] ✓ Recreated table with 768 dimensions`);
+                        this.logger.log(`[RAG] Recreated table with 768 dimensions`);
                     }
                 }
             } else {
@@ -149,7 +149,7 @@ export class RagService implements OnModuleInit {
                         embedding vector(768)
                     );
                 `);
-                console.log(`[RAG] ✓ Created documents table with 768 dimensions`);
+                this.logger.log(`[RAG] Created documents table with 768 dimensions`);
             }
 
             // Create indexes for better performance
@@ -164,7 +164,7 @@ export class RagService implements OnModuleInit {
                 ON documents ((metadata->>'subject'));
             `);
 
-            this.logger.log('✓ RAG service initialized successfully');
+            this.logger.log('RAG service initialized successfully');
         } catch (error) {
             this.logger.error('RAG initialization failed:', error);
             this.isConnected = false;
@@ -173,7 +173,7 @@ export class RagService implements OnModuleInit {
 
     async storeVector(vector: number[], content: string, metadata: any) {
         if (!this.isConnected) {
-            console.warn('[RAG] Vector DB not connected. Skipping storage.');
+            this.logger.warn('[RAG] Vector DB not connected. Skipping storage.');
             return;
         }
 
@@ -184,17 +184,17 @@ export class RagService implements OnModuleInit {
             .trim();
 
         if (!cleanContent || cleanContent.length === 0) {
-            console.warn('[RAG] ⚠️ Content is empty after cleaning, skipping storage');
+            this.logger.warn('[RAG] Content is empty after cleaning, skipping storage');
             return;
         }
 
         // Validate vector dimension
         if (vector.length !== 768) {
-            console.error(`[RAG] ❌ Vector dimension mismatch: expected 768, got ${vector.length}`);
+            this.logger.error(`[RAG] Vector dimension mismatch: expected 768, got ${vector.length}`);
             throw new Error(`Vector dimension mismatch: expected 768, got ${vector.length}`);
         }
 
-        console.log(`[RAG] Storing vector with metadata:`, JSON.stringify(metadata, null, 2));
+        this.logger.log(`[RAG] Storing vector with metadata:`, JSON.stringify(metadata, null, 2));
         const embeddingString = `[${vector.join(',')}]`;
         
         try {
@@ -202,9 +202,9 @@ export class RagService implements OnModuleInit {
                 `INSERT INTO documents (content, metadata, embedding) VALUES ($1, $2, $3::vector)`,
                 [cleanContent, JSON.stringify(metadata), embeddingString]
             );
-            console.log(`[RAG] ✓ Stored vector successfully (${vector.length} dimensions, ${cleanContent.length} chars)`);
+            this.logger.log(`[RAG] Stored vector successfully (${vector.length} dimensions, ${cleanContent.length} chars)`);
         } catch (error) {
-            console.error(`[RAG] ❌ Error storing vector:`, error);
+            this.logger.error(`[RAG] Error storing vector:`, error);
             throw error;
         }
     }
@@ -263,15 +263,15 @@ export class RagService implements OnModuleInit {
 
         // If no chunks above threshold, use the chunk with highest similarity
         if (relevantChunks.length === 0) {
-            console.log(`[RAG] ⚠️ No documents above ${(threshold * 100).toFixed(0)}% similarity threshold`);
+            this.logger.log(`[RAG] No documents above ${(threshold * 100).toFixed(0)}% similarity threshold`);
             
             const bestChunk = chunksWithSimilarity.reduce((best, current) => 
                 current.similarity > best.similarity ? current : best
             );
             
             const bestSimilarityPercent = (bestChunk.similarity * 100).toFixed(1);
-            console.log(`[RAG] 📌 Using best available chunk with ${bestSimilarityPercent}% similarity (below ${(threshold * 100).toFixed(0)}% threshold)`);
-            console.log(`[RAG] ⚠️ Note: This chunk may be less relevant to the query`);
+            this.logger.log(`[RAG] Using best available chunk with ${bestSimilarityPercent}% similarity (below ${(threshold * 100).toFixed(0)}% threshold)`);
+            this.logger.log(`[RAG] Note: This chunk may be less relevant to the query`);
             
             relevantChunks = [bestChunk.content];
         }
@@ -290,36 +290,36 @@ export class RagService implements OnModuleInit {
         classBand?: string, 
         classId?: string
     ): Promise<string> {
-        console.log(`[RAG] Starting retrieval - Query: "${query}", Subject: "${subject || 'All'}", ClassBand: "${classBand || 'middle'}", ClassID: "${classId || 'none'}"`);
+        this.logger.log(`[RAG] Starting retrieval - Query: "${query}", Subject: "${subject || 'All'}", ClassBand: "${classBand || 'middle'}", ClassID: "${classId || 'none'}"`);
 
         if (!this.isConnected) {
-            console.warn('[RAG] Vector DB not connected. RAG disabled.');
+            this.logger.warn('[RAG] Vector DB not connected. RAG disabled.');
             return "";
         }
 
         // 1. Generate query embedding (optimized for search)
-        console.log(`[RAG] Step 1: Generating query embedding...`);
+        this.logger.log(`[RAG] Step 1: Generating query embedding...`);
         const queryVector = await this.embeddingService.generateQueryEmbedding(query);
 
-        // 🔒 GRACEFUL DEGRADATION: If embeddings are disabled (returns empty array), skip RAG
+        // GRACEFUL DEGRADATION: If embeddings are disabled (returns empty array), skip RAG
         if (!queryVector || queryVector.length === 0) {
-            console.warn('[RAG] ⚠️ Embeddings unavailable. Skipping RAG retrieval.');
+            this.logger.warn('[RAG] Embeddings unavailable. Skipping RAG retrieval.');
             return "";
         }
 
-        console.log(`[RAG] ✓ Generated query embedding (${queryVector.length} dimensions)`);
+        this.logger.log(`[RAG] Generated query embedding (${queryVector.length} dimensions)`);
         const vectorStr = `[${queryVector.join(',')}]`;
 
         // 2. Build SQL query with class_id and subject filtering
-        console.log(`[RAG] Step 2: Searching vector database...`);
+        this.logger.log(`[RAG] Step 2: Searching vector database...`);
         try {
             // Build metadata filter
             const filter = this.buildMetadataFilter(subject, classId);
             
             if (classId) {
-                console.log(`[RAG] Filtering by class_id: ${classId} AND subject: ${subject}`);
+                this.logger.log(`[RAG] Filtering by class_id: ${classId} AND subject: ${subject}`);
             } else {
-                console.log(`[RAG] Filtering by subject only: ${subject} (no class_id provided)`);
+                this.logger.log(`[RAG] Filtering by subject only: ${subject} (no class_id provided)`);
             }
 
             // Build SQL query with cosine similarity
@@ -335,29 +335,29 @@ export class RagService implements OnModuleInit {
             const queryParams = [vectorStr, ...filter.params];
 
             const result = await this.pool.query(sqlQuery, queryParams);
-            console.log(`[RAG] Found ${result.rows.length} potential matches`);
+            this.logger.log(`[RAG] Found ${result.rows.length} potential matches`);
 
             if (result.rows.length === 0) {
-                console.log(`[RAG] ⚠️ No documents found for class_id: ${classId || 'none'}, subject: ${subject}`);
+                this.logger.log(`[RAG] No documents found for class_id: ${classId || 'none'}, subject: ${subject}`);
                 return "";
             }
 
             // Print all extracted documents with details
-            console.log(`[RAG] ========================================`);
-            console.log(`[RAG] 📄 EXTRACTED DOCUMENTS (${result.rows.length} total):`);
-            console.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] EXTRACTED DOCUMENTS (${result.rows.length} total):`);
+            this.logger.log(`[RAG] ========================================`);
             
             result.rows.forEach((row, index) => {
                 const similarity = parseFloat(row.similarity);
                 const similarityPercent = (similarity * 100).toFixed(1);
-                console.log(`[RAG] ─────────────────────────────────────`);
-                console.log(`[RAG] Document ${index + 1}:`);
-                console.log(`[RAG]   Similarity: ${similarityPercent}%`);
-                console.log(`[RAG]   Content Length: ${row.content.length} characters`);
-                console.log(`[RAG]   Content Preview: ${row.content.substring(0, 200)}${row.content.length > 200 ? '...' : ''}`);
-                console.log(`[RAG]   Full Content:`);
-                console.log(`[RAG]   ${row.content}`);
-                console.log(`[RAG] ─────────────────────────────────────`);
+                this.logger.log(`[RAG] ─────────────────────────────────────`);
+                this.logger.log(`[RAG] Document ${index + 1}:`);
+                this.logger.log(`[RAG]   Similarity: ${similarityPercent}%`);
+                this.logger.log(`[RAG]   Content Length: ${row.content.length} characters`);
+                this.logger.log(`[RAG]   Content Preview: ${row.content.substring(0, 200)}${row.content.length > 200 ? '...' : ''}`);
+                this.logger.log(`[RAG]   Full Content:`);
+                this.logger.log(`[RAG]   ${row.content}`);
+                this.logger.log(`[RAG] ─────────────────────────────────────`);
             });
 
             // Map results to chunks with similarity scores
@@ -369,7 +369,7 @@ export class RagService implements OnModuleInit {
             // Log similarity for each chunk
             chunksWithSimilarity.forEach((chunk, index) => {
                 const similarityPercent = (chunk.similarity * 100).toFixed(1);
-                console.log(`[RAG] Chunk ${index + 1} similarity: ${similarityPercent}% ${chunk.similarity > 0.7 ? '✅ (above threshold)' : '❌ (below 70% threshold)'}`);
+                this.logger.log(`[RAG] Chunk ${index + 1} similarity: ${similarityPercent}% ${chunk.similarity > 0.7 ? '(above threshold)' : '(below 70% threshold)'}`);
             });
 
             // Filter by similarity threshold (70%) with fallback logic
@@ -377,32 +377,32 @@ export class RagService implements OnModuleInit {
             const usedFallback = relevantChunks.length === 1 && chunksWithSimilarity.length > 0 && 
                                  chunksWithSimilarity[0].similarity <= 0.7;
 
-            console.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] ========================================`);
             const thresholdStatus = usedFallback 
                 ? 'best available (below 70% threshold)' 
                 : 'above 70% threshold';
-            console.log(`[RAG] ✅ Retrieved ${relevantChunks.length} relevant document chunk(s) (${thresholdStatus})`);
-            console.log(`[RAG] ========================================`);
-            console.log(`[RAG] 📝 RELEVANT DOCUMENTS CONTENT:`);
-            console.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] Retrieved ${relevantChunks.length} relevant document chunk(s) (${thresholdStatus})`);
+            this.logger.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] RELEVANT DOCUMENTS CONTENT:`);
+            this.logger.log(`[RAG] ========================================`);
             
             relevantChunks.forEach((chunk, index) => {
-                console.log(`[RAG] ─────────────────────────────────────`);
-                console.log(`[RAG] Relevant Chunk ${index + 1} (${chunk.length} chars):`);
-                console.log(`[RAG] ${chunk}`);
-                console.log(`[RAG] ─────────────────────────────────────`);
+                this.logger.log(`[RAG] ─────────────────────────────────────`);
+                this.logger.log(`[RAG] Relevant Chunk ${index + 1} (${chunk.length} chars):`);
+                this.logger.log(`[RAG] ${chunk}`);
+                this.logger.log(`[RAG] ─────────────────────────────────────`);
             });
 
             const combinedContent = relevantChunks.join('\n\n');
-            console.log(`[RAG] ========================================`);
-            console.log(`[RAG] 📋 COMBINED CONTENT (${combinedContent.length} characters):`);
-            console.log(`[RAG] ========================================`);
-            console.log(`[RAG] ${combinedContent}`);
-            console.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] COMBINED CONTENT (${combinedContent.length} characters):`);
+            this.logger.log(`[RAG] ========================================`);
+            this.logger.log(`[RAG] ${combinedContent}`);
+            this.logger.log(`[RAG] ========================================`);
             
             return combinedContent;
         } catch (error) {
-            console.error(`[RAG] ❌ Database query failed:`, error);
+            this.logger.error(`[RAG] Database query failed:`, error);
             this.logger.error('RAG database query failed:', error);
             return ""; // Graceful degradation
         }
@@ -413,10 +413,10 @@ export class RagService implements OnModuleInit {
      * Used to populate AI Tutor subject dropdown with only subjects that have materials
      */
     async getSubjectsWithMaterials(classId: string): Promise<string[]> {
-        console.log(`[RAG] Getting subjects with materials for class_id: ${classId}`);
+        this.logger.log(`[RAG] Getting subjects with materials for class_id: ${classId}`);
 
         if (!this.isConnected) {
-            console.warn('[RAG] Vector DB not connected. Returning empty array.');
+            this.logger.warn('[RAG] Vector DB not connected. Returning empty array.');
             return [];
         }
 
@@ -437,10 +437,10 @@ export class RagService implements OnModuleInit {
                 .map(row => row.subject)
                 .filter(subject => subject && subject.trim().length > 0);
 
-            console.log(`[RAG] Found ${subjects.length} subjects with uploaded materials for class ${classId}:`, subjects);
+            this.logger.log(`[RAG] Found ${subjects.length} subjects with uploaded materials for class ${classId}:`, subjects);
             return subjects;
         } catch (error) {
-            console.error(`[RAG] ❌ Error getting subjects with materials:`, error);
+            this.logger.error(`[RAG] Error getting subjects with materials:`, error);
             this.logger.error('Failed to get subjects with materials:', error);
             return []; // Graceful degradation
         }
@@ -459,6 +459,85 @@ export class RagService implements OnModuleInit {
         } catch (error) {
             this.logger.error('RAG health check failed:', error);
             return false;
+        }
+    }
+
+    /**
+     * Retrieve life coach content from vector database
+     */
+    async retrieveLifeCoach(query: string, schoolId: string, category?: string): Promise<string> {
+        this.logger.log(`[RAG] Life Coach retrieval - SchoolID: "${schoolId}", Category: "${category || 'All'}"`);
+        if (!this.isConnected) return '';
+
+        const queryVector = await this.embeddingService.generateQueryEmbedding(query);
+        if (!queryVector || queryVector.length === 0) return '';
+
+        const vectorStr = `[${queryVector.join(',')}]`;
+        try {
+            let whereClause = `WHERE metadata->>'source' = 'life_coach' AND metadata->>'school_id' = $2`;
+            const params: any[] = [vectorStr, schoolId];
+            if (category && category !== 'all' && category !== 'All') {
+                whereClause += ` AND metadata->>'category' = $3`;
+                params.push(category);
+            }
+            const result = await this.pool.query(
+                `SELECT content, 1 - (embedding <=> $1::vector) as similarity FROM documents ${whereClause} ORDER BY similarity DESC LIMIT 5`,
+                params
+            );
+            if (result.rows.length === 0) return '';
+
+            const THRESHOLD = 0.7;
+            const relevant = result.rows.filter(r => r.similarity >= THRESHOLD).map(r => r.content);
+            if (relevant.length === 0 && result.rows.length > 0) {
+                relevant.push(result.rows[0].content);
+            }
+            const combined = relevant.join('\n\n');
+            this.logger.log(`[RAG] Life Coach: Retrieved ${relevant.length} chunks (${combined.length} chars)`);
+            return combined;
+        } catch (error) {
+            this.logger.error('[RAG] Life Coach retrieval failed:', error);
+            return '';
+        }
+    }
+
+    /**
+     * Get life coach categories that have uploaded content for a school
+     */
+    async getLifeCoachCategoriesWithContent(schoolId: string): Promise<string[]> {
+        if (!this.isConnected) return [];
+        try {
+            const result = await this.pool.query(
+                `SELECT DISTINCT metadata->>'category' as category FROM documents WHERE metadata->>'source' = 'life_coach' AND metadata->>'school_id' = $1 AND metadata->>'category' IS NOT NULL ORDER BY category ASC`,
+                [schoolId]
+            );
+            return result.rows.map(r => r.category).filter(Boolean);
+        } catch (error) {
+            this.logger.error('[RAG] Error getting life coach categories:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Delete all document vectors associated with a specific file_id
+     * Used for deduplication: when a file is re-uploaded, old vectors are cleaned up first
+     */
+    async deleteByFileId(fileId: string): Promise<number> {
+        if (!this.isConnected) {
+            this.logger.warn('[RAG] Vector DB not connected. Cannot delete vectors.');
+            return 0;
+        }
+
+        try {
+            const result = await this.pool.query(
+                `DELETE FROM documents WHERE metadata->>'file_id' = $1`,
+                [fileId]
+            );
+            const deletedCount = result.rowCount || 0;
+            this.logger.log(`[RAG] Deleted ${deletedCount} vectors for file_id: ${fileId}`);
+            return deletedCount;
+        } catch (error) {
+            this.logger.error(`[RAG] Error deleting vectors for file_id ${fileId}:`, error);
+            throw error;
         }
     }
 }

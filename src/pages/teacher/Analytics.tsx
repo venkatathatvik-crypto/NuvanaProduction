@@ -81,6 +81,7 @@ import {
 } from "@/services/academic";
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import { schoolService } from "@/services/schoolService";
@@ -88,6 +89,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EngagementOverview } from "@/components/engagement/EngagementOverview";
 import { Target } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 // Professional colors optimized for white background (PDF export)
 const PROFESSIONAL_COLORS = {
@@ -450,7 +452,7 @@ const AnalyticsDashboard = () => {
           },
         }));
       } catch (error: any) {
-        console.error("Error fetching student analytics:", error);
+        logger.error("Error fetching student analytics:", error);
         toast.error("Failed to load student analytics");
       }
     };
@@ -507,7 +509,7 @@ const AnalyticsDashboard = () => {
           const data = await getStudentAnalyticsForTeacher(s.id, selectedClass?.class_id || "");
           setStudentAnalyticsData(prev => ({ ...prev, [s.id]: data }));
         } catch (err) {
-          console.error(`Failed to fetch analytics for student ${s.id}`, err);
+          logger.error(`Failed to fetch analytics for student ${s.id}`, err);
         }
       });
 
@@ -522,7 +524,7 @@ const AnalyticsDashboard = () => {
 
       await exportAnalyticsPDF({
         elementId: "analytics-full-report",
-        logoUrl: schoolInfo?.logo_url || "/logo.png",
+        logoUrl: schoolInfo?.logo_url || `${import.meta.env.BASE_URL}logo.png`,
         schoolName: schoolInfo?.name || "Nuvana Academy",
         watermarkOpacity: 0.05,
         watermarkWidth: 80,
@@ -535,7 +537,7 @@ const AnalyticsDashboard = () => {
       }
       toast.success("Full report generated successfully!");
     } catch (err) {
-      console.error("PDF Export Error:", err);
+      logger.error("PDF Export Error:", err);
       toast.error("Failed to export PDF");
     }
   };
@@ -565,9 +567,17 @@ const AnalyticsDashboard = () => {
     ];
   };
 
-  // We no longer block the entire page on 'loading' (classes).
-  // if (loading) return <LoadingSpinner />;
-  
+  // Only show empty state when offline AND no cached classes at all
+  const offlineNoCache = useOfflineLoading(loading && !classes.length);
+
+  if (offlineNoCache) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Analytics" />
+      </div>
+    );
+  }
+
   if (!loading && !selectedClass)
     return (
       <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">

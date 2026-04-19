@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -24,6 +24,9 @@ import { EngagementModule } from './engagement/engagement.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
+import { MailModule } from './mail/mail.module';
+
+const logger = new Logger('AppModule');
 
 @Module({
     imports: [
@@ -55,30 +58,30 @@ import { ExpressAdapter } from '@bull-board/express';
                 if (redisUrl) {
                     try {
                         const url = new URL(redisUrl);
-                        console.log(`✅ Redis cache connecting to host: ${url.hostname}:${url.port}...`);
-                        
+                        logger.log(`Redis cache connecting to host: ${url.hostname}:${url.port}...`);
+
                         const store = createKeyv(redisUrl);
 
-                        console.log('✅ Redis cache connected successfully!');
-                        console.log(`📦 Cache Type: REDIS (@keyv/redis) - ${url.hostname}`);
-                        console.log('⚡ AI response caching enabled - Expecting ~70% cost reduction');
+                        logger.log('Redis cache connected successfully');
+                        logger.log(`Cache Type: REDIS (@keyv/redis) - ${url.hostname}`);
+                        logger.log('AI response caching enabled - Expecting ~70% cost reduction');
 
                         return {
                             stores: [store],
                             ttl: 3600 * 1000, // Default TTL: 1 hour in milliseconds
                         };
                     } catch (error) {
-                        console.warn('⚠️  Redis connection failed, falling back to in-memory cache');
-                        console.warn(`⚠️  Error Code: ${error.code || 'UNKNOWN'}`);
-                        console.warn(`⚠️  Error Message: ${error.message}`);
-                        
+                        logger.warn('Redis connection failed, falling back to in-memory cache');
+                        logger.warn(`Error Code: ${error.code || 'UNKNOWN'}`);
+                        logger.warn(`Error Message: ${error.message}`);
+
                         if (error.message.includes('ENOTFOUND')) {
-                            console.error('🔍 DIAGNOSIS: DNS Resolution Failure for Redis. Cannot resolve hostname.');
+                            logger.error('DIAGNOSIS: DNS Resolution Failure for Redis. Cannot resolve hostname.');
                         } else if (error.message.includes('ECONNREFUSED')) {
-                            console.error('🔍 DIAGNOSIS: Connection Refused by Redis server.');
+                            logger.error('DIAGNOSIS: Connection Refused by Redis server.');
                         }
 
-                        console.log('📦 Cache Type: IN-MEMORY (limited, not recommended for production)');
+                        logger.log('Cache Type: IN-MEMORY (limited, not recommended for production)');
 
                         return {
                             ttl: 3600 * 1000, // 1 hour in milliseconds
@@ -86,9 +89,9 @@ import { ExpressAdapter } from '@bull-board/express';
                     }
                 }
 
-                console.warn('⚠️  REDIS_URL not configured, using in-memory cache');
-                console.log('📦 Cache Type: IN-MEMORY (limited, not recommended for production)');
-                console.log('💡 Tip: Set REDIS_URL environment variable for production caching');
+                logger.warn('REDIS_URL not configured, using in-memory cache');
+                logger.log('Cache Type: IN-MEMORY (limited, not recommended for production)');
+                logger.log('Tip: Set REDIS_URL environment variable for production caching');
 
                 return {
                     ttl: 3600 * 1000, // 1 hour in milliseconds
@@ -101,12 +104,12 @@ import { ExpressAdapter } from '@bull-board/express';
             useFactory: () => {
                 const redisUrl = process.env.REDIS_URL;
                 if (!redisUrl) {
-                    console.error('❌ REDIS_URL is required for BullModule but not found!');
+                    logger.error('REDIS_URL is required for BullModule but not found!');
                     throw new Error('REDIS_URL is required for BullModule');
                 }
                 try {
                     const url = new URL(redisUrl);
-                    console.log(`✅ BullMQ connection setup for host: ${url.hostname}`);
+                    logger.log(`BullMQ connection setup for host: ${url.hostname}`);
                     return {
                         connection: {
                             host: url.hostname,
@@ -117,7 +120,7 @@ import { ExpressAdapter } from '@bull-board/express';
                         prefix: `nuvana-dev-saite`, // Isolate your local jobs from staging/prod
                     };
                 } catch (error) {
-                    console.error('❌ Failed to parse REDIS_URL for BullMQ:', error.message);
+                    logger.error(`Failed to parse REDIS_URL for BullMQ: ${error.message}`);
                     throw error;
                 }
             },
@@ -141,6 +144,7 @@ import { ExpressAdapter } from '@bull-board/express';
         PdfAnnotationsModule,
         EngagementModule,
         WhatsappModule,
+        MailModule,
         BullBoardModule.forRoot({
           route: '/admin/queues',
           adapter: ExpressAdapter,

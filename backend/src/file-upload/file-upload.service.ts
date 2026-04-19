@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { UploadVoiceNoteDto, UploadFileDto } from './dto';
+import { UploadVoiceNoteDto, UploadFileDto, UploadLifeCoachBookDto } from './dto';
 import { IngestionService } from '../ai/rag/ingestion.service';
+import { RagService } from '../ai/rag/rag.service';
 
 const MAX_VOICE_NOTE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
@@ -40,6 +41,7 @@ export class FileUploadService {
     private prisma: PrismaService,
     private storage: StorageService,
     private ingestionService: IngestionService,
+    private ragService: RagService,
   ) {}
 
   /**
@@ -200,7 +202,7 @@ export class FileUploadService {
     try {
       await this.storage.deleteFile('voice_notes', voiceNote.storage_url);
     } catch (error) {
-      console.error('Error deleting from storage:', error);
+      this.logger.error('Error deleting from storage:', error);
       // Continue with database deletion even if storage deletion fails
     }
 
@@ -274,6 +276,40 @@ export class FileUploadService {
       }
     }
 
+    // === Deduplication: Replace on Re-upload ===
+    // Check if a file with the same title + teacher + subject already exists
+    const existingFile = await this.prisma.files.findFirst({
+      where: {
+        file_title: dto.title,
+        teacher_id: teacherId,
+        grade_subject_id: dto.gradeSubjectId,
+        school_id: schoolId,
+      },
+    });
+
+    if (existingFile) {
+      this.logger.log(`[Dedup] 🔄 Found existing file "${dto.title}" (id: ${existingFile.id}). Replacing...`);
+
+      // 1. Delete old RAG vectors
+      try {
+        const deletedVectors = await this.ragService.deleteByFileId(existingFile.id);
+        this.logger.log(`[Dedup] 🗑️ Cleaned up ${deletedVectors} old RAG vectors`);
+      } catch (error) {
+        this.logger.warn(`[Dedup] ⚠️ Failed to clean old RAG vectors, continuing anyway:`, error);
+      }
+
+      // 2. Delete old file from storage
+      try {
+        await this.storage.deleteFile('files', existingFile.storage_url);
+      } catch (error) {
+        this.logger.warn(`[Dedup] ⚠️ Failed to delete old storage file, continuing:`, error);
+      }
+
+      // 3. Delete old file record from DB
+      await this.prisma.files.delete({ where: { id: existingFile.id } });
+      this.logger.log(`[Dedup] ✅ Old file replaced successfully`);
+    }
+
     // Generate file path
     const fileName = `${Date.now()}-${file.originalname}`;
     const filePath = `${teacherId}/${fileName}`;
@@ -297,6 +333,7 @@ export class FileUploadService {
         teacher_id: teacherId,
         school_id: schoolId,
         file_type: dto.fileType,
+        rag_status: dto.fileType === 'pdf' ? 'processing' : null,
       },
       include: {
         file_categories: {
@@ -336,7 +373,7 @@ export class FileUploadService {
 
     // Process PDF for RAG asynchronously (non-blocking)
     if (dto.fileType === 'pdf' && file.buffer) {
-      console.log(`[File Upload] 📄 PDF detected, scheduling RAG processing (file_id: ${fileRecord.id})...`);
+      this.logger.log(`[File Upload] 📄 PDF detected, scheduling RAG processing (file_id: ${fileRecord.id})...`);
       
       // Process in background (don't await - non-blocking)
       this.processPdfForRag(file.buffer, {
@@ -346,7 +383,7 @@ export class FileUploadService {
         classBand: fileRecord.classes?.name ? this.inferClassBand(fileRecord.classes.name) : 'middle',
         school_id: schoolId,
       }).catch((error) => {
-        console.error(`[File Upload] ❌ Background PDF processing failed for file_id: ${fileRecord.id}`, error);
+        this.logger.error(`[File Upload] ❌ Background PDF processing failed for file_id: ${fileRecord.id}`, error);
         this.logger.error('Background PDF processing failed', error);
         // Don't throw - file upload succeeded, processing failed separately
       });
@@ -363,21 +400,23 @@ export class FileUploadService {
     buffer: Buffer,
     metadata: {
       file_id: string;
-      class_id: string;
-      subject: string;
+      class_id?: string;
+      subject?: string;
       classBand?: string;
       school_id: string;
+      source?: string;
+      category?: string;
     },
   ): Promise<void> {
-    console.log(`[File Upload] 🚀 Starting background PDF processing for RAG...`);
-    console.log(`[File Upload] File ID: ${metadata.file_id}, Class: ${metadata.class_id}, Subject: ${metadata.subject}`);
+    this.logger.log(`[File Upload] 🚀 Starting background PDF processing for RAG...`);
+    this.logger.log(`[File Upload] File ID: ${metadata.file_id}, Class: ${metadata.class_id}, Subject: ${metadata.subject}`);
 
     try {
       const result = await this.ingestionService.processFile(buffer, metadata);
-      console.log(`[File Upload] ✅ PDF processing complete: ${result.chunksProcessed}/${result.totalChunks} chunks stored`);
+      this.logger.log(`[File Upload] ✅ PDF processing complete: ${result.chunksProcessed}/${result.totalChunks} chunks stored`);
       this.logger.log(`PDF processed for RAG: ${result.chunksProcessed} chunks stored for file ${metadata.file_id}`);
     } catch (error) {
-      console.error(`[File Upload] ❌ PDF processing error:`, error);
+      this.logger.error(`[File Upload] ❌ PDF processing error:`, error);
       this.logger.error(`Failed to process PDF for RAG (file_id: ${metadata.file_id})`, error);
       throw error;
     }
@@ -466,8 +505,15 @@ export class FileUploadService {
     try {
       await this.storage.deleteFile('files', file.storage_url);
     } catch (error) {
-      console.error('Error deleting from storage:', error);
+      this.logger.error('Error deleting from storage:', error);
       // Continue with database deletion even if storage deletion fails
+    }
+
+    // Delete RAG vectors
+    try {
+      await this.ragService.deleteByFileId(fileId);
+    } catch (error) {
+      this.logger.warn(`[Delete] ⚠️ Failed to clean RAG vectors for file ${fileId}, continuing:`, error);
     }
 
     // Delete from database
@@ -631,6 +677,116 @@ export class FileUploadService {
     });
 
     return updated.download_count || 0;
+  }
+
+  // ==================== LIFE COACH BOOKS ====================
+
+  async uploadLifeCoachBook(
+    file: Express.Multer.File,
+    dto: UploadLifeCoachBookDto,
+    uploaderId: string,
+    schoolId: string,
+  ) {
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files are allowed for life coach books.');
+    }
+    if (file.size > MAX_PDF_SIZE) {
+      throw new BadRequestException('PDF file size must be 10MB or less.');
+    }
+
+    const categoryId = parseInt(dto.categoryId, 10);
+    const category = await this.prisma.life_coach_categories.findFirst({
+      where: { id: categoryId, school_id: schoolId },
+    });
+    if (!category) throw new NotFoundException('Life coach category not found');
+
+    // Deduplication
+    const existing = await this.prisma.life_coach_books.findFirst({
+      where: { title: dto.title, category_id: categoryId, school_id: schoolId },
+    });
+    if (existing) {
+      this.logger.log(`[Life Coach] Replacing existing book "${dto.title}"`);
+      try { await this.ragService.deleteByFileId(existing.id); } catch (e) {}
+      try { await this.storage.deleteFile('files', existing.storage_url); } catch (e) {}
+      await this.prisma.life_coach_books.delete({ where: { id: existing.id } });
+    }
+
+    const fileName = `${Date.now()}-${file.originalname}`;
+    const filePath = `life-coach/${schoolId}/${fileName}`;
+    const storageData = await this.storage.uploadFile('files', filePath, file.buffer, file.mimetype);
+
+    const bookRecord = await this.prisma.life_coach_books.create({
+      data: {
+        title: dto.title,
+        category_id: categoryId,
+        storage_url: storageData.path,
+        uploaded_by: uploaderId,
+        school_id: schoolId,
+        file_type: 'pdf',
+        rag_status: 'processing',
+      },
+      include: { life_coach_categories: { select: { id: true, name: true } } },
+    });
+
+    this.processPdfForRag(file.buffer, {
+      file_id: bookRecord.id,
+      school_id: schoolId,
+      source: 'life_coach',
+      category: category.name,
+    }).then(() => {
+      this.prisma.life_coach_books.update({
+        where: { id: bookRecord.id },
+        data: { rag_status: 'completed' },
+      }).catch(() => {});
+    }).catch((error) => {
+      this.logger.error(`[Life Coach] PDF processing failed for book ${bookRecord.id}`, error);
+      this.prisma.life_coach_books.update({
+        where: { id: bookRecord.id },
+        data: { rag_status: 'failed', rag_error: error.message },
+      }).catch(() => {});
+    });
+
+    return {
+      id: bookRecord.id,
+      title: bookRecord.title,
+      category: bookRecord.life_coach_categories?.name || 'Unknown',
+      categoryId: bookRecord.category_id,
+      uploadDate: bookRecord.created_at,
+      ragStatus: bookRecord.rag_status,
+      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+    };
+  }
+
+  async getLifeCoachBooks(schoolId: string) {
+    const books = await this.prisma.life_coach_books.findMany({
+      where: { school_id: schoolId },
+      include: {
+        life_coach_categories: { select: { id: true, name: true } },
+        profiles: { select: { name: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+    return books.map((book) => ({
+      id: book.id,
+      title: book.title,
+      category: book.life_coach_categories?.name || 'Unknown',
+      categoryId: book.category_id,
+      uploadedBy: book.profiles?.name || 'Unknown',
+      uploadDate: book.created_at,
+      ragStatus: book.rag_status,
+      ragError: book.rag_error,
+    }));
+  }
+
+  async deleteLifeCoachBook(bookId: string, schoolId: string) {
+    const book = await this.prisma.life_coach_books.findFirst({
+      where: { id: bookId, school_id: schoolId },
+    });
+    if (!book) throw new NotFoundException('Life coach book not found');
+    try { await this.storage.deleteFile('files', book.storage_url); } catch (e) {}
+    try { await this.ragService.deleteByFileId(bookId); } catch (e) {}
+    await this.prisma.life_coach_books.delete({ where: { id: bookId } });
+    return { message: 'Life coach book deleted successfully' };
   }
 
   /**

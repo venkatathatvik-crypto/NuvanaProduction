@@ -14,16 +14,9 @@ import { DAY_NAMES } from "@/services/timetableService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { logger } from '@/lib/logger';
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminTimetable() {
   const navigate = useNavigate();
@@ -102,7 +95,7 @@ export default function AdminTimetable() {
       const data = await academicService.getWeeklyTimetable(classId);
       setTimetableData(data);
     } catch (error) {
-      console.error("Error fetching timetable:", error);
+      logger.error("Error fetching timetable:", error);
       toast.error("Failed to load timetable");
     } finally {
       setTimetableLoading(false);
@@ -134,7 +127,7 @@ export default function AdminTimetable() {
       resetPeriodForm();
       fetchTimetable(selectedTimetableClass);
     } catch (error: any) {
-      console.error("Error saving period:", error);
+      logger.error("Error saving period:", error);
       toast.error(error.message || "Failed to save period");
     } finally {
       setAddingPeriod(false);
@@ -166,7 +159,7 @@ export default function AdminTimetable() {
       toast.success("Period deleted");
       fetchTimetable(selectedTimetableClass);
     } catch (error: any) {
-      console.error("Error deleting period:", error);
+      logger.error("Error deleting period:", error);
       toast.error(error.message || "Failed to delete period");
     } finally {
       setShowDeleteDialog(false);
@@ -269,7 +262,7 @@ export default function AdminTimetable() {
           successCount++;
         } catch (error) {
           failCount++;
-          console.error(`Failed to save period ${period.period_number}:`, error);
+          logger.error(`Failed to save period ${period.period_number}:`, error);
         }
       }
 
@@ -374,7 +367,7 @@ export default function AdminTimetable() {
 
       return null;
     } catch (error) {
-      console.error("Error getting grade subject ID:", error);
+      logger.error("Error getting grade subject ID:", error);
       return null;
     }
   };
@@ -634,7 +627,7 @@ export default function AdminTimetable() {
         );
       }
     } catch (error: any) {
-      console.error("Timetable CSV Import Error:", error);
+      logger.error("Timetable CSV Import Error:", error);
       toast.error("Failed to process CSV file");
     } finally {
       setIsImportingTimetable(false);
@@ -651,8 +644,21 @@ export default function AdminTimetable() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Skeleton className="h-10 w-10 rounded" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-full max-w-sm rounded" />
+          <div className="space-y-4">
+            <Skeleton className="h-12 w-full rounded" />
+            <Skeleton className="h-64 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -1158,22 +1164,15 @@ export default function AdminTimetable() {
       </div>
 
       {/* Delete Period Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Period?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this period? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeletePeriod} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={confirmDeletePeriod}
+        title="Delete Period?"
+        description="Are you sure you want to delete this period? This action cannot be undone."
+        confirmText="Delete"
+        variant="destructive"
+      />
     </div>
   );
 }

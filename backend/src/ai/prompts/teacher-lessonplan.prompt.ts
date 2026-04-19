@@ -9,14 +9,14 @@ export const TeacherLessonPlanPrompt = (
   subject: string,
   classBand: string,
   duration?: number,
-  objectives?: string
+  objectives?: string,
+  lessonMinutes?: number
 ) => {
   const classBandStyle = ClassBandStyles[classBand] || ClassBandStyles.middle;
-  
+
   // Duration parameter represents NUMBER OF DAYS for the lesson plan
   const numberOfDays = duration || 3; // Default 3-day lesson plan
-  const lessonDurationMinutes = 60; // Each lesson is 60 minutes
-  const lessonDuration = duration || 45; // Legacy for compatibility
+  const lessonDurationMinutes = lessonMinutes || 60; // Each lesson duration in minutes
 
   return `TASK: Create a comprehensive, structured lesson plan for teaching "${topic}"
 

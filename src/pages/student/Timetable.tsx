@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Clock, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -8,45 +7,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentTimetable } from "@/services/timetableService";
 import { getStudentData } from "@/services/academic";
+import { useQuery } from "@tanstack/react-query";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 
 const Timetable = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
-  
-  const [loading, setLoading] = useState(true);
-  const [timetable, setTimetable] = useState<Record<string, Array<{ time: string; subject: string; room: string; teacher: string; period_number: number }>>>({});
 
   const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  useEffect(() => {
-    const fetchTimetable = async () => {
-      if (profileLoading) return;
+  // Step 1: fetch student data (class_id)
+  const { data: studentData } = useQuery({
+    queryKey: ["student-data", profile?.id],
+    queryFn: () => getStudentData(profile!.id),
+    enabled: !!profile?.id && !profileLoading,
+    staleTime: 5 * 60 * 1000,
+  });
 
-      if (!profile?.id || !profile?.school_id) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Get student data to get class_id
-        const studentData = await getStudentData(profile.id);
-        console.log("👤 Student data:", studentData);
-        if (studentData?.class_id) {
-          const data = await getStudentTimetable(studentData.class_id, profile.school_id);
-          console.log("📚 Timetable data received:", data);
-          setTimetable(data);
-        } else {
-          console.warn("⚠️ No class_id found for student");
-        }
-      } catch (error) {
-        console.error("Error fetching timetable:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTimetable();
-  }, [profile?.id, profile?.school_id, profileLoading]);
+  // Step 2: fetch timetable once we have a class_id
+  const { data: timetable = {}, isLoading: loading } = useQuery({
+    queryKey: ["student-timetable", studentData?.class_id, profile?.school_id],
+    queryFn: () => getStudentTimetable(studentData!.class_id, profile!.school_id),
+    enabled: !!studentData?.class_id && !!profile?.school_id,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const subjectColors: Record<string, string> = {
     Mathematics: "bg-neon-cyan/20 border-neon-cyan/50",
@@ -69,6 +53,16 @@ const Timetable = () => {
   const avgClassesPerDay = totalDays > 0 
     ? Math.round(weekDays.reduce((acc, day) => acc + (timetable[day]?.length || 0), 0) / totalDays) 
     : 0;
+
+  const offlineLoading = useOfflineLoading(loading);
+
+  if (offlineLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Timetable" />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

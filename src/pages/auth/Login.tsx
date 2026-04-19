@@ -18,12 +18,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserRole } from "@/lib/auth";
 import { useAuth } from "@/auth/AuthContext";
-import { GraduationCap, School, Loader2, Shield } from "lucide-react";
+import { GraduationCap, School, Loader2, Shield, Eye, EyeOff } from "lucide-react";
 
 // ... (schema remains same)
 const loginSchema = z.object({
-  email: z.string().optional(),
-  password: z.string().optional(),
+  email: z.string().min(1, "Email is required").email("Please enter a valid email"),
+  password: z.string().min(1, "Password is required"),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -36,6 +36,7 @@ const Login = () => {
   const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -96,7 +97,7 @@ const Login = () => {
     <div
       className="min-h-screen flex items-center justify-center p-4 relative"
       style={{
-        backgroundImage: 'url(/doodle-bg.png)',
+        backgroundImage: `url(${import.meta.env.BASE_URL}doodle-bg.png)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'
@@ -145,7 +146,7 @@ const Login = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
                 {/* 👈 Error Message Display */}
                 {errorMsg && (
                   <div className="text-sm text-center font-medium text-destructive bg-destructive/10 p-2 rounded-md">
@@ -175,12 +176,17 @@ const Login = () => {
                 {/* Password Field */}
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    {...register("password")}
-                    className="bg-background/50"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      {...register("password")}
+                      className="bg-background/50 pr-10"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                   {errors.password && (
                     <p className="text-sm text-destructive">
                       {errors.password.message}

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { queryKeys } from "@/lib/queryKeys";
+import { logger } from '@/lib/logger';
 
 const ProfileSkeleton = () => (
   <div className="min-h-screen p-3 sm:p-6 animate-in fade-in duration-500">
@@ -110,7 +111,7 @@ export default function AdminProfile() {
       });
       toast.success('School logo uploaded successfully!');
     } catch (error: any) {
-      console.error('Error uploading logo:', error);
+      logger.error('Error uploading logo:', error);
       toast.error(error.response?.data?.message || 'Failed to upload logo');
     } finally {
       setUploading(false);

@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { whatsappApi, type WhatsappMessage } from "@/services/whatsappApiService";
 import { getClasses } from "@/services/classService";
 import { FlattenedClass } from "@/schemas/academic";
+import { logger } from '@/lib/logger';
 
 const ChatSkeleton = () => (
     <div className="space-y-4 animate-in fade-in duration-500">
@@ -113,7 +114,7 @@ const AdminCommunication = () => {
                 const teacherUsers = users.filter((u: any) => u.role_id === 3 && u.school_id === profile.school_id);
                 setTeachers(teacherUsers);
             } catch (error) {
-                console.error("Error fetching teachers:", error);
+                logger.error("Error fetching teachers:", error);
                 toast.error("Failed to load teachers");
             } finally {
                 setTeachersLoading(false);
@@ -136,7 +137,7 @@ const AdminCommunication = () => {
                 const schoolClasses = await getClasses(profile.school_id);
                 setClasses(schoolClasses);
             } catch (error) {
-                console.error("Error fetching classes:", error);
+                logger.error("Error fetching classes:", error);
                 toast.error("Failed to load classes");
             } finally {
                 setClassesLoading(false);
@@ -190,7 +191,7 @@ const AdminCommunication = () => {
             // Switch to inbox tab to see the chat
             setActiveTab('inbox');
         } catch (error: any) {
-            console.error("Error sending message:", error);
+            logger.error("Error sending message:", error);
             toast.error(error.message || "Failed to send message");
         } finally {
             setLoading(false);
@@ -240,7 +241,7 @@ const AdminCommunication = () => {
             // Invalidate history query
             queryClient.invalidateQueries({ queryKey: ['whatsapp-history'] });
         } catch (error: any) {
-            console.error("Error sending WhatsApp broadcast:", error);
+            logger.error("Error sending WhatsApp broadcast:", error);
             toast.error(error.message || "Failed to send WhatsApp message");
         } finally {
             setLoading(false);
@@ -266,7 +267,7 @@ const AdminCommunication = () => {
             queryClient.invalidateQueries({ queryKey: ['messages-conversation', selectedConversation.userId] });
             queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
         } catch (error: any) {
-            console.error("Error sending reply:", error);
+            logger.error("Error sending reply:", error);
             toast.error(error.message || "Failed to send reply");
         } finally {
             setSending(false);
@@ -283,7 +284,7 @@ const AdminCommunication = () => {
                 // Here we'll just invalidate to clear the red badge on refresh
                 queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
             } catch (error) {
-                console.error("Error marking messages as read:", error);
+                logger.error("Error marking messages as read:", error);
             }
         }
     };

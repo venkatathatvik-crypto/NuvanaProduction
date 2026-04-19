@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Login to Your Nuvana Account</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            background-color: #f0f4f8;
+            color: #334155;
+            padding: 30px 16px;
+        }
+
+        .wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Header band */
+        .header-band {
+            background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 60%, #38bdf8 100%);
+            border-radius: 12px 12px 0 0;
+            padding: 32px 36px 28px;
+            text-align: center;
+        }
+
+        .header-band .logo {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.20);
+        }
+
+        .header-band h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+        }
+
+        .header-band p {
+            font-size: 13px;
+            color: rgba(255,255,255,0.85);
+            margin-top: 4px;
+        }
+
+        /* Body card */
+        .card {
+            background: #ffffff;
+            border-radius: 0 0 12px 12px;
+            padding: 36px 36px 28px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+        }
+
+        .greeting {
+            font-size: 16px;
+            color: #1e293b;
+            margin-bottom: 10px;
+        }
+
+        .greeting strong { 
+            color: #0284c7; 
+        }
+
+        .intro-text {
+            font-size: 15px;
+            line-height: 1.65;
+            color: #475569;
+            margin-bottom: 24px;
+        }
+
+        /* Security badge */
+        .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #16a34a;
+            margin-bottom: 22px;
+        }
+
+        .security-badge::before {
+            content: '🔒';
+            font-size: 13px;
+        }
+
+        /* Details table */
+        .details-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .details-box-title {
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 11px 18px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        .detail-row {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px 18px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .detail-row:last-child { border-bottom: none; }
+
+        .detail-icon {
+            font-size: 16px;
+            width: 24px;
+            flex-shrink: 0;
+            margin-right: 10px;
+            margin-top: 1px;
+        }
+
+        .detail-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-width: 80px;
+            flex-shrink: 0;
+        }
+
+        .detail-value {
+            font-size: 14px;
+            color: #1e293b;
+            font-weight: 500;
+            flex: 1;
+            word-break: break-all;
+        }
+
+        /* Alert box */
+        .alert-box {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-left: 4px solid #f97316;
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-size: 14px;
+            color: #7c3e08;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .alert-box strong {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            color: #c2410c;
+            margin-bottom: 4px;
+        }
+
+        /* Divider */
+        .divider {
+            border: none;
+            border-top: 1px solid #f1f5f9;
+            margin: 4px 0 20px;
+        }
+
+        /* Reassurance text */
+        .reassurance {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.6;
+            text-align: center;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.7;
+        }
+
+        .footer a {
+            color: #0284c7;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+
+        <!-- Branded Header -->
+        <div class="header-band">
+            <img class="logo"
+                 src="{{#if schoolLogo}}{{schoolLogo}}{{else}}https://ui-avatars.com/api/?name=N&background=0369a1&color=fff&size=112&bold=true&font-size=0.55&rounded=true{{/if}}"
+                 alt="School Logo" />
+            <h1>New Login Detected</h1>
+            <p>Nuvana Education Platform — Security Alert</p>
+        </div>
+
+        <!-- Main Card -->
+        <div class="card">
+
+            <p class="greeting">Hello, <strong>{{name}}</strong> 👋</p>
+
+            <p class="intro-text">
+                We detected a new sign-in to your Nuvana account. Here are the details of this login attempt.
+                If this was you, you can safely ignore this email.
+            </p>
+
+            <div class="security-badge">Login Verified Successfully</div>
+
+            <!-- Login Details -->
+            <div class="details-box">
+                <div class="details-box-title">Login Details</div>
+
+                <div class="detail-row">
+                    <span class="detail-icon">📅</span>
+                    <span class="detail-label">Time</span>
+                    <span class="detail-value">{{loginTime}}</span>
+                </div>
+
+                {{#if ipAddress}}
+                <div class="detail-row">
+                    <span class="detail-icon">🌐</span>
+                    <span class="detail-label">IP Address</span>
+                    <span class="detail-value">{{ipAddress}}</span>
+                </div>
+                {{/if}}
+
+                {{#if device}}
+                <div class="detail-row">
+                    <span class="detail-icon">💻</span>
+                    <span class="detail-label">Device</span>
+                    <span class="detail-value">{{device}}</span>
+                </div>
+                {{/if}}
+
+                <div class="detail-row">
+                    <span class="detail-icon">✉️</span>
+                    <span class="detail-label">Account</span>
+                    <span class="detail-value">{{email}}</span>
+                </div>
+
+            </div>
+
+            <!-- Suspicious activity alert -->
+            <div class="alert-box">
+                <strong>⚠️ Wasn't you?</strong>
+                If you did not perform this login, your account may be compromised.
+                Please change your password immediately and contact your school administrator.
+            </div>
+
+            <hr class="divider" />
+
+            <p class="reassurance">
+                This is an automated security notification from Nuvana.<br>
+                You'll receive this email every time someone signs in to your account.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>© 2025 Nuvana Education Platform. All rights reserved.</p>
+            <p>If you have questions, contact your school administrator.</p>
+        </div>
+
+    </div>
+</body>
+</html>

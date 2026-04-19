@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { $Enums } from '../../generated/prisma/client';
 import {
@@ -9,10 +9,16 @@ import {
   QuestionType,
   CreateTestFromAiGradingDto,
 } from './dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class TestService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(TestService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService
+  ) {}
 
   /**
    * Map DTO question type to Prisma enum value
@@ -23,7 +29,7 @@ export class TestService {
     // Handle both string values and enum values
     const typeStr = typeof questionType === 'string' ? questionType : questionType;
     
-    console.log(`[TestService] Mapping question type: "${typeStr}"`);
+    this.logger.log(`[TestService] Mapping question type: "${typeStr}"`);
     
     // Map to Prisma enum keys
     // Frontend should send enum keys: MCQ, Essay, Short_Answer, Very_Short_Answer
@@ -39,13 +45,13 @@ export class TestService {
     } else if (typeStr === 'Very_Short_Answer' || typeStr === 'Very Short Answer' || typeStr === QuestionType.Very_Short_Answer) {
       enumKey = 'Very_Short_Answer';
     } else {
-      console.error(`[TestService] Invalid question type received: "${typeStr}" (type: ${typeof typeStr})`);
+      this.logger.error(`[TestService] Invalid question type received: "${typeStr}" (type: ${typeof typeStr})`);
       throw new BadRequestException(`Invalid question type: ${typeStr}. Expected one of: MCQ, Essay, Short_Answer, Very_Short_Answer`);
     }
     
     // Use the enum key directly - Prisma will handle the mapping to DB value
     const enumValue = $Enums.question_type_enum[enumKey];
-    console.log(`[TestService] Mapped "${typeStr}" -> enum key "${enumKey}" -> Prisma enum:`, enumValue);
+    this.logger.log(`[TestService] Mapped "${typeStr}" -> enum key "${enumKey}" -> Prisma enum:`, enumValue);
     
     return enumValue;
   }
@@ -94,7 +100,7 @@ export class TestService {
       for (const questionDto of questions) {
         const { options, question_type, ...questionData } = questionDto;
         
-        console.log(`[TestService] Received question_type: "${question_type}" (type: ${typeof question_type})`);
+        this.logger.log(`[TestService] Received question_type: "${question_type}" (type: ${typeof question_type})`);
         
         // Map question type to Prisma enum key string
         // Frontend sends enum keys like "Short_Answer" which we use directly
@@ -120,8 +126,8 @@ export class TestService {
         // We cast it to the enum type for TypeScript, but at runtime it's the enum key string
         const prismaEnumValue = enumKey as $Enums.question_type_enum;
         
-        console.log(`[TestService] Mapped "${question_type}" -> enum key "${enumKey}"`);
-        console.log(`[TestService] Using enum key as Prisma enum:`, prismaEnumValue);
+        this.logger.log(`[TestService] Mapped "${question_type}" -> enum key "${enumKey}"`);
+        this.logger.log(`[TestService] Using enum key as Prisma enum:`, prismaEnumValue);
         
         // Explicitly construct data object
         const questionCreateData = {
@@ -135,7 +141,7 @@ export class TestService {
           test_id: test.id,
         };
         
-        console.log(`[TestService] Creating question with type:`, questionCreateData.question_type);
+        this.logger.log(`[TestService] Creating question with type:`, questionCreateData.question_type);
         
         const question = await tx.questions.create({
           data: questionCreateData,
@@ -446,6 +452,29 @@ export class TestService {
       data: { is_published: isPublished },
     });
 
+    // If publishing, send bulk emails
+    if (isPublished) {
+      this.prisma.profiles.findMany({
+        where: {
+          role_id: 4, // Students
+          school_id: schoolId,
+          student_details: { class_id: test.class_id }
+        }
+      }).then(students => {
+        let dueDateStr = undefined;
+        if (test.due_date) {
+            dueDateStr = test.due_date.toLocaleString();
+        }
+        for (const student of students) {
+          this.mailService.sendNewTestPublishedEmail(
+            { email: student.email, name: student.name },
+            test.title,
+            dueDateStr
+          ).catch(e => this.logger.error(`Error sending publish email: ${e.message}`));
+        }
+      }).catch(e => this.logger.error(`Error fetching students for email: ${e.message}`));
+    }
+
     return { message: `Test ${isPublished ? 'published' : 'unpublished'} successfully` };
   }
 
@@ -641,6 +670,7 @@ export class TestService {
       },
       include: {
         student_answers: true,
+        tests: true,
       },
     });
 
@@ -684,8 +714,21 @@ export class TestService {
         },
       });
     }, {
-      timeout: 30000, // 30 seconds timeout for large transactions
+      timeout: 30000, 
     });
+
+    // Retrieve student info asynchronously without blocking the request
+    if (submission.student_id) {
+       this.prisma.profiles.findUnique({
+         where: { id: submission.student_id }
+       }).then(student => {
+         if (student && student.email) {
+           this.mailService.sendTestGradedEmail ? 
+             this.mailService.sendTestGradedEmail({ email: student.email, name: student.name }, submission.tests?.title || 'Your Test', totalMarks).catch(e => this.logger.error(e)) 
+             : null;
+         }
+       }).catch(e => this.logger.error(e));
+    }
 
     return { message: 'Submission graded successfully' };
   }
@@ -901,7 +944,7 @@ export class TestService {
         }
         
         // Debug logging
-        console.log('[submitTest] Processing answer:', {
+        this.logger.log('[submitTest] Processing answer:', {
           question_id: ans.question_id,
           raw_value: ans.student_selected_option_index,
           processed_value: selectedOptionIndex,
@@ -920,7 +963,7 @@ export class TestService {
         };
       });
 
-      console.log('[submitTest] Answers data to insert:', JSON.stringify(answersData, null, 2));
+      this.logger.log('[submitTest] Answers data to insert:', JSON.stringify(answersData, null, 2));
 
       await tx.student_answers.createMany({
         data: answersData,

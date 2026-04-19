@@ -4,6 +4,7 @@ import { StudentQuestionPopup } from './StudentQuestionPopup';
 import { StudentQuestionModal } from './StudentQuestionModal';
 import { useAuth } from '@/auth/AuthContext';
 import { engagementApi } from '@/services/engagementApi';
+import { logger } from '@/lib/logger';
 
 interface EngagementListenerProps {
   classId: string;
@@ -23,7 +24,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
 
   // Listen for new questions
   const handleNewQuestion = useCallback((data: any) => {
-    console.log('[Engagement] New question received:', data);
+    logger.log('[Engagement] New question received:', data);
     if (data.questionId) {
       handledQuestionsRef.current.add(data.questionId);
     }
@@ -35,7 +36,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
 
   // Listen for question expiration
   const handleQuestionExpired = useCallback((data: any) => {
-    console.log('[Engagement] Question expired:', data);
+    logger.log('[Engagement] Question expired:', data);
     const activeQ = currentQuestionRef.current;
     
     if (activeQ?.questionId === data.questionId) {
@@ -45,7 +46,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
       // IMPORTANT: We do NOT clear currentQuestion or currentQuestionRef 
       // if the modal is open, to allow the student to finish their submission.
       // The modal has its own timer and will handle its own closing.
-      console.log('[Engagement] Question ID matched expiration. Current modal state:', showModal);
+      logger.log('[Engagement] Question ID matched expiration. Current modal state:', showModal);
     }
   }, [showModal]);
 
@@ -82,7 +83,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
         const token = localStorage.getItem('access_token');
         if (!token) return;
 
-        console.log('[Engagement] Running catch-up check for class:', classId);
+        logger.log('[Engagement] Running catch-up check for class:', classId);
         const response = await engagementApi.getActiveSession(classId, token);
         const activeSession = response?.data;
 
@@ -90,7 +91,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
           const q = activeSession.pop_questions[0];
           
           if (handledQuestionsRef.current.has(q.id)) {
-            console.log('[Engagement] Question already handled, skipping:', q.id);
+            logger.log('[Engagement] Question already handled, skipping:', q.id);
             return;
           }
           
@@ -101,13 +102,13 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
           // INCREASED BUFFER: If less than 5 seconds remain, don't show as catch-up
           // This avoids the "expired" error just as it opens.
           if (remainingMs < 5000) {
-            console.log('[Engagement] Question too close to expiry to catch up:', remainingMs);
+            logger.log('[Engagement] Question too close to expiry to catch up:', remainingMs);
             handledQuestionsRef.current.add(q.id);
             return;
           }
 
           if (!currentQuestionRef.current) {
-            console.log('[Engagement] Caught up with active question:', q.id);
+            logger.log('[Engagement] Caught up with active question:', q.id);
             handledQuestionsRef.current.add(q.id);
             const formattedQuestion = {
               questionId: q.id,
@@ -124,7 +125,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
           }
         }
       } catch (error) {
-        console.error('[Engagement] Catch-up check failed:', error);
+        logger.error('[Engagement] Catch-up check failed:', error);
       }
     };
 
@@ -141,7 +142,7 @@ export const EngagementListener: React.FC<EngagementListenerProps> = ({ classId 
   const handleDismiss = () => {
     if (currentQuestion?.questionId) {
       handledQuestionsRef.current.add(currentQuestion.questionId);
-      console.log('[Engagement] Question marked as handled (dismissed):', currentQuestion.questionId);
+      logger.log('[Engagement] Question marked as handled (dismissed):', currentQuestion.questionId);
     }
     setShowPopup(false);
   };

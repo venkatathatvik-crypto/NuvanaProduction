@@ -3,6 +3,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { getStudentData } from '@/services/academic';
 import { EngagementListener } from './EngagementListener';
+import { logger } from '@/lib/logger';
 
 /**
  * GlobalEngagementListener
@@ -25,7 +26,7 @@ export const GlobalEngagementListener: React.FC = () => {
 
   const classId = profile?.class_id || studentData?.class_id;
 
-  console.log('[GlobalEngagementListener] Student:', profile?.name, 'Role:', profile?.role, 'ClassID:', classId);
+  logger.log('[GlobalEngagementListener] Student:', profile?.name, 'Role:', profile?.role, 'ClassID:', classId);
 
   if (!isStudent || !classId) return null;
 

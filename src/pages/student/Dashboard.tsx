@@ -30,6 +30,7 @@ import NotificationBell from "@/components/NotificationBell";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatePresence } from "framer-motion";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -178,11 +179,22 @@ const Dashboard = () => {
   ];
 
   // Critical loading check
-  const isInitialLoading = profileLoading || loadingStudentData;
+  // offlineNoCache: only show "no cache" empty state when offline AND no data at all.
+  // If studentData is already in cache, we skip the empty state and show the page.
+  const isInitialLoading = (profileLoading && !profile) || (loadingStudentData && !studentData);
+  const offlineNoCache = useOfflineLoading(isInitialLoading && !studentData);
 
   // Get today's day name for display
   const jsDay = new Date().getDay();
   const todayDayName = jsDay === 0 ? "Sunday" : DAY_NAMES[jsDay - 1];
+
+  if (offlineNoCache) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Dashboard" />
+      </div>
+    );
+  }
 
   if (isInitialLoading) {
     return (

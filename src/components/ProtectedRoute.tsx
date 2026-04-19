@@ -30,8 +30,10 @@ const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
     return <Navigate to="/login" />;
   }
 
-  // If we have a session but profile is still loading, wait
-  if (profileLoading) return <LoadingSpinner />;
+  // If we have a session but profile is still loading and we don't have a 
+  // cached version yet, wait. If we HAVE a profile, we show the page
+  // even if it's currently revalidating in the background.
+  if (profileLoading && !profile) return <LoadingSpinner />;
 
   // If role is required but profile doesn't exist or role doesn't match
   if (role) {

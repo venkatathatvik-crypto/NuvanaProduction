@@ -1,4 +1,6 @@
 import { apiClient } from "@/lib/apiClient";
+import { cacheProfile, clearCachedProfile } from "@/lib/db";
+import { logger } from '@/lib/logger';
 
 export type UserRole = "student" | "teacher" | "school_admin" | "super_admin";
 
@@ -52,22 +54,24 @@ export const authService = {
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
 
+      const profile: UserProfile = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role,
+        school_id: data.user.school_id,
+        avatar_url: data.user.avatar_url,
+        is_verified: data.user.is_verified,
+        is_first_login: data.user.is_first_login,
+        created_at: new Date().toISOString(),
+      };
+
+      // Cache profile in IndexedDB for offline cold-start
+      await cacheProfile(profile);
+
       return {
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-        },
-        profile: {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          role: data.user.role,
-          school_id: data.user.school_id,
-          avatar_url: data.user.avatar_url,
-          is_verified: data.user.is_verified,
-          is_first_login: data.user.is_first_login,
-          created_at: new Date().toISOString(),
-        },
+        user: { id: data.user.id, email: data.user.email },
+        profile,
       };
     } catch (error) {
       throw error;
@@ -82,21 +86,26 @@ export const authService = {
     try {
       const accessToken = this.getAccessToken();
       if (!accessToken) {
-        console.log("[AuthService] No access token available");
+        logger.log("[AuthService] No access token available");
         return null;
       }
 
-      console.log("[AuthService] Validating session...");
+      logger.log("[AuthService] Validating session...");
+      // 5-second timeout: if the network is unreachable (e.g. WiFi with no
+      // upstream), fail fast so AuthContext can restore from the IndexedDB
+      // cache instead of hanging for the browser's default 30-90 s timeout.
       const data = await apiClient.post<{
         valid: boolean;
         user: any;
-      }>("/auth/validate-session");
+      }>("/auth/validate-session", undefined, {
+        signal: AbortSignal.timeout(5000),
+      });
 
-      console.log("[AuthService] Validation response:", data);
+      logger.log("[AuthService] Validation response:", data);
 
       if (data.valid && data.user) {
-        console.log("[AuthService] Session is valid");
-        return {
+        logger.log("[AuthService] Session is valid");
+        const profile: UserProfile = {
           id: data.user.id,
           email: data.user.email,
           name: data.user.name,
@@ -107,36 +116,27 @@ export const authService = {
           is_first_login: data.user.is_first_login,
           created_at: data.user.created_at || new Date().toISOString(),
         };
+
+        // Keep IndexedDB profile cache fresh after each successful online validation
+        await cacheProfile(profile);
+
+        return profile;
       }
 
-      console.log("[AuthService] Session validation returned invalid");
+      logger.log("[AuthService] Session validation returned invalid");
       return null;
     } catch (error: any) {
-      console.error("[AuthService] Session validation failed:", error);
+      logger.error("[AuthService] Session validation failed:", error);
 
-      // If 401 Unauthorized, clear tokens and return null
+      // 401 means the token is genuinely invalid — clear and return null
       if (error.status === 401) {
-        console.log("[AuthService] Got 401, clearing tokens");
+        logger.log("[AuthService] Got 401, clearing tokens");
         this.logout();
         return null;
       }
 
-      // For other errors, try to get current session as fallback
-      try {
-        console.log("[AuthService] Trying fallback session check...");
-        const fallbackProfile = await this.getCurrentSession();
-        if (fallbackProfile) {
-          console.log("[AuthService] Fallback succeeded");
-          return fallbackProfile;
-        }
-        return null;
-      } catch (fallbackError) {
-        console.error(
-          "[AuthService] Fallback session check also failed:",
-          fallbackError
-        );
-        return null;
-      }
+      // Network/server error — rethrow so AuthContext can restore from cache
+      throw error;
     }
   },
 
@@ -145,10 +145,10 @@ export const authService = {
    */
   async getCurrentSession(): Promise<UserProfile | null> {
     try {
-      console.log("[AuthService] Fetching current session...");
+      logger.log("[AuthService] Fetching current session...");
       const data = await apiClient.post<any>("/auth/session");
 
-      console.log("[AuthService] Session data received:", data);
+      logger.log("[AuthService] Session data received:", data);
 
       return {
         id: data.id,
@@ -162,7 +162,7 @@ export const authService = {
         created_at: data.created_at || new Date().toISOString(),
       };
     } catch (error) {
-      console.error("[AuthService] Failed to get current session:", error);
+      logger.error("[AuthService] Failed to get current session:", error);
       return null;
     }
   },
@@ -215,19 +215,24 @@ export const authService = {
   },
 
   /**
-   * Logout user - clear tokens and call backend logout endpoint
+   * Logout user - clear tokens, cached profile, and call backend logout endpoint.
+   * NOTE: Clearing the query cache (queryClient.clear + persister.removeClient)
+   * is handled in AuthContext so we have access to the React Query client there.
    */
   async logout(): Promise<void> {
     try {
       // Call backend logout endpoint
       await apiClient.post("/auth/logout");
     } catch (error) {
-      console.error("Backend logout error:", error);
+      logger.error("Backend logout error:", error);
       // Continue with local cleanup even if backend call fails
     } finally {
       // Clear JWT tokens
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+
+      // Clear cached profile from IndexedDB so the next user starts clean
+      await clearCachedProfile();
     }
   },
 

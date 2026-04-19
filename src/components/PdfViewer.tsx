@@ -41,6 +41,7 @@ import { QuestionPanel } from './engagement/QuestionPanel';
 import { useAuth } from '@/auth/AuthContext';
 import { uploadTeacherVoiceNote } from '@/services/academic';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { logger } from '@/lib/logger';
 
 // Configure pdfjs worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -131,7 +132,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
       toast.info("Recording started...");
     } catch (error) {
-      console.error("Error accessing microphone:", error);
+      logger.error("Error accessing microphone:", error);
       toast.error("Failed to access microphone. Please check permissions.");
     }
   };
@@ -164,7 +165,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       return;
     }
     if (!classId || !gradeSubjectId) {
-      console.error("Missing IDs:", { classId, gradeSubjectId });
+      logger.error("Missing IDs:", { classId, gradeSubjectId });
       toast.error(`Missing metadata for upload: ${!classId ? 'Class ID' : 'Subject ID'} is missing.`);
       return;
     }
@@ -194,7 +195,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error) {
-      console.error("Upload error:", error);
+      logger.error("Upload error:", error);
       toast.error("Failed to upload audio note.");
     } finally {
       setIsUploadingAudio(false);
@@ -300,15 +301,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Load paths when pageNumber or data changes
   useEffect(() => {
-    if (pdfLoaded) {
-      // Load PDF annotations
-      if (canvasRef.current) {
-        const pPaths = pdfAnnotations[pageNumber] || [];
-        if (pPaths.length > 0) {
-          canvasRef.current.loadPaths(pPaths);
-        } else {
-          canvasRef.current.clearCanvas();
-        }
+    if (pdfLoaded && canvasRef.current) {
+      // Always clear first — loadPaths appends, so stale drawings bleed across pages without this
+      canvasRef.current.clearCanvas();
+      const pPaths = pdfAnnotations[pageNumber] || [];
+      if (pPaths.length > 0) {
+        canvasRef.current.loadPaths(pPaths);
       }
     }
   }, [pageNumber, pdfLoaded, pdfAnnotations]);
@@ -365,7 +363,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       
       toast.success("All notes saved to cloud!");
     } catch (error) {
-      console.error("Save error:", error);
+      logger.error("Save error:", error);
       toast.error("Failed to save some notes.");
     } finally {
       setIsSaving(false);
@@ -463,7 +461,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       
       toast.success("PDF Generated Instantly!", { id: toastId });
     } catch (error) {
-      console.error("Fast download error:", error);
+      logger.error("Fast download error:", error);
       toast.error("Fast export failed. Please try again.", { id: toastId });
     } finally {
       setIsDownloading(false);
@@ -733,7 +731,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               onLoadSuccess={onDocumentLoadSuccess}
               loading={<div className="p-20"><LoadingSpinner /></div>}
               onLoadError={(error) => {
-                console.error("PDF Load Error:", error);
+                logger.error("PDF Load Error:", error);
                 toast.error("External PDF blocked by CORS.");
               }}
               error={

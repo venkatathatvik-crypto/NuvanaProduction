@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { logger } from '@/lib/logger';
 
 class EngagementSocketService {
   private socket: Socket | null = null;
@@ -9,7 +10,7 @@ class EngagementSocketService {
       return this.socket;
     }
 
-    console.log('[EngagementSocket] Connecting for user:', userId, 'role:', userRole);
+    logger.log('[EngagementSocket] Connecting for user:', userId, 'role:', userRole);
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
     
     this.socket = io(`${backendUrl}/engagement`, {
@@ -20,15 +21,15 @@ class EngagementSocketService {
     });
 
     this.socket.on('connect', () => {
-      console.log('✅ Connected to engagement socket');
+      logger.log('✅ Connected to engagement socket');
     });
 
     this.socket.on('disconnect', () => {
-      console.log('❌ Disconnected from engagement socket');
+      logger.log('❌ Disconnected from engagement socket');
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
+      logger.error('Connection error:', error);
     });
 
     return this.socket;
@@ -92,9 +93,9 @@ class EngagementSocketService {
 
   // Generic listener
   on(event: string, callback: (...args: any[]) => void) {
-    console.log('[EngagementSocket] Registering listener for:', event);
+    logger.log('[EngagementSocket] Registering listener for:', event);
     if (!this.socket) {
-      console.warn('[EngagementSocket] Cannot register .on() - socket not initialized');
+      logger.warn('[EngagementSocket] Cannot register .on() - socket not initialized');
       return;
     }
     
@@ -158,18 +159,18 @@ class EngagementSocketService {
   // Admin joins school room
   joinSchool(schoolId: string, adminId: string) {
     if (!this.socket) {
-      console.warn('[EngagementSocket] Cannot join school room - socket not initialized');
+      logger.warn('[EngagementSocket] Cannot join school room - socket not initialized');
       return;
     }
-    console.log('[EngagementSocket] Attempting to join school room:', schoolId, 'for admin:', adminId);
+    logger.log('[EngagementSocket] Attempting to join school room:', schoolId, 'for admin:', adminId);
     this.socket.emit('join:school', { schoolId, adminId });
   }
 
   // Listen for session end
   onSessionEnded(callback: (data: any) => void) {
-    console.log('[EngagementSocket] Registering session:ended listener');
+    logger.log('[EngagementSocket] Registering session:ended listener');
     if (!this.socket) {
-      console.warn('[EngagementSocket] Cannot register session:ended - socket not initialized');
+      logger.warn('[EngagementSocket] Cannot register session:ended - socket not initialized');
       return;
     }
     

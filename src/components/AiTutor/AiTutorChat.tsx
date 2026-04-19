@@ -28,6 +28,9 @@ import {
 } from "@/components/ui/select";
 import { aiService, AiRequestDto } from "@/services/aiService";
 import { MessageBubble } from "./MessageBubble";
+import { QuickReplyButtons } from "./QuickReplyButtons";
+import { AiConfigForm } from "./AiConfigForm";
+import type { AiConfigValues } from "./AiConfigForm";
 import { useAuth } from "@/auth/AuthContext";
 import { useAiChat } from "@/contexts/AiChatContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -35,6 +38,8 @@ import VoiceModeOverlay from "./VoiceModeOverlay";
 import { toast } from "sonner";
 import { getStudentData, StudentData } from "@/services/studentDataService";
 import { getSubjectsWithMaterials } from "@/services/subjectService";
+import { lifeCoachService } from "@/services/lifeCoachService";
+import { logger } from '@/lib/logger';
 
 // Message interface (matches AiChatContext)
 interface Message {
@@ -104,12 +109,20 @@ const AiTutorChat = () => {
     setActiveMode,
     selectedSubject,
     setSelectedSubject,
+    isLoading,
+    setIsLoading,
   } = useAiChat();
   
   // Local state for UI-only concerns (not persisted)
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isContextLoading, setIsContextLoading] = useState(false);
+  
+  // Study plan params state for quick reply flow
+  const [studyPlanParams, setStudyPlanParams] = useState<{
+    days?: number;
+    hoursPerDay?: number;
+  }>({});
+  const [originalStudyPlanQuery, setOriginalStudyPlanQuery] = useState<string>("");
   const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -118,6 +131,7 @@ const AiTutorChat = () => {
   
   // Subject list (loaded from API, not persisted in chat context)
   const [subjects, setSubjects] = useState<string[]>([]);
+  const [lifeCoachCategories, setLifeCoachCategories] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -127,38 +141,38 @@ const AiTutorChat = () => {
     const loadStudentDataAndSubjects = async () => {
       if (profile?.id && profile?.role === "student") {
         setIsContextLoading(true);
-        console.log("[AiTutorChat] Loading student data...");
+        logger.log("[AiTutorChat] Loading student data...");
         try {
           const data = await getStudentData(profile.id);
           setStudentData(data);
-          console.log("[AiTutorChat] Student data loaded:", data);
+          logger.log("[AiTutorChat] Student data loaded:", data);
 
           // Load subjects that have uploaded PDF files for this student's class
           if (data?.class_id) {
-            console.log(
+            logger.log(
               "[AiTutorChat] Loading subjects with materials for class_id:",
               data.class_id
             );
             try {
               const subs = await getSubjectsWithMaterials(data.class_id);
-              console.log(
+              logger.log(
                 "[AiTutorChat] Received subjects with materials:",
                 subs
               );
               setSubjects(subs);
             } catch (err) {
-              console.error(
+              logger.error(
                 "[AiTutorChat] Failed to load subjects with materials:",
                 err
               );
               setSubjects([]);
             }
           } else {
-            console.warn("[AiTutorChat] No class_id found in studentData");
+            logger.warn("[AiTutorChat] No class_id found in studentData");
             setSubjects([]);
           }
         } catch (error) {
-          console.error("[AiTutorChat] Failed to load student data:", error);
+          logger.error("[AiTutorChat] Failed to load student data:", error);
         } finally {
           setIsContextLoading(false);
         }
@@ -166,6 +180,15 @@ const AiTutorChat = () => {
     };
     loadStudentDataAndSubjects();
   }, [profile]);
+
+  // Load life coach categories when mode is life_skill
+  useEffect(() => {
+    if (activeMode === "life_skill" && profile?.school_id) {
+      lifeCoachService.getCategoriesWithContent(profile.school_id)
+        .then(cats => setLifeCoachCategories(cats))
+        .catch(() => setLifeCoachCategories([]));
+    }
+  }, [activeMode, profile?.school_id]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -233,7 +256,7 @@ const AiTutorChat = () => {
         recognitionRef.current.start();
         setIsListening(true);
       } catch (error) {
-        console.error("Speech recognition error:", error);
+        logger.error("Speech recognition error:", error);
       }
     } else {
       toast.error("Speech recognition not supported in this browser.");
@@ -268,16 +291,141 @@ const AiTutorChat = () => {
     }
   };
 
+  // Handle quick reply button clicks (study plan parameter collection)
+  const handleQuickReplyClick = async (
+    button: any,
+    messageIndex: number,
+    inputType: string
+  ) => {
+    // 1. Add user's selection as a message
+    const userMsg: Message = {
+      sender: "user",
+      content: button.text,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    // 2. Update study plan params based on input type
+    const paramKey = inputType === 'studyPlanDays' ? 'days' : 'hoursPerDay';
+    const updatedParams = {
+      ...studyPlanParams,
+      [paramKey]: button.value,
+    };
+    setStudyPlanParams(updatedParams);
+
+    // 3. Disable buttons in the previous message
+    setMessages((prev) =>
+      prev.map((msg, idx) =>
+        idx === messageIndex ? { ...msg, buttonsDisabled: true } : msg
+      )
+    );
+
+    // 4. Send to backend with updated params
+    setIsLoading(true);
+    try {
+      const subjectToSend =
+        selectedSubject && selectedSubject !== "all"
+          ? selectedSubject.trim()
+          : undefined;
+
+      const aiResponseEncoded = await aiService.processRequest({
+        taskType: "study_plan",
+        query: originalStudyPlanQuery,
+        studentId: profile?.id,
+        subject: subjectToSend,
+        studyPlanParams: updatedParams,
+      });
+
+      // 5. Add AI response (might have more buttons or final study plan)
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          content: aiResponseEncoded,
+          quickReplies: aiResponseEncoded.quickReplies,
+          waitingForInput: aiResponseEncoded.waitingForInput,
+          inputType: aiResponseEncoded.inputType,
+          timestamp: new Date(),
+        },
+      ]);
+
+      // 6. If no more buttons, reset study plan params for next request
+      if (!aiResponseEncoded.waitingForInput) {
+        setStudyPlanParams({});
+        setOriginalStudyPlanQuery("");
+      }
+    } catch (error) {
+      logger.error("Error processing quick reply:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          content: {
+            explanation: "⚠️ I encountered an error. Please try again.",
+          },
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStudyPlanConfigSubmit = async (config: AiConfigValues, messageIndex: number) => {
+    const summary = `${config.days}-day study plan, ${config.hoursPerDay} hr${(config.hoursPerDay || 0) > 1 ? 's' : ''}/day`;
+    setMessages((prev) => [...prev, { sender: "user", content: summary, timestamp: new Date() }]);
+    setMessages((prev) =>
+      prev.map((msg, idx) => (idx === messageIndex ? { ...msg, buttonsDisabled: true } : msg))
+    );
+
+    setIsLoading(true);
+    try {
+      const subjectToSend = selectedSubject && selectedSubject !== "all" ? selectedSubject.trim() : undefined;
+      const aiResponseEncoded = await aiService.processRequest({
+        taskType: "study_plan",
+        query: originalStudyPlanQuery || "create study plan",
+        studentId: profile?.id,
+        subject: subjectToSend,
+        studyPlanParams: { days: config.days, hoursPerDay: config.hoursPerDay },
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          content: aiResponseEncoded,
+          quickReplies: aiResponseEncoded.quickReplies,
+          waitingForInput: aiResponseEncoded.waitingForInput,
+          inputType: aiResponseEncoded.inputType,
+          timestamp: new Date(),
+        },
+      ]);
+
+      if (!aiResponseEncoded.waitingForInput) {
+        setStudyPlanParams({});
+        setOriginalStudyPlanQuery("");
+      }
+    } catch (error) {
+      logger.error("Error generating study plan:", error);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "ai", content: { explanation: "⚠️ I encountered an error. Please try again." }, timestamp: new Date() },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSend = async (textOverride?: string) => {
     const textToSend = textOverride || input;
     if (!textToSend.trim()) return;
 
-    console.log("[AiTutorChat] ========================================");
-    console.log("[AiTutorChat] 📤 User sending message");
-    console.log("[AiTutorChat] Message:", textToSend);
-    console.log("[AiTutorChat] Active Mode:", activeMode);
-    console.log("[AiTutorChat] Student Data:", studentData);
-    console.log("[AiTutorChat] Selected Subject:", selectedSubject);
+    logger.log("[AiTutorChat] ========================================");
+    logger.log("[AiTutorChat] 📤 User sending message");
+    logger.log("[AiTutorChat] Message:", textToSend);
+    logger.log("[AiTutorChat] Active Mode:", activeMode);
+    logger.log("[AiTutorChat] Student Data:", studentData);
+    logger.log("[AiTutorChat] Selected Subject:", selectedSubject);
 
     const userMsg: Message = {
       sender: "user" as const,
@@ -288,17 +436,24 @@ const AiTutorChat = () => {
     setInput("");
     setIsLoading(true);
 
+    // When user types a new message in study_plan mode, always reset params
+    // so each new question gets fresh parameter collection
+    if (activeMode === "study_plan") {
+      setStudyPlanParams({});
+      setOriginalStudyPlanQuery(textToSend);
+    }
+
     try {
       // Determine task type based on active mode
       // Keep 'start' as-is for default mode (don't convert to 'doubt')
       const taskType = activeMode as any;
 
-      console.log("[AiTutorChat] Selected Subject (raw):", selectedSubject);
-      console.log(
+      logger.log("[AiTutorChat] Selected Subject (raw):", selectedSubject);
+      logger.log(
         "[AiTutorChat] Selected Subject (type):",
         typeof selectedSubject
       );
-      console.log(
+      logger.log(
         "[AiTutorChat] Selected Subject (length):",
         selectedSubject?.length
       );
@@ -309,23 +464,36 @@ const AiTutorChat = () => {
         selectedSubject && selectedSubject !== "all"
           ? selectedSubject.trim()
           : undefined;
-      console.log("[AiTutorChat] Subject to send:", subjectToSend);
+      logger.log("[AiTutorChat] Subject to send:", subjectToSend);
 
       const aiRequest: AiRequestDto = {
         taskType: taskType,
         query: userMsg.content,
         studentId: profile?.id,
-        subject: subjectToSend, // Use selected subject (only if not empty)
+        subject: activeMode === "life_skill" ? undefined : subjectToSend,
+        // Pass study plan params if in study_plan mode
+        ...(taskType === 'study_plan' && Object.keys(studyPlanParams).length > 0
+          ? { studyPlanParams }
+          : {}),
+        // Pass life coach category if in life_skill mode
+        ...(activeMode === "life_skill" && subjectToSend
+          ? { lifeCoachCategory: subjectToSend }
+          : {}),
       };
 
-      console.log(
+      logger.log(
         "[AiTutorChat] Sending AI request:",
         JSON.stringify(aiRequest, null, 2)
       );
 
       // Call AI service
       const aiResponseEncoded = await aiService.processRequest(aiRequest);
-      console.log("[AiTutorChat] Received AI response:", aiResponseEncoded);
+      logger.log("[AiTutorChat] Received AI response:", aiResponseEncoded);
+
+      // If this is a study plan response with quick replies, save the original query
+      if (aiResponseEncoded.waitingForInput && activeMode === "study_plan" && !originalStudyPlanQuery) {
+        setOriginalStudyPlanQuery(textToSend);
+      }
 
       // Flatten response for speech
       let speakableText =
@@ -335,8 +503,21 @@ const AiTutorChat = () => {
 
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", content: aiResponseEncoded, timestamp: new Date() },
+        {
+          sender: "ai",
+          content: aiResponseEncoded,
+          quickReplies: aiResponseEncoded.quickReplies,
+          waitingForInput: aiResponseEncoded.waitingForInput,
+          inputType: aiResponseEncoded.inputType,
+          timestamp: new Date(),
+        },
       ]);
+
+      // If no more buttons, reset study plan params
+      if (!aiResponseEncoded.waitingForInput && activeMode === "study_plan") {
+        setStudyPlanParams({});
+        setOriginalStudyPlanQuery("");
+      }
 
       // Speak if in voice mode
       if (isVoiceModeOpen) {
@@ -392,11 +573,11 @@ const AiTutorChat = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Subject Selector - Always visible */}
+            {/* Subject/Category Selector */}
             <Select
               value={selectedSubject}
               onValueChange={(value) => {
-                console.log("[AiTutorChat] Subject changed to:", value);
+                logger.log("[AiTutorChat] Subject/Category changed to:", value);
                 setSelectedSubject(value);
               }}
               disabled={isContextLoading}
@@ -405,20 +586,26 @@ const AiTutorChat = () => {
                 {isContextLoading ? (
                   <Loader2 className="w-3 h-3 animate-spin mr-2" />
                 ) : null}
-                <SelectValue placeholder="All Subjects" />
+                <SelectValue placeholder={activeMode === "life_skill" ? "All Categories" : "All Subjects"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Subjects</SelectItem>
-                {subjects.length > 0 ? (
-                  subjects.map((sub) => (
-                    <SelectItem key={sub} value={sub}>
-                      {sub}
-                    </SelectItem>
-                  ))
+                <SelectItem value="all">{activeMode === "life_skill" ? "All Categories" : "All Subjects"}</SelectItem>
+                {activeMode === "life_skill" ? (
+                  lifeCoachCategories.length > 0 ? (
+                    lifeCoachCategories.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-categories" disabled>No categories available</SelectItem>
+                  )
                 ) : (
-                  <SelectItem value="loading" disabled>
-                    Loading subjects...
-                  </SelectItem>
+                  subjects.length > 0 ? (
+                    subjects.map((sub) => (
+                      <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="loading" disabled>Loading subjects...</SelectItem>
+                  )
                 )}
               </SelectContent>
             </Select>
@@ -465,12 +652,31 @@ const AiTutorChat = () => {
                   content={msg.content}
                   timestamp={msg.timestamp}
                 />
-                {msg.sender === "ai" && 
-                  msg.content.quickReplies && 
-                  msg.content.quickReplies.length > 0 && 
-                  !msg.content.buttonsDisabled && (
+                {/* Study plan config form */}
+                {msg.sender === "ai" &&
+                  msg.inputType === "studyPlanConfig" &&
+                  !msg.buttonsDisabled && (
                   <div className="ml-12 mb-4">
-                    {/* QuickReplyButtons would be imported/rendered here similarly if needed */}
+                    <AiConfigForm
+                      mode="studyPlan"
+                      defaultTopic={originalStudyPlanQuery}
+                      onSubmit={(config) => handleStudyPlanConfigSubmit(config, index)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
+                {/* Quick reply buttons (for other flows) */}
+                {msg.sender === "ai" &&
+                  msg.inputType !== "studyPlanConfig" &&
+                  msg.quickReplies &&
+                  msg.quickReplies.length > 0 &&
+                  !msg.buttonsDisabled && (
+                  <div className="ml-12 mb-4">
+                    <QuickReplyButtons
+                      buttons={msg.quickReplies}
+                      onSelect={(button) => handleQuickReplyClick(button, index, msg.inputType || "")}
+                      disabled={isLoading}
+                    />
                   </div>
                 )}
               </React.Fragment>

@@ -26,6 +26,8 @@ import {
   AssignSubjectsToTeacherDto,
   CreateFileCategoryDto,
   UpdateFileCategoryDto,
+  CreateLifeCoachCategoryDto,
+  UpdateLifeCoachCategoryDto,
   CreateExamTypeDto,
   UpdateExamTypeDto,
   CreatePeriodDto,
@@ -265,6 +267,31 @@ export class AcademicController {
     @Tenant() schoolId: string
   ) {
     return this.academicService.deleteFileCategory(id, schoolId);
+  }
+
+  // ==================== LIFE COACH CATEGORIES ====================
+  @Post("life-coach-categories")
+  @Roles("school_admin", "super_admin")
+  createLifeCoachCategory(@Body() dto: CreateLifeCoachCategoryDto, @Tenant() schoolId: string) {
+    return this.academicService.createLifeCoachCategory(dto, schoolId);
+  }
+
+  @Get("life-coach-categories")
+  @Roles("school_admin", "super_admin", "student")
+  getLifeCoachCategories(@Tenant() schoolId: string) {
+    return this.academicService.getLifeCoachCategories(schoolId);
+  }
+
+  @Patch("life-coach-categories/:id")
+  @Roles("school_admin", "super_admin")
+  updateLifeCoachCategory(@Param("id", ParseIntPipe) id: number, @Body() dto: UpdateLifeCoachCategoryDto, @Tenant() schoolId: string) {
+    return this.academicService.updateLifeCoachCategory(id, dto, schoolId);
+  }
+
+  @Delete("life-coach-categories/:id")
+  @Roles("school_admin", "super_admin")
+  deleteLifeCoachCategory(@Param("id", ParseIntPipe) id: number, @Tenant() schoolId: string) {
+    return this.academicService.deleteLifeCoachCategory(id, schoolId);
   }
 
   // ==================== EXAM TYPES ====================

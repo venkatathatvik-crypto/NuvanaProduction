@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { TestForm } from "@/components/mcq/TestForm";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -7,13 +7,31 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
 import { createTeacherTest, getGradeSubjectIdBySubjectName, getExamTypeIdByName } from "@/services/academic";
 import { useQueryClient } from "@tanstack/react-query";
+import { logger } from '@/lib/logger';
 
 const TestCreate = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [searchParams] = useSearchParams();
     const defaultType = searchParams.get("type");
     const { profile } = useAuth();
     const queryClient = useQueryClient();
+
+    // Pre-filled data from AI Generate Paper flow
+    const prefillState = location.state as {
+        prefillQuestions?: Array<{
+            text: string;
+            questionType: string;
+            options?: string[];
+            correctOptionIndex?: number;
+            marks: number;
+            chapter: string;
+            topic: string;
+        }>;
+        prefillTitle?: string;
+        prefillSubject?: string;
+        prefillDuration?: number;
+    } | null;
 
     const handleSubmit = async (data: {
         title: string;
@@ -43,27 +61,27 @@ const TestCreate = () => {
         try {
             // gradeSubjectId is now set directly in the form when subject is selected
             const gradeSubjectId = data.gradeSubjectId;
-            console.log('[TestCreate] gradeSubjectId from form:', gradeSubjectId, 'type:', typeof gradeSubjectId);
+            logger.log('[TestCreate] gradeSubjectId from form:', gradeSubjectId, 'type:', typeof gradeSubjectId);
             
             // Validate it's a non-empty string
             if (!gradeSubjectId || typeof gradeSubjectId !== 'string' || gradeSubjectId.trim() === '') {
-                console.error('[TestCreate] Invalid gradeSubjectId:', gradeSubjectId);
+                logger.error('[TestCreate] Invalid gradeSubjectId:', gradeSubjectId);
                 toast.error("Failed to find subject. Please try again.");
                 return;
             }
             
             // Validate it's a valid UUID format
             if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(gradeSubjectId)) {
-                console.error('[TestCreate] Invalid UUID format for gradeSubjectId:', gradeSubjectId);
+                logger.error('[TestCreate] Invalid UUID format for gradeSubjectId:', gradeSubjectId);
                 toast.error("Invalid subject ID format. Please try again.");
                 return;
             }
             
-            console.log('[TestCreate] Final gradeSubjectId:', gradeSubjectId, 'type:', typeof gradeSubjectId);
+            logger.log('[TestCreate] Final gradeSubjectId:', gradeSubjectId, 'type:', typeof gradeSubjectId);
 
             // Convert exam type name to exam_type_id
             const examTypeId = await getExamTypeIdByName(data.examType);
-            console.log('[TestCreate] examTypeId received:', examTypeId, 'type:', typeof examTypeId);
+            logger.log('[TestCreate] examTypeId received:', examTypeId, 'type:', typeof examTypeId);
             if (!examTypeId) {
                 toast.error(`Failed to find exam type '${data.examType}'. Please ensure it exists in the database.`);
                 return;
@@ -102,13 +120,13 @@ const TestCreate = () => {
                     // Validate the date is valid
                     const testDate = new Date(dateString);
                     if (isNaN(testDate.getTime())) {
-                        console.warn('[TestCreate] Invalid dueDate format, ignoring:', data.dueDate);
+                        logger.warn('[TestCreate] Invalid dueDate format, ignoring:', data.dueDate);
                         normalizedDueDate = undefined;
                     } else {
                         normalizedDueDate = dateString;
                     }
                 } catch (error) {
-                    console.warn('[TestCreate] Error normalizing dueDate, ignoring:', error);
+                    logger.warn('[TestCreate] Error normalizing dueDate, ignoring:', error);
                     normalizedDueDate = undefined;
                 }
             }
@@ -129,9 +147,9 @@ const TestCreate = () => {
                 })),
             };
             
-            console.log('[TestCreate] Sending test data to createTeacherTest for', data.classIds.length, 'classes');
-            console.log('[TestCreate] gradeSubjectId in testData:', testData.gradeSubjectId, 'type:', typeof testData.gradeSubjectId);
-            console.log('[TestCreate] examTypeId in testData:', testData.examTypeId, 'type:', typeof testData.examTypeId);
+            logger.log('[TestCreate] Sending test data to createTeacherTest for', data.classIds.length, 'classes');
+            logger.log('[TestCreate] gradeSubjectId in testData:', testData.gradeSubjectId, 'type:', typeof testData.gradeSubjectId);
+            logger.log('[TestCreate] examTypeId in testData:', testData.examTypeId, 'type:', typeof testData.examTypeId);
 
             // Create test for each selected class
             const testPromises = data.classIds.map(classId =>
@@ -150,7 +168,7 @@ const TestCreate = () => {
             toast.success(`Test created successfully for ${data.classIds.length} class(es)!`);
             navigate("/teacher/tests");
         } catch (error: unknown) {
-            console.error("Error creating test:", error);
+            logger.error("Error creating test:", error);
             const errorMessage = error instanceof Error ? error.message : "Failed to create test";
             toast.error(errorMessage);
         }
@@ -177,7 +195,23 @@ const TestCreate = () => {
                     {defaultType === "Assignment" ? "Design your assignment and set marks" : "Design your assessment"}
                 </p>
 
-                <TestForm onSubmit={handleSubmit} defaultExamType={defaultType || undefined} />
+                <TestForm
+                    onSubmit={handleSubmit}
+                    defaultExamType={defaultType || undefined}
+                    initialData={prefillState?.prefillQuestions ? {
+                        title: prefillState.prefillTitle || '',
+                        durationMinutes: prefillState.prefillDuration || 30,
+                        questions: prefillState.prefillQuestions.map(q => ({
+                            text: q.text,
+                            questionType: q.questionType as any,
+                            options: q.options,
+                            correctOptionIndex: q.correctOptionIndex,
+                            marks: q.marks,
+                            chapter: q.chapter || 'General',
+                            topic: q.topic || 'General',
+                        })),
+                    } as any : undefined}
+                />
             </motion.div>
         </div>
     );
