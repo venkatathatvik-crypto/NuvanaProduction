@@ -81,8 +81,38 @@ export class EngagementController {
     return this.engagementService.getSchoolSessions(schoolId);
   }
 
+  @Get('school/:schoolId/class-subject-analytics')
+  async getClassSubjectAnalytics(@Param('schoolId') schoolId: string) {
+    return this.engagementService.getClassSubjectAnalytics(schoolId);
+  }
+
   @Get('sessions/:id/students')
   async getSessionStudentDetails(@Param('id') sessionId: string) {
     return this.engagementService.getSessionStudentDetails(sessionId);
+  }
+
+  @Get('sessions/:id/leaderboard')
+  async getSessionLeaderboard(@Param('id') sessionId: string) {
+    return this.engagementService.getSessionLeaderboard(sessionId);
+  }
+
+  // ── Tiered Dashboard Endpoints ────────────────────────────────────────────
+
+  // Admin: grade→class breakdown + top teacher
+  @Get('admin/:schoolId/dashboard')
+  async getAdminDashboard(@Param('schoolId') schoolId: string) {
+    return this.engagementService.getAdminDashboard(schoolId);
+  }
+
+  // Teacher: session leaderboard, topic health, at-risk students
+  @Get('teacher/sessions/:sessionId/dashboard')
+  async getTeacherSessionDashboard(@Param('sessionId') sessionId: string) {
+    return this.engagementService.getTeacherSessionDashboard(sessionId);
+  }
+
+  // Student: last 10 scores + class rank
+  @Get('student/:student_id/performance')
+  async getStudentPerformance(@Param('student_id') studentId: string) {
+    return this.engagementService.getStudentPerformance(studentId);
   }
 }

@@ -17,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FileUploadService } from './file-upload.service';
-import { UploadVoiceNoteDto, UploadFileDto } from './dto';
+import { UploadVoiceNoteDto, UploadFileDto, UploadLifeCoachBookDto } from './dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Tenant } from '../auth/decorators/tenant.decorator';
@@ -188,6 +188,34 @@ export class FileUploadController {
   ) {
     const count = await this.fileUploadService.incrementFileDownload(id, schoolId);
     return { downloadCount: count };
+  }
+
+  // ==================== LIFE COACH BOOKS ====================
+
+  @Post('life-coach-books')
+  @Roles('school_admin', 'super_admin')
+  @UseInterceptors(FileInterceptor('file'))
+  @UsePipes(new ValidationPipe({ transform: true, transformOptions: { enableImplicitConversion: true }, whitelist: true, forbidNonWhitelisted: false }))
+  async uploadLifeCoachBook(
+    @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: MAX_PDF_SIZE }), new FileTypeValidator({ fileType: /^application\/pdf$/ })] }))
+    file: Express.Multer.File,
+    @Body() dto: UploadLifeCoachBookDto,
+    @CurrentUser() user: any,
+    @Tenant() schoolId: string,
+  ) {
+    return this.fileUploadService.uploadLifeCoachBook(file, dto, user.sub, schoolId);
+  }
+
+  @Get('life-coach-books')
+  @Roles('school_admin', 'super_admin')
+  async getLifeCoachBooks(@Tenant() schoolId: string) {
+    return this.fileUploadService.getLifeCoachBooks(schoolId);
+  }
+
+  @Delete('life-coach-books/:id')
+  @Roles('school_admin', 'super_admin')
+  async deleteLifeCoachBook(@Param('id') id: string, @Tenant() schoolId: string) {
+    return this.fileUploadService.deleteLifeCoachBook(id, schoolId);
   }
 }
 

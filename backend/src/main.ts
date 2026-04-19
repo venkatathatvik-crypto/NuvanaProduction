@@ -1,20 +1,29 @@
-import { NestFactory, Reflector } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import * as helmet from 'helmet';
+import { SwaggerModule } from '@nestjs/swagger';
+import * as fs from 'node:fs';
+import * as yaml from 'js-yaml';
+import * as path from 'node:path';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
-import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+
+const logger = new Logger('Bootstrap');
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
+
+    // Security headers
+    app.use(helmet.default());
 
     // Enable CORS with production-ready configuration
     app.enableCors({
         origin: (origin, callback) => {
             const allowedOrigins = process.env.NODE_ENV === 'production'
-                ? process.env.FRONTEND_URL?.split(',').map(u => u.trim()) || ['https://your-frontend.vercel.app']
-                : ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:4173', 'https://nuvana360server.onrender.com'];
-            
+                ? process.env.FRONTEND_URL?.split(',').map(u => u.trim()) || []
+                : ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:4173'];
+
             if (!origin || allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
@@ -26,6 +35,17 @@ async function bootstrap() {
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
 
+    // Swagger API docs from static YAML
+    // __dirname at runtime is dist/src/, so go up twice to reach backend/
+    const swaggerFile = path.join(__dirname, '..', '..', 'swagger.yaml');
+    if (fs.existsSync(swaggerFile)) {
+        const swaggerDocument = yaml.load(fs.readFileSync(swaggerFile, 'utf8')) as Record<string, any>;
+        SwaggerModule.setup('api-docs', app, swaggerDocument as any);
+        logger.log('Swagger UI available at /api-docs');
+    } else {
+        logger.warn(`Swagger file not found at ${swaggerFile}`);
+    }
+
     // Global exception filter - must be first
     app.useGlobalFilters(new GlobalExceptionFilter());
 
@@ -35,11 +55,11 @@ async function bootstrap() {
     // Global validation pipe - validates all DTOs
     app.useGlobalPipes(
         new ValidationPipe({
-            whitelist: true, // Strip properties that don't have decorators
-            forbidNonWhitelisted: true, // Throw error if non-whitelisted properties exist
-            transform: true, // Automatically transform payloads to DTO instances
+            whitelist: true,
+            forbidNonWhitelisted: true,
+            transform: true,
             transformOptions: {
-                enableImplicitConversion: true, // Enable type conversion
+                enableImplicitConversion: true,
             },
         }),
     );
@@ -48,16 +68,16 @@ async function bootstrap() {
 
     // Graceful shutdown handlers
     process.on('SIGTERM', async () => {
-        console.log('\n⚠️  SIGTERM signal received: closing HTTP server');
+        logger.warn('SIGTERM signal received: closing HTTP server');
         await app.close();
-        console.log('✅ Server closed gracefully');
+        logger.log('Server closed gracefully');
         process.exit(0);
     });
 
     process.on('SIGINT', async () => {
-        console.log('\n⚠️  SIGINT signal received: closing HTTP server');
+        logger.warn('SIGINT signal received: closing HTTP server');
         await app.close();
-        console.log('✅ Server closed gracefully');
+        logger.log('Server closed gracefully');
         process.exit(0);
     });
 
@@ -66,40 +86,30 @@ async function bootstrap() {
 
     // Global process error handlers
     process.on('unhandledRejection', (reason, promise) => {
-        console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-        // Don't exit here, just log it. Let the app try to continue.
+        logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
     });
 
     process.on('uncaughtException', (error) => {
-        console.error('❌ Uncaught Exception:', error.message, error.stack);
-        // For fatal errors, we might need to exit, but let's log first.
+        logger.error(`Uncaught Exception: ${error.message}`, error.stack);
         if (error.message.includes('ECONNRESET')) {
-            console.warn('⚠️  Detected ECONNRESET - usually transient, continuing...');
-        } else {
-            // Potentially fatal, but let's try to stay alive if possible
-            // process.exit(1); 
+            logger.warn('Detected ECONNRESET - usually transient, continuing...');
         }
     });
 
     // Handle server-level errors (like EADDRINUSE)
     server.on('error', (error: any) => {
-        console.error('❌ Server error:', error.message);
+        logger.error(`Server error: ${error.message}`);
     });
 
-    // Enhanced startup logging
-    console.log('\n');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('🚀 Nuvana Production Backend Server');
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log(`🌍 Server running on: http://localhost:${port}`);
-    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔒 Global Exception Filter: ACTIVE`);
-    console.log(`✨ Response Transformer: ACTIVE`);
-    console.log(`🛡️  Rate Limiting: ACTIVE (100 req/min global, 5 req/min AI)`);
-    console.log(`💉 Validation Pipe: ACTIVE`);
-    console.log(`🏥 Health Check: http://localhost:${port}/health`);
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('');
+    // Startup logging
+    logger.log(`Server running on: http://localhost:${port}`);
+    logger.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.log(`Global Exception Filter: ACTIVE`);
+    logger.log(`Response Transformer: ACTIVE`);
+    logger.log(`Helmet Security Headers: ACTIVE`);
+    logger.log(`Rate Limiting: ACTIVE (100 req/min global, 5 req/min AI)`);
+    logger.log(`Validation Pipe: ACTIVE`);
+    logger.log(`Health Check: http://localhost:${port}/health`);
 }
 
 bootstrap();

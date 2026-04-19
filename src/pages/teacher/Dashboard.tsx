@@ -28,6 +28,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { Skeleton } from "@/components/ui/skeleton";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -62,6 +63,16 @@ const TeacherDashboard = () => {
   };
 
   const isInitialLoading = loadingClasses || (profile?.id && loadingNotifications);
+  // Only show offline empty state when offline AND no cached classes at all.
+  const offlineNoCache = useOfflineLoading(!!isInitialLoading && !classes.length);
+
+  if (offlineNoCache) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Dashboard" />
+      </div>
+    );
+  }
 
   if (isInitialLoading && !classes.length) {
     return (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Users, UserPlus, Upload, Trash2, Loader2, ArrowLeft, Search } from "lucide-react";
+import { Users, UserPlus, Upload, Trash2, Loader2, ArrowLeft, Search, Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,10 @@ import { useAuth } from "@/auth/AuthContext";
 import { academicService } from "@/services/academicApiService";
 import { userService } from "@/services/userService";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
+import { logger } from '@/lib/logger';
+import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 export default function AdminMembers() {
   const navigate = useNavigate();
@@ -22,6 +26,7 @@ export default function AdminMembers() {
   const [newMemberPassword, setNewMemberPassword] = useState("");
   const [newMemberRollNo, setNewMemberRollNo] = useState("");
   const [newMemberParentContact, setNewMemberParentContact] = useState("");
+  const [showMemberPassword, setShowMemberPassword] = useState(false);
   const [newMemberType, setNewMemberType] = useState<"teacher" | "student">("teacher");
   const [isCreatingMember, setIsCreatingMember] = useState(false);
   const [csvImportType, setCsvImportType] = useState<"teacher" | "student">("student");
@@ -31,6 +36,8 @@ export default function AdminMembers() {
   const [studentSearch, setStudentSearch] = useState("");
   const [teacherClassFilter, setTeacherClassFilter] = useState<string>("all");
   const [studentClassFilter, setStudentClassFilter] = useState<string>("all");
+  const [showDeleteMemberDialog, setShowDeleteMemberDialog] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
 
   const { data: classes = [], isLoading: classesLoading } = useQuery({
     queryKey: ['members-classes'],
@@ -111,7 +118,7 @@ export default function AdminMembers() {
       queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
       queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
-      console.error("Error creating user:", error);
+      logger.error("Error creating user:", error);
       toast.error(error.message || "Failed to create user");
     } finally {
       setIsCreatingMember(false);
@@ -192,7 +199,7 @@ export default function AdminMembers() {
                 await userService.updateStudentDetails(createdUser.id, studentDetails);
               }
             } catch (studentDetailsError: any) {
-              console.error(`Error saving student details for ${user.email}:`, studentDetailsError);
+              logger.error(`Error saving student details for ${user.email}:`, studentDetailsError);
             }
           }
           successCount++;
@@ -211,17 +218,22 @@ export default function AdminMembers() {
       queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
       queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
-      console.error("CSV Import Error:", error);
+      logger.error("CSV Import Error:", error);
       toast.error("Failed to process CSV file");
     } finally {
       setIsImporting(false);
     }
   };
 
-  const deleteMember = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this member? This action cannot be undone.")) return;
+  const deleteMember = (id: string) => {
+    setMemberToDelete(id);
+    setShowDeleteMemberDialog(true);
+  };
+
+  const confirmDeleteMember = async () => {
+    if (!memberToDelete) return;
     try {
-      await userService.deleteUser(id);
+      await userService.deleteUser(memberToDelete);
       toast.success("Member deleted successfully");
       // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ['members-teachers'] });
@@ -229,8 +241,11 @@ export default function AdminMembers() {
       queryClient.invalidateQueries({ queryKey: ['assignments-teachers'] });
       queryClient.invalidateQueries({ queryKey: ['assignments-students'] });
     } catch (error: any) {
-      console.error("Error deleting member:", error);
+      logger.error("Error deleting member:", error);
       toast.error(error.message || "Failed to delete member");
+    } finally {
+      setShowDeleteMemberDialog(false);
+      setMemberToDelete(null);
     }
   };
 
@@ -258,10 +273,33 @@ export default function AdminMembers() {
     return matchesSearch && matchesClass;
   });
 
-  if (loading) {
+  const offlineLoading = useOfflineLoading(loading);
+
+  if (offlineLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <OfflineEmptyState pageName="Members" />
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Skeleton className="h-10 w-10 rounded" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-56" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-full max-w-md rounded" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-64 rounded-xl" />
+            <Skeleton className="h-64 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -327,7 +365,12 @@ export default function AdminMembers() {
                     <div className="space-y-4">
                       <Input placeholder="Name" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} />
                       <Input placeholder="Email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
-                      <Input placeholder="Password" type="password" value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} />
+                      <div className="relative">
+                        <Input placeholder="Password" type={showMemberPassword ? "text" : "password"} value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} className="pr-10" />
+                        <button type="button" onClick={() => setShowMemberPassword(!showMemberPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showMemberPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
                       <Button className="w-full" onClick={() => handleCreateMember("teacher")} disabled={isCreatingMember}>
                         {isCreatingMember ? (
                           <>
@@ -511,7 +554,12 @@ export default function AdminMembers() {
                     <div className="space-y-4">
                       <Input placeholder="Name" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} />
                       <Input placeholder="Email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} />
-                      <Input placeholder="Password" type="password" value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} />
+                      <div className="relative">
+                        <Input placeholder="Password" type={showMemberPassword ? "text" : "password"} value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} className="pr-10" />
+                        <button type="button" onClick={() => setShowMemberPassword(!showMemberPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showMemberPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
                       <Input placeholder="Roll Number (Optional)" value={newMemberRollNo} onChange={(e) => setNewMemberRollNo(e.target.value)} />
                       <Input placeholder="Parent Contact (Optional)" value={newMemberParentContact} onChange={(e) => setNewMemberParentContact(e.target.value)} />
                       <Button className="w-full" onClick={() => handleCreateMember("student")} disabled={isCreatingMember}>
@@ -670,6 +718,16 @@ export default function AdminMembers() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteMemberDialog}
+        onOpenChange={setShowDeleteMemberDialog}
+        onConfirm={confirmDeleteMember}
+        title="Delete Member"
+        description="Are you sure you want to delete this member? This action cannot be undone and will permanently remove the user and all associated data."
+        confirmText="Delete"
+        variant="destructive"
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { getStudentGradedTests, StudentGradedTest } from "@/services/academic";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import {
   Table,
   TableBody,
@@ -146,6 +147,18 @@ const Marks = () => {
     if (grade.startsWith("B")) return "text-neon-purple";
     return "text-neon-pink";
   };
+
+  const offlineLoading = useOfflineLoading(loading);
+
+  if (offlineLoading) {
+    return (
+      <div className="min-h-screen p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto">
+          <OfflineEmptyState pageName="Marks & Results" />
+        </div>
+      </div>
+    );
+  }
 
   if (loading || profileLoading) {
     return (

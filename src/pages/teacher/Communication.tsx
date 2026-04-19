@@ -22,6 +22,7 @@ import { userService } from "@/services/userService";
 import { formatDistanceToNow, format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { whatsappApi, type WhatsappMessage } from "@/services/whatsappApiService";
+import { logger } from '@/lib/logger';
 
 const TeacherCommunication = () => {
     const navigate = useNavigate();
@@ -62,7 +63,7 @@ const TeacherCommunication = () => {
                     setAdminId(admin.id);
                 }
             } catch (error) {
-                console.error("Error fetching admin:", error);
+                logger.error("Error fetching admin:", error);
             }
         };
         fetchAdmin();
@@ -88,7 +89,7 @@ const TeacherCommunication = () => {
                 const teacherClasses = await getTeacherClasses(profile.id, profile.school_id);
                 setClasses(teacherClasses);
             } catch (error) {
-                console.error("Error fetching teacher classes:", error);
+                logger.error("Error fetching teacher classes:", error);
                 toast.error("Failed to load classes");
             } finally {
                 setClassesLoading(false);
@@ -111,7 +112,7 @@ const TeacherCommunication = () => {
                 const classStudents = await getStudentsByClass(parentClass);
                 setStudents(classStudents);
             } catch (error) {
-                console.error("Error fetching students:", error);
+                logger.error("Error fetching students:", error);
                 toast.error("Failed to load students");
             } finally {
                 setStudentsLoading(false);
@@ -146,7 +147,7 @@ const TeacherCommunication = () => {
             queryClient.invalidateQueries({ queryKey: ['messages-conversation', adminId] });
             queryClient.invalidateQueries({ queryKey: ['messages-conversations'] });
         } catch (error: any) {
-            console.error("Error sending message:", error);
+            logger.error("Error sending message:", error);
             toast.error(error.message || "Failed to send message");
         } finally {
             setLoading(false);
@@ -259,7 +260,7 @@ const TeacherCommunication = () => {
             // Invalidate history query
             queryClient.invalidateQueries({ queryKey: ['whatsapp-history'] });
         } catch (error: any) {
-            console.error("Error sending WhatsApp broadcast:", error);
+            logger.error("Error sending WhatsApp broadcast:", error);
             toast.error(error.message || "Failed to send WhatsApp message");
         } finally {
             setLoading(false);

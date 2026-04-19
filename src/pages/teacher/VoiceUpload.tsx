@@ -41,6 +41,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { logger } from '@/lib/logger';
 
 const VoiceUpload = () => {
   const navigate = useNavigate();
@@ -214,7 +215,7 @@ const VoiceUpload = () => {
 
       toast.info("Recording started...");
     } catch (error) {
-      console.error("Error accessing microphone:", error);
+      logger.error("Error accessing microphone:", error);
       toast.error("Failed to access microphone. Please check permissions.");
     }
   };
@@ -285,7 +286,7 @@ const VoiceUpload = () => {
       queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error: any) {
-      console.error("Error uploading voice note:", error);
+      logger.error("Error uploading voice note:", error);
       toast.error(error.message || "Failed to upload voice note.");
     } finally {
       setIsUploading(false);
@@ -383,7 +384,7 @@ const VoiceUpload = () => {
       queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error: any) {
-      console.error("Error uploading voice note:", error);
+      logger.error("Error uploading voice note:", error);
       toast.error(error.message || "Failed to upload voice note.");
     } finally {
       setIsUploading(false);
@@ -430,7 +431,7 @@ const VoiceUpload = () => {
         queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) 
       });
     } catch (error: any) {
-      console.error("Error deleting voice note:", error);
+      logger.error("Error deleting voice note:", error);
       toast.error(error.message || "Failed to delete voice note.");
     } finally {
       setVoiceNoteToDelete(null);
@@ -451,21 +452,30 @@ const VoiceUpload = () => {
       window.URL.revokeObjectURL(url);
       toast.success("Audio note downloaded successfully");
     } catch (error) {
-      console.error("Error downloading voice note:", error);
+      logger.error("Error downloading voice note:", error);
       toast.error("Failed to download voice note.");
     }
   };
 
   const handlePlay = async (voiceNote: TeacherVoiceNote) => {
     if (audioRef.current) {
-      if (playingVoiceNoteId === voiceNote.id && !audioRef.current.paused) {
-        // Pause if same voice note is playing
-        audioRef.current.pause();
-        setIsPlaying(false);
-        setPlayingVoiceNoteId(null);
+      if (playingVoiceNoteId === voiceNote.id) {
+        // Toggle pause/resume for same voice note
+        if (audioRef.current.paused) {
+          try {
+            await audioRef.current.play();
+            setIsPlaying(true);
+          } catch (error) {
+            logger.error("Resume error:", error);
+            toast.error("Playback failed.");
+          }
+        } else {
+          audioRef.current.pause();
+          setIsPlaying(false);
+        }
       } else {
         try {
-          // Reset and load new source
+          // Play a different voice note
           audioRef.current.pause();
           audioRef.current.src = voiceNote.storageUrl;
           audioRef.current.load();
@@ -474,7 +484,7 @@ const VoiceUpload = () => {
           setIsPlaying(true);
           setPlayingVoiceNoteId(voiceNote.id);
         } catch (error) {
-          console.error("Playback error:", error);
+          logger.error("Playback error:", error);
           toast.error("Cannot play this audio format. Please download it instead.");
           setIsPlaying(false);
           setPlayingVoiceNoteId(null);

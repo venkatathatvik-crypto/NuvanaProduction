@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(grep -v \"^.*//.*isLoading\")",
+      "Read(//c/Users/saite/OneDrive/Desktop/Free Lance App/Nuvana-Production/NuvanaProduction/**)",
+      "Read(//c/Users/saite/.claude/projects/c--Users-saite-OneDrive-Desktop-Free-Lance-App-Nuvana-Production-NuvanaProduction/**)",
+      "Read(//c/Users/saite/OneDrive/Desktop/Free/ Lance/ App/Nuvana-Production/NuvanaProduction/**)",
+      "Bash(ls -la .env*)",
+      "Bash(npm install helmet @types/helmet)",
+      "Bash(node --version)",
+      "Bash(npx tsc --noEmit --pretty)",
+      "Bash(xargs grep:*)",
+      "Bash(npm install:*)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(find backend:*)",
+      "Read(//c/c/**)",
+      "Bash(find /c -type f -name *Student*Chat*)",
+      "Read(//c/Users/saite/OneDrive/Desktop/**)"
+    ]
+  }
+}

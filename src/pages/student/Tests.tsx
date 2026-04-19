@@ -11,6 +11,7 @@ import { getStudentData, getStudentTests, StudentTest } from "@/services/academi
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 
 const StudentTests = () => {
     const navigate = useNavigate();
@@ -33,6 +34,8 @@ const StudentTests = () => {
         },
         enabled: !!studentData?.class_id && !!profile?.id,
     });
+
+    const offlineLoading = useOfflineLoading(loading);
 
     const getStatusBadge = (status: StudentTest["submissionStatus"]) => {
         switch (status) {
@@ -135,6 +138,9 @@ const StudentTests = () => {
                 </div>
             </motion.div>
 
+            {offlineLoading ? (
+              <OfflineEmptyState pageName="Tests & Assessments" />
+            ) : (
             <Tabs defaultValue="upcoming" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="upcoming" className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Upcoming ({upcomingTests.length})</TabsTrigger>
@@ -220,6 +226,7 @@ const StudentTests = () => {
                     )}
                 </TabsContent>
             </Tabs>
+            )}
         </div>
     );
 };

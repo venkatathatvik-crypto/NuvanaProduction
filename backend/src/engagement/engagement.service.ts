@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SendQuestionDto } from './dto/send-question.dto';
@@ -6,6 +6,8 @@ import { SubmitResponseDto } from './dto/submit-response.dto';
 
 @Injectable()
 export class EngagementService {
+  private readonly logger = new Logger(EngagementService.name);
+
   constructor(private prisma: PrismaService) {}
 
   // Create a new engagement session
@@ -33,28 +35,16 @@ export class EngagementService {
     return session;
   }
 
-  // End a session
+  // End a session (wraps finalization in a $transaction)
   async endSession(sessionId: string) {
     const session = await this.prisma.engagement_sessions.findUnique({
       where: { id: sessionId },
     });
 
-    if (!session) {
-      throw new NotFoundException('Session not found');
-    }
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.status === 'ended') throw new BadRequestException('Session already ended');
 
-    if (session.status === 'ended') {
-      throw new BadRequestException('Session already ended');
-    }
-
-    const updated = await this.prisma.engagement_sessions.update({
-      where: { id: sessionId },
-      data: {
-        status: 'ended',
-        ended_at: new Date(),
-      },
-    });
-
+    const updated = await this.finalizeSession(sessionId);
     return updated;
   }
 
@@ -134,34 +124,33 @@ export class EngagementService {
       throw new BadRequestException('Already answered this question');
     }
 
-    // Calculate correctness and points
+    // ── Combined Scoring Engine ───────────────────────────────────────────────
+    // progress   = fraction of time limit used (0 = instant, 1 = at limit)
+    // speedFactor= continuous speed measure (0 = slowest, 1 = instant)
+    // baseScore  = 70-100 continuous (spec formula)
+    // tier       = 4-bracket multiplier to keep tier-distribution analytics
     const isCorrect = dto.selected_option === question.correct_option;
     let pointsEarned = 0;
 
     if (isCorrect) {
-      const timeElapsed = dto.response_time_ms / 1000;
-      const timeLimit = question.time_limit_seconds;
-      const progress = timeElapsed / timeLimit;
+      const timeLimit = question.time_limit_seconds ?? 30;
+      const progress  = dto.response_time_ms / (timeLimit * 1000);
+      const speedFactor = Math.max(0, Math.min(1, 1 - progress));
+      const baseScore   = 70 + speedFactor * 30; // 70–100
 
-      console.log(`[CALCULATION LOG] Student ${dto.student_id} response time: ${dto.response_time_ms}ms (${timeElapsed}s)`);
-      console.log(`[CALCULATION LOG] Time limit: ${timeLimit}s. Progress: ${(progress * 100).toFixed(2)}% of limit`);
+      let tierMultiplier: number;
+      let tierLabel: string;
+      if (progress <= 0.25)      { tierMultiplier = 1.00; tierLabel = 'Elite (<25%)'; }
+      else if (progress <= 0.50) { tierMultiplier = 0.75; tierLabel = 'Fast (25-50%)'; }
+      else if (progress <= 0.75) { tierMultiplier = 0.50; tierLabel = 'Medium (50-75%)'; }
+      else                       { tierMultiplier = 0.25; tierLabel = 'Slow (>75%)'; }
 
-      if (progress <= 0.25) {
-        pointsEarned = question.points; // 100%
-        console.log(`[CALCULATION LOG] Tier 1 (<25%): 100% points awarded (${pointsEarned})`);
-      } else if (progress <= 0.5) {
-        pointsEarned = Math.round(question.points * 0.75); // 75%
-        console.log(`[CALCULATION LOG] Tier 2 (25-50%): 75% points awarded (${pointsEarned})`);
-      } else if (progress <= 0.75) {
-        pointsEarned = Math.round(question.points * 0.5); // 50%
-        console.log(`[CALCULATION LOG] Tier 3 (50-75%): 50% points awarded (${pointsEarned})`);
-      } else {
-        pointsEarned = Math.round(question.points * 0.25); // 25%
-        console.log(`[CALCULATION LOG] Tier 4 (>75%): 25% points awarded (${pointsEarned})`);
-      }
+      pointsEarned = Math.floor(baseScore * tierMultiplier);
+
+      this.logger.log(`[SCORING] Student ${dto.student_id} | Time: ${dto.response_time_ms}ms / ${timeLimit}s | Progress: ${(progress * 100).toFixed(1)}% | SpeedFactor: ${speedFactor.toFixed(3)} | BaseScore: ${baseScore.toFixed(1)} | Tier: ${tierLabel} (×${tierMultiplier}) | Points: ${pointsEarned}`);
     }
 
-    console.log(`[DEBUG] Submitting response for student ${dto.student_id}, question ${dto.question_id}, Correct: ${isCorrect}`);
+    this.logger.log(`[DEBUG] Submitting response for student ${dto.student_id}, question ${dto.question_id}, Correct: ${isCorrect}`);
 
     // Save response
     const response = await this.prisma.student_responses.create({
@@ -190,7 +179,7 @@ export class EngagementService {
 
     // Update analytics synchronously to ensure real-time dashboards see the latest data
     await this.updateAnalytics(question.session_id, dto.student_id).catch((err) =>
-      console.error('Failed to update analytics:', err),
+      this.logger.error('Failed to update analytics:', err),
     );
 
     return {
@@ -313,9 +302,9 @@ export class EngagementService {
       },
     });
 
-    console.log(`[DEBUG] Found ${sessions.length} sessions for teacher ${teacherId}`);
+    this.logger.log(`[DEBUG] Found ${sessions.length} sessions for teacher ${teacherId}`);
     if (sessions.length > 0) {
-      console.log(`[DEBUG] First session status: ${sessions[0].status}, Questions: ${sessions[0].pop_questions?.length}, Analytics: ${sessions[0].engagement_analytics?.length}`);
+      this.logger.log(`[DEBUG] First session status: ${sessions[0].status}, Questions: ${sessions[0].pop_questions?.length}, Analytics: ${sessions[0].engagement_analytics?.length}`);
     }
 
     return sessions;
@@ -401,7 +390,7 @@ export class EngagementService {
 
   // Get school-wide engagement analytics
   async getSchoolAnalytics(schoolId: string) {
-    console.log(`[EngagementService] Fetching school analytics for schoolId: ${schoolId}`);
+    this.logger.log(`[EngagementService] Fetching school analytics for schoolId: ${schoolId}`);
     
     const analytics = await this.prisma.engagement_analytics.findMany({
       where: { school_id: schoolId },
@@ -587,12 +576,21 @@ export class EngagementService {
                 grade_levels: true
               }
             },
+            files: {
+              include: {
+                grade_subjects: {
+                  include: {
+                    subjects_master: true
+                  }
+                }
+              }
+            }
           }
         }
       }
     });
 
-    return teachers.map(teacher => {
+    const result = teachers.map(teacher => {
       const sessions = (teacher as any).engagement_sessions || [];
       const allAnalytics = sessions.flatMap((s: any) => s.engagement_analytics || []);
       
@@ -604,6 +602,17 @@ export class EngagementService {
         ? allAnalytics.reduce((sum: number, a: any) => sum + Number(a.accuracy_rate || 0), 0) / allAnalytics.length
         : 0;
 
+      const avgResponseTime = allAnalytics.length > 0
+        ? allAnalytics.reduce((sum: number, a: any) => sum + Number(a.avg_response_time_ms || 0), 0) / allAnalytics.length
+        : 0;
+
+      // Compute a 0-10 engagement score:
+      // accuracy 40% + participation 40% + speed bonus 20%
+      // speed bonus: max 100 when avgResponseTime <= 1000ms, scales down
+      const speedScore = avgResponseTime > 0 ? Math.max(0, 100 - avgResponseTime / 100) : 50;
+      const rawScore = avgAccuracy * 0.4 + avgParticipation * 0.4 + speedScore * 0.2;
+      const score = Math.min(10, rawScore / 10);
+
       // Extract unique classes
       const uniqueClasses = new Set<string>();
       sessions.forEach((s: any) => {
@@ -612,16 +621,505 @@ export class EngagementService {
         uniqueClasses.add(gradeName ? `${gradeName} - ${sectionName}` : sectionName);
       });
 
+      // Extract unique subjects via files → grade_subjects → subjects_master
+      const uniqueSubjects = new Set<string>();
+      sessions.forEach((s: any) => {
+        const subjectName = s.files?.grade_subjects?.subjects_master?.name;
+        if (subjectName) uniqueSubjects.add(subjectName);
+      });
+
       const classLabel = Array.from(uniqueClasses).slice(0, 2).join(', ') + (uniqueClasses.size > 2 ? '...' : '');
+      const subjectLabel = Array.from(uniqueSubjects).slice(0, 2).join(', ') + (uniqueSubjects.size > 2 ? '...' : '');
 
       return {
         name: teacher.name,
         sessions: sessions.length,
         participation: Math.round(avgParticipation),
         accuracy: Math.round(avgAccuracy),
-        grade: classLabel || 'N/A'
+        avgResponseTime: Math.round(avgResponseTime),
+        score: Math.round(score * 10) / 10,
+        grade: classLabel || 'N/A',
+        subject: subjectLabel || 'N/A',
+        classes: Array.from(uniqueClasses),
+        subjects: Array.from(uniqueSubjects),
       };
-    }).sort((a, b) => b.participation - a.participation).slice(0, 10);
+    }).sort((a, b) => b.score - a.score).slice(0, 20);
+
+    return result;
+  }
+
+  // Get per-class and per-subject engagement breakdown for admin dashboard
+  async getClassSubjectAnalytics(schoolId: string) {
+    const sessions = await this.prisma.engagement_sessions.findMany({
+      where: { school_id: schoolId },
+      include: {
+        classes: {
+          include: { grade_levels: true }
+        },
+        files: {
+          include: {
+            grade_subjects: {
+              include: { subjects_master: true }
+            }
+          }
+        },
+        engagement_analytics: true,
+      }
+    });
+
+    // ---- By Class ----
+    const classMap = new Map<string, { sessions: number; totalAccuracy: number; totalParticipation: number; totalResponseTime: number; count: number }>();
+    for (const s of sessions) {
+      const gradeName = s.classes?.grade_levels?.name || '';
+      const sectionName = s.classes?.name || 'General';
+      const key = gradeName ? `${gradeName} - ${sectionName}` : sectionName;
+
+      const analytics = s.engagement_analytics || [];
+      const avgAcc = analytics.length > 0
+        ? analytics.reduce((sum, a) => sum + Number(a.accuracy_rate || 0), 0) / analytics.length
+        : 0;
+      const avgPart = analytics.length > 0
+        ? analytics.reduce((sum, a) => sum + Number(a.participation_rate || 0), 0) / analytics.length
+        : 0;
+      const avgRT = analytics.length > 0
+        ? analytics.reduce((sum, a) => sum + Number(a.avg_response_time_ms || 0), 0) / analytics.length
+        : 0;
+
+      const existing = classMap.get(key) || { sessions: 0, totalAccuracy: 0, totalParticipation: 0, totalResponseTime: 0, count: 0 };
+      classMap.set(key, {
+        sessions: existing.sessions + 1,
+        totalAccuracy: existing.totalAccuracy + avgAcc,
+        totalParticipation: existing.totalParticipation + avgPart,
+        totalResponseTime: existing.totalResponseTime + avgRT,
+        count: existing.count + 1,
+      });
+    }
+
+    const byClass = Array.from(classMap.entries()).map(([className, data]) => ({
+      className,
+      sessions: data.sessions,
+      avgAccuracy: Math.round(data.totalAccuracy / data.count),
+      avgParticipation: Math.round(data.totalParticipation / data.count),
+      avgResponseTime: Math.round(data.totalResponseTime / data.count),
+    })).sort((a, b) => b.avgParticipation - a.avgParticipation);
+
+    // ---- By Subject ----
+    const subjectMap = new Map<string, { sessions: number; totalAccuracy: number; totalParticipation: number; totalResponseTime: number; count: number }>();
+    for (const s of sessions) {
+      const subjectName = (s as any).files?.grade_subjects?.subjects_master?.name;
+      if (!subjectName) continue;
+
+      const analytics = s.engagement_analytics || [];
+      const avgAcc = analytics.length > 0
+        ? analytics.reduce((sum, a) => sum + Number(a.accuracy_rate || 0), 0) / analytics.length
+        : 0;
+      const avgPart = analytics.length > 0
+        ? analytics.reduce((sum, a) => sum + Number(a.participation_rate || 0), 0) / analytics.length
+        : 0;
+      const avgRT = analytics.length > 0
+        ? analytics.reduce((sum, a) => sum + Number(a.avg_response_time_ms || 0), 0) / analytics.length
+        : 0;
+
+      const existing = subjectMap.get(subjectName) || { sessions: 0, totalAccuracy: 0, totalParticipation: 0, totalResponseTime: 0, count: 0 };
+      subjectMap.set(subjectName, {
+        sessions: existing.sessions + 1,
+        totalAccuracy: existing.totalAccuracy + avgAcc,
+        totalParticipation: existing.totalParticipation + avgPart,
+        totalResponseTime: existing.totalResponseTime + avgRT,
+        count: existing.count + 1,
+      });
+    }
+
+    const bySubject = Array.from(subjectMap.entries()).map(([subjectName, data]) => ({
+      subjectName,
+      sessions: data.sessions,
+      avgAccuracy: Math.round(data.totalAccuracy / data.count),
+      avgParticipation: Math.round(data.totalParticipation / data.count),
+      avgResponseTime: Math.round(data.totalResponseTime / data.count),
+    })).sort((a, b) => b.avgParticipation - a.avgParticipation);
+
+    return { byClass, bySubject };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SESSION FINALIZER — called by endSession, runs inside $transaction
+  // ═══════════════════════════════════════════════════════════════════════════
+  private async finalizeSession(sessionId: string) {
+    // Load full session data outside the transaction (read-only)
+    const sessionData = await this.prisma.engagement_sessions.findUnique({
+      where: { id: sessionId },
+      include: {
+        pop_questions: {
+          include: { student_responses: true },
+        },
+      },
+    });
+
+    if (!sessionData) throw new NotFoundException('Session not found');
+
+    const totalQuestions = sessionData.pop_questions.length;
+
+    // Build per-student aggregates
+    const studentMap = new Map<string, {
+      answered: number; correct: number;
+      totalPoints: number; totalResponseTime: number;
+    }>();
+
+    for (const q of sessionData.pop_questions) {
+      for (const r of q.student_responses) {
+        const prev = studentMap.get(r.student_id) || { answered: 0, correct: 0, totalPoints: 0, totalResponseTime: 0 };
+        studentMap.set(r.student_id, {
+          answered:          prev.answered + 1,
+          correct:           prev.correct + (r.is_correct ? 1 : 0),
+          totalPoints:       prev.totalPoints + (r.points_earned ?? 0),
+          totalResponseTime: prev.totalResponseTime + r.response_time_ms,
+        });
+      }
+    }
+
+    // Run $transaction: mark session ended + upsert per-student analytics
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // 1. Mark session ended
+      const endedSession = await tx.engagement_sessions.update({
+        where: { id: sessionId },
+        data: { status: 'ended', ended_at: new Date() },
+      });
+
+      // 2. Upsert engagement_analytics for each participating student
+      for (const [studentId, agg] of studentMap.entries()) {
+        const participationRate = totalQuestions > 0 ? (agg.answered / totalQuestions) * 100 : 0;
+        const accuracyRate      = agg.answered > 0  ? (agg.correct  / agg.answered)   * 100 : 0;
+        const avgRT             = agg.answered > 0  ? agg.totalResponseTime / agg.answered : null;
+
+        // engagement_score: participation 40% + accuracy 40% + speed bonus 20%
+        const speedBonus    = avgRT ? Math.max(0, 100 - avgRT / 1000) * 0.2 : 0;
+        const engagementScore = participationRate * 0.4 + accuracyRate * 0.4 + speedBonus;
+
+        await tx.engagement_analytics.upsert({
+          where: { session_id_student_id: { session_id: sessionId, student_id: studentId } },
+          create: {
+            session_id:          sessionId,
+            student_id:          studentId,
+            school_id:           sessionData.school_id,
+            total_questions:     totalQuestions,
+            questions_answered:  agg.answered,
+            questions_correct:   agg.correct,
+            total_points_earned: agg.totalPoints,
+            avg_response_time_ms: avgRT ? Math.round(avgRT) : null,
+            participation_rate:   participationRate,
+            accuracy_rate:        accuracyRate,
+            engagement_score:     engagementScore,
+          },
+          update: {
+            total_questions:     totalQuestions,
+            questions_answered:  agg.answered,
+            questions_correct:   agg.correct,
+            total_points_earned: agg.totalPoints,
+            avg_response_time_ms: avgRT ? Math.round(avgRT) : null,
+            participation_rate:   participationRate,
+            accuracy_rate:        accuracyRate,
+            engagement_score:     engagementScore,
+          },
+        });
+      }
+
+      return endedSession;
+    });
+
+    // 3. After transaction: update teacher efficiency and student term summaries
+  await this.upsertTeacherEfficiency(sessionData.teacher_id, sessionData.school_id).catch(err =>
+    this.logger.error('[finalizeSession] Failed to update teacher efficiency:', err),
+  );
+
+  for (const studentId of studentMap.keys()) {
+    await this.updateStudentTermSummary(studentId, sessionData.school_id).catch(err =>
+      this.logger.error(`[finalizeSession] Failed to update term summary for ${studentId}:`, err),
+    );
+  }
+
+  this.logger.log(`[finalizeSession] Session ${sessionId} finalized. ${studentMap.size} students processed.`);
+  return updated;
+}
+
+  // ── Teacher Efficiency Metrics Upsert ─────────────────────────────────────
+  private async upsertTeacherEfficiency(teacherId: string, schoolId: string) {
+    const termId = `TERM-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    // Load all analytics for all sessions the teacher has ever conducted
+    const teacherSessions = await this.prisma.engagement_sessions.findMany({
+      where: { teacher_id: teacherId, school_id: schoolId },
+      include: { engagement_analytics: true, pop_questions: { select: { id: true } } },
+    });
+
+    const allAnalytics = teacherSessions.flatMap(s => s.engagement_analytics);
+
+    if (allAnalytics.length === 0) return;
+
+    const avgParticipation  = allAnalytics.reduce((s, a) => s + Number(a.participation_rate || 0), 0) / allAnalytics.length;
+    const avgAccuracy       = allAnalytics.reduce((s, a) => s + Number(a.accuracy_rate      || 0), 0) / allAnalytics.length;
+    const avgEngagement     = allAnalytics.reduce((s, a) => s + Number(a.engagement_score   || 0), 0) / allAnalytics.length;
+
+    const totalQuestionsSent = teacherSessions.reduce((s, sess) => s + (sess.pop_questions?.length ?? 0), 0);
+
+    // combined_efficiency_score = participation 40% + accuracy 40% + engagement 20%
+    const combinedScore = avgParticipation * 0.4 + avgAccuracy * 0.4 + avgEngagement * 0.2;
+
+    await this.prisma.teacher_efficiency_metrics.upsert({
+      where: { teacher_id_term_id: { teacher_id: teacherId, term_id: termId } },
+      create: {
+        teacher_id:                 teacherId,
+        school_id:                  schoolId,
+        term_id:                    termId,
+        academic_year:              `${new Date().getFullYear()}`,
+        total_sessions_conducted:   teacherSessions.length,
+        total_questions_sent:       totalQuestionsSent,
+        avg_class_participation:    avgParticipation,
+        avg_class_accuracy:         avgAccuracy,
+        avg_engagement_score:       avgEngagement,
+        combined_efficiency_score:  combinedScore,
+      },
+      update: {
+        total_sessions_conducted:   teacherSessions.length,
+        total_questions_sent:       totalQuestionsSent,
+        avg_class_participation:    avgParticipation,
+        avg_class_accuracy:         avgAccuracy,
+        avg_engagement_score:       avgEngagement,
+        combined_efficiency_score:  combinedScore,
+      },
+    });
+
+    this.logger.log(`[upsertTeacherEfficiency] Teacher ${teacherId} | Term ${termId} | Combined score: ${combinedScore.toFixed(2)}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DASHBOARD ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Admin Dashboard: grade → class breakdown + top teacher
+async getAdminDashboard(schoolId: string) {
+  const sessions = await this.prisma.engagement_sessions.findMany({
+    where: { school_id: schoolId },
+    include: {
+      classes: { include: { grade_levels: true } },
+      engagement_analytics: true,
+    },
+  });
+
+  // Grouping by Grade
+  const gradeMap = new Map<string, any>();
+
+  for (const s of sessions) {
+    const gradeName = s.classes?.grade_levels?.name || 'Unknown Grade';
+    const className = s.classes?.name || 'General';
+    const classId = s.classes?.id || 'default';
+    const analytics = s.engagement_analytics || [];
+    
+    const avgAcc = analytics.length > 0 ? analytics.reduce((sum, a) => sum + Number(a.accuracy_rate || 0), 0) / analytics.length : 0;
+    const avgPart = analytics.length > 0 ? analytics.reduce((sum, a) => sum + Number(a.participation_rate || 0), 0) / analytics.length : 0;
+
+    if (!gradeMap.has(gradeName)) {
+      gradeMap.set(gradeName, { grade: gradeName, classes: new Map(), totalSessions: 0, sumPart: 0 });
+    }
+
+    const g = gradeMap.get(gradeName);
+    g.totalSessions += 1;
+    g.sumPart += avgPart;
+
+    if (!g.classes.has(classId)) {
+      g.classes.set(classId, { classId, className, sessions: 0, sumAcc: 0, sumPart: 0 });
+    }
+    const c = g.classes.get(classId);
+    c.sessions += 1;
+    c.sumAcc += avgAcc;
+    c.sumPart += avgPart;
+  }
+
+  const byGrade = Array.from(gradeMap.values()).map(g => ({
+    grade: g.grade,
+    avgParticipation: Math.round(g.sumPart / g.totalSessions),
+    totalSessions: g.totalSessions,
+    classes: Array.from(g.classes.values()).map((c: any) => ({
+      classId: c.classId,
+      className: c.className,
+      avgAccuracy: Math.round(c.sumAcc / c.sessions),
+      avgParticipation: Math.round(c.sumPart / c.sessions),
+    }))
+  })).sort((a, b) => b.avgParticipation - a.avgParticipation);
+
+  // Top teacher logic (unchanged)
+  const topMetric = await this.prisma.teacher_efficiency_metrics.findFirst({
+    where: { school_id: schoolId },
+    orderBy: { combined_efficiency_score: 'desc' },
+    include: { profiles: { select: { name: true } } },
+  });
+
+  const topTeacher = topMetric ? {
+    name: topMetric.profiles.name,
+    avgParticipation: Math.round(Number(topMetric.avg_class_participation || 0)),
+    avgAccuracy: Math.round(Number(topMetric.avg_class_accuracy || 0)),
+    combinedScore: Math.round(Number(topMetric.combined_efficiency_score || 0) * 10) / 10,
+    totalSessions: topMetric.total_sessions_conducted,
+  } : null;
+
+  return { byGrade, topTeacher };
+}
+
+// Teacher Session Dashboard: leaderboard, topic health, at-risk students
+async getTeacherSessionDashboard(sessionId: string) {
+    const session = await this.prisma.engagement_sessions.findUnique({
+      where: { id: sessionId },
+      include: {
+        pop_questions: {
+          orderBy: { sent_at: 'asc' },
+          include: { student_responses: { include: { profiles: { select: { id: true, name: true } } } } },
+        },
+        engagement_analytics: {
+          include: { profiles: { select: { id: true, name: true } } },
+          orderBy: { total_points_earned: 'desc' },
+        },
+      },
+    });
+
+    if (!session) throw new NotFoundException('Session not found');
+
+    const totalQuestions = session.pop_questions.length;
+    const avgTimeLimit   = totalQuestions > 0
+      ? session.pop_questions.reduce((s, q) => s + (q.time_limit_seconds ?? 30), 0) / totalQuestions
+      : 30;
+
+    // 1. Leaderboard — ranked by total_points_earned
+    const leaderboard = session.engagement_analytics.map((a, i) => ({
+      rank:           i + 1,
+      studentId:      a.student_id,
+      studentName:    (a as any).profiles?.name || 'Unknown',
+      pointsEarned:   (a as any).total_points_earned ?? 0,
+      accuracy:       Math.round(Number(a.accuracy_rate     || 0)),
+      participation:  Math.round(Number(a.participation_rate || 0)),
+      engagementScore: Math.round(Number(a.engagement_score || 0) * 10) / 10,
+    }));
+
+    // 2. Topic Health — per question correctness %
+    const topicHealth = session.pop_questions.map(q => {
+      const total   = q.student_responses.length;
+      const correct = q.student_responses.filter(r => r.is_correct).length;
+      const pct     = total > 0 ? Math.round((correct / total) * 100) : 0;
+      return {
+        questionId:     q.id,
+        questionText:   q.question_text,
+        totalResponses: total,
+        correctCount:   correct,
+        pctCorrect:     pct,
+        requiresReview: pct < 50,
+      };
+    });
+
+    // 3. At-Risk — accuracy < 40% OR avg response time > 80% of avg time limit
+    const atRiskThresholdMs = avgTimeLimit * 1000 * 0.8;
+    const atRisk = session.engagement_analytics
+      .filter(a =>
+        Number(a.accuracy_rate || 0) < 40 ||
+        (a.avg_response_time_ms !== null && a.avg_response_time_ms > atRiskThresholdMs),
+      )
+      .map(a => ({
+        studentId:       a.student_id,
+        studentName:     (a as any).profiles?.name || 'Unknown',
+        accuracy:        Math.round(Number(a.accuracy_rate     || 0)),
+        avgResponseTime: a.avg_response_time_ms ?? 0,
+        reason:          [
+          Number(a.accuracy_rate || 0) < 40 ? 'Low accuracy (<40%)' : null,
+          (a.avg_response_time_ms !== null && a.avg_response_time_ms > atRiskThresholdMs) ? 'Slow response (>80% of limit)' : null,
+        ].filter(Boolean),
+      }));
+
+    return { sessionId, leaderboard, topicHealth, atRisk, totalQuestions };
+  }
+
+  // Student Leaderboard for a specific session
+  async getSessionLeaderboard(sessionId: string) {
+    const session = await this.prisma.engagement_sessions.findUnique({
+      where: { id: sessionId },
+      include: {
+        engagement_analytics: {
+          include: { profiles: { select: { id: true, name: true, avatar_url: true } } },
+          orderBy: { total_points_earned: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    if (!session) throw new NotFoundException('Session not found');
+
+    const leaderboard = session.engagement_analytics.map((a, i) => ({
+      rank: i + 1,
+      studentId: a.student_id,
+      studentName: (a as any).profiles?.name || 'Unknown',
+      avatarUrl: (a as any).profiles?.avatar_url,
+      pointsEarned: (a as any).total_points_earned ?? 0,
+      accuracy: Math.round(Number(a.accuracy_rate || 0)),
+    }));
+
+    return { sessionId, sessionName: session.session_name, leaderboard };
+  }
+
+  // Student Performance Dashboard: recent scores + class rank
+  async getStudentPerformance(studentId: string) {
+    const recentAnalytics = await this.prisma.engagement_analytics.findMany({
+      where: { student_id: studentId },
+      orderBy: { updated_at: 'desc' },
+      take: 10,
+      include: {
+        engagement_sessions: {
+          include: { classes: { include: { grade_levels: true } } },
+        },
+      },
+    });
+
+    const recentScores = recentAnalytics.reverse().map(a => ({
+      sessionId:       a.session_id,
+      date:            new Date(a.engagement_sessions.started_at).toLocaleDateString(),
+      sessionName:     a.engagement_sessions.session_name || 'Session',
+      score:          Math.round(Number(a.engagement_score || 0)),
+      accuracy:        Math.round(Number(a.accuracy_rate || 0)),
+      participation:   Math.round(Number(a.participation_rate || 0)),
+    }));
+
+    const studentTerm = await this.prisma.term_engagement_summary.findFirst({
+      where: { student_id: studentId },
+      orderBy: { updated_at: 'desc' },
+    });
+
+    const studentDetail = await this.prisma.student_details.findUnique({
+      where: { profile_id: studentId },
+    });
+
+    let classRank = 'N/A';
+    if (studentDetail?.class_id) {
+      const classSummaries = await this.prisma.term_engagement_summary.findMany({
+        where: { 
+          student_id: { 
+            in: (await this.prisma.student_details.findMany({
+              where: { class_id: studentDetail.class_id },
+              select: { profile_id: true }
+            })).map(s => s.profile_id)
+          } 
+        },
+        orderBy: { avg_engagement_score: 'desc' },
+      });
+      const rankIdx = classSummaries.findIndex(s => s.student_id === studentId);
+      classRank = rankIdx >= 0 ? (rankIdx + 1).toString() : 'N/A';
+    }
+
+    return {
+      studentId,
+      recentScores,
+      classRank,
+      termSummary: {
+        avgEngagement: studentTerm ? Math.round(Number(studentTerm.avg_engagement_score || 0)) : 0,
+        avgAccuracy: studentTerm ? Math.round(Number(studentTerm.avg_accuracy_rate || 0)) : 0,
+        avgParticipation: studentTerm ? Math.round(Number(studentTerm.avg_participation_rate || 0)) : 0,
+        totalSessions: studentTerm?.total_sessions ?? 0,
+      },
+    };
   }
 
   // Update analytics for a student in a session
@@ -660,13 +1158,13 @@ export class EngagementService {
       : 0;
     const engagementScore = participationRate * 0.4 + accuracyRate * 0.4 + speedBonus;
 
-    console.log(`[CALCULATION LOG] Student ${studentId} analytics update:`);
-    console.log(`- Participation: ${questionsAnswered}/${totalQuestions} = ${participationRate.toFixed(2)}%`);
-    console.log(`- Accuracy: ${questionsCorrect}/${questionsAnswered} = ${accuracyRate.toFixed(2)}%`);
-    console.log(`- Speed Bonus (20% weight): ${speedBonus.toFixed(2)} (Avg Time: ${avgResponseTime?.toFixed(2)}ms)`);
-    console.log(`- Final Engagement Score: ${engagementScore.toFixed(2)}`);
+    this.logger.log(`[CALCULATION LOG] Student ${studentId} analytics update:`);
+    this.logger.log(`- Participation: ${questionsAnswered}/${totalQuestions} = ${participationRate.toFixed(2)}%`);
+    this.logger.log(`- Accuracy: ${questionsCorrect}/${questionsAnswered} = ${accuracyRate.toFixed(2)}%`);
+    this.logger.log(`- Speed Bonus (20% weight): ${speedBonus.toFixed(2)} (Avg Time: ${avgResponseTime?.toFixed(2)}ms)`);
+    this.logger.log(`- Final Engagement Score: ${engagementScore.toFixed(2)}`);
 
-    console.log(`[DEBUG] Updating analytics for session ${sessionId}, student ${studentId}: Participation: ${participationRate}, Accuracy: ${accuracyRate}`);
+    this.logger.log(`[DEBUG] Updating analytics for session ${sessionId}, student ${studentId}: Participation: ${participationRate}, Accuracy: ${accuracyRate}`);
 
     await this.prisma.engagement_analytics.upsert({
       where: {
@@ -699,7 +1197,64 @@ export class EngagementService {
         engagement_score: engagementScore,
       },
     });
+
+    await this.updateStudentTermSummary(studentId, session.school_id);
   }
+
+// Recalculate term-wide averages for a student
+private async updateStudentTermSummary(studentId: string, schoolId: string) {
+  const termId = `TERM-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  
+  const analytics = await this.prisma.engagement_analytics.findMany({
+    where: { student_id: studentId },
+  });
+
+  if (analytics.length === 0) return;
+
+  const totalSessions = analytics.length;
+  const avgEngagement = analytics.reduce((s, a) => s + Number(a.engagement_score || 0), 0) / totalSessions;
+  const avgAccuracy   = analytics.reduce((s, a) => s + Number(a.accuracy_rate     || 0), 0) / totalSessions;
+  const avgParticipation = analytics.reduce((s, a) => s + Number(a.participation_rate || 0), 0) / totalSessions;
+
+  await this.prisma.term_engagement_summary.upsert({
+    where: { student_id_term_id: { student_id: studentId, term_id: termId } },
+    create: {
+      student_id: studentId,
+      term_id:    termId,
+      school_id:  schoolId,
+      total_sessions: totalSessions,
+      avg_engagement_score: avgEngagement,
+      avg_accuracy_rate:    avgAccuracy,
+      avg_participation_rate: avgParticipation,
+    },
+    update: {
+      total_sessions: totalSessions,
+      avg_engagement_score: avgEngagement,
+      avg_accuracy_rate:    avgAccuracy,
+      avg_participation_rate: avgParticipation,
+    },
+  });
+}
+
+// Backfill: Process all ended sessions that haven't been finalized
+async backfillAnalytics() {
+  const sessions = await this.prisma.engagement_sessions.findMany({
+    where: { status: 'ended' },
+    select: { id: true }
+  });
+
+  this.logger.log(`[BACKFILL] Starting for ${sessions.length} sessions...`);
+  let count = 0;
+  for (const s of sessions) {
+    try {
+      await this.finalizeSession(s.id);
+      count++;
+    } catch (e) {
+      this.logger.error(`[BACKFILL] Failed for session ${s.id}:`, e.message);
+    }
+  }
+  return { processed: count, total: sessions.length };
+}
 
   // Get active session for a class
   async getActiveSessionForClass(classId: string) {

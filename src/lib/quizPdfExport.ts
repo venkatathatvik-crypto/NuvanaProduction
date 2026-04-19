@@ -18,7 +18,7 @@ interface QuizPDFOptions {
  */
 export async function exportQuizPDF({
   quizContent,
-  schoolLogo = "/logo.png",
+  schoolLogo = `${import.meta.env.BASE_URL}logo.png`,
   schoolName = "School Name",
   subject = "General",
   className = "All Classes",

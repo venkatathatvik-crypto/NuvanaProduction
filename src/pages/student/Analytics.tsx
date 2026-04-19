@@ -56,17 +56,364 @@ import {
 } from "@/services/academic";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import {
+  OfflineEmptyState,
+  useOfflineLoading,
+} from "@/components/OfflineEmptyState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { engagementApi } from "@/services/engagementApi";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatePresence } from "framer-motion";
-import { engagementApi } from "@/services/engagementApi";
 
 const NEON_COLORS = {
   primary: "#8884d8",
   secondary: "#82ca9d",
   accent: "#ffc658",
   danger: "#ff7373",
+};
+
+// ── NEW COMPONENT: SessionPodium ───────────────────────────────────────────
+const SessionPodium = ({ sessionId }: { sessionId: string }) => {
+  const token = localStorage.getItem("access_token") || "";
+  const { data: leaderboardData, isLoading } = useQuery({
+    queryKey: ["session-leaderboard", sessionId],
+    queryFn: () => engagementApi.getSessionLeaderboard(sessionId, token),
+    enabled: !!sessionId,
+  });
+
+  const data = ((leaderboardData as Record<string, unknown>)?.data || leaderboardData) as { leaderboard: { studentId: string; studentName: string; rank: number; score: number; pointsEarned: number; avatar?: string }[] } | undefined;
+  if (isLoading)
+    return <Skeleton className="h-[300px] w-full bg-primary/5 rounded-2xl" />;
+  if (!data || !data.leaderboard || data.leaderboard.length === 0)
+    return (
+      <div className="h-[200px] flex items-center justify-center text-muted-foreground italic font-medium">
+        No leaderboard data available for this session.
+      </div>
+    );
+
+  const top3 = data.leaderboard.slice(0, 3);
+  // Reorder for podium: [2, 1, 3]
+  const podium = [
+    top3[1] || null, // Silver
+    top3[0], // Gold
+    top3[2] || null, // Bronze
+  ];
+
+  const heights = ["h-[180px]", "h-[240px]", "h-[140px]"];
+  const colors = [
+    "bg-slate-400/20 text-slate-400",
+    "bg-yellow-500/20 text-yellow-500",
+    "bg-amber-700/20 text-amber-700",
+  ];
+  const labels = ["2nd", "1st", "3rd"];
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-end justify-center gap-2 md:gap-6">
+        {podium.map((student, i) =>
+          student ? (
+            <motion.div
+              key={student.studentId}
+              initial={{ y: 50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: i * 0.2, type: "spring", stiffness: 100 }}
+              className="flex flex-col items-center group"
+            >
+              <div className="mb-2 text-center">
+                <div className="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center overflow-hidden mb-1 mx-auto group-hover:scale-110 transition-transform">
+                  {student.avatarUrl ? (
+                    <img src={student.avatarUrl} alt="" />
+                  ) : (
+                    <Award className="w-6 h-6 opacity-40" />
+                  )}
+                </div>
+                <p className="text-[10px] md:text-xs font-bold font-mono truncate max-w-[80px]">
+                  {student.studentName}
+                </p>
+                <p className="text-[9px] font-black text-primary">
+                  {student.pointsEarned} pts
+                </p>
+              </div>
+              <div
+                className={`w-[70px] md:w-[100px] ${heights[i]} ${colors[i].split(" ")[0]} rounded-t-2xl border-x-2 border-t-2 border-white/10 flex flex-col items-center justify-start pt-4 relative shadow-2xl overflow-hidden`}
+              >
+                <div
+                  className={`absolute inset-0 opacity-10 bg-gradient-to-b from-white/20 to-transparent`}
+                />
+                <span
+                  className={`text-2xl md:text-4xl font-black italic ${colors[i].split(" ")[1]}`}
+                >
+                  {labels[i]}
+                </span>
+              </div>
+            </motion.div>
+          ) : (
+            <div key={`empty-${i}`} className="w-[70px] md:w-[100px]" />
+          ),
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4">
+        {data.leaderboard.slice(3, 10).map((student: { studentId: string; studentName: string; rank: number; score: number; pointsEarned: number }) => (
+          <div
+            key={student.studentId}
+            className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-white/5"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-black text-muted-foreground w-4">
+                {student.rank}
+              </span>
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold">
+                {student.studentName.charAt(0)}
+              </div>
+              <span className="text-xs font-bold">{student.studentName}</span>
+            </div>
+            <span className="text-xs font-black text-primary">
+              {student.pointsEarned} pts
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ── NEW COMPONENT: StudentEngagementTab ─────────────────────────────────────
+const StudentEngagementTab = ({ studentId }: { studentId: string }) => {
+  const token = localStorage.getItem("access_token") || "";
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    null,
+  );
+
+  const { data: performance, isLoading } = useQuery({
+    queryKey: ["student-performance", studentId],
+    queryFn: () => engagementApi.getStudentPerformance(studentId, token),
+    enabled: !!studentId,
+  });
+
+  const perfData = (performance as Record<string, unknown>)?.data || performance;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Skeleton className="h-24 w-full bg-primary/5 rounded-2xl" />
+          <Skeleton className="h-24 w-full bg-primary/5 rounded-2xl" />
+          <Skeleton className="h-24 w-full bg-primary/5 rounded-2xl" />
+        </div>
+        <Card className="glass-card h-[400px]">
+          <Skeleton className="h-full w-full bg-primary/5" />
+        </Card>
+      </div>
+    );
+  }
+
+  if (!perfData) return null;
+
+  return (
+    <div className="space-y-6">
+      {/* ── Stats Summary ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="glass-card border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold text-muted-foreground uppercase flex items-center gap-2">
+              <Award className="w-4 h-4 text-primary" /> Class Rank
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-primary">
+              #{perfData.classRank || "N/A"}
+            </div>
+            <p className="text-[10px] text-muted-foreground font-bold italic mt-1">
+              Based on engagement score
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-green-500/20 bg-green-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold text-muted-foreground uppercase flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-green-500" /> Avg. Engagement
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-green-500">
+              {perfData.termSummary?.avgEngagement ?? 0}%
+            </div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">
+              For currently graded sessions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-yellow-500/20 bg-yellow-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold text-muted-foreground uppercase flex items-center gap-2">
+              <Target className="w-4 h-4 text-yellow-500" /> Accuracy
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-yellow-500">
+              {perfData.termSummary?.avgAccuracy ?? 0}%
+            </div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">
+              Term overall average
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* ── Recent Sessions List ── */}
+        <Card className="glass-card lg:col-span-1 overflow-hidden h-fit">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              Recent Sessions
+            </CardTitle>
+            <CardDescription className="text-[11px]">
+              Click to view class leaderboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-[400px] overflow-y-auto">
+            {perfData.recentScores?.length > 0 ? (
+              perfData.recentScores.map((session: { sessionId: string; date: string; score: number; sessionName?: string }) => (
+                <button
+                  key={session.sessionId || session.date}
+                  onClick={() => setSelectedSessionId(session.sessionId)}
+                  className={`w-full text-left p-3 rounded-xl transition-all border ${selectedSessionId === session.sessionId ? "bg-primary/20 border-primary/40 shadow-lg shadow-primary/10" : "bg-primary/5 border-transparent hover:border-primary/20 hover:bg-primary/10"}`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                      {session.date}
+                    </span>
+                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">
+                      {session.score}%
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold truncate">
+                    {session.sessionName}
+                  </p>
+                </button>
+              ))
+            ) : (
+              <div className="p-8 text-center text-[11px] text-muted-foreground italic">
+                No recent sessions found
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Session Podium / Trends ── */}
+        <Card className="glass-card lg:col-span-2 overflow-hidden min-h-[450px] relative">
+          <CardHeader className="pb-0">
+            <CardTitle className="flex items-center gap-2">
+              {selectedSessionId ? (
+                <Award className="w-5 h-5 text-yellow-500" />
+              ) : (
+                <TrendingUp className="w-5 h-5 text-primary" />
+              )}
+              {selectedSessionId
+                ? "Class Session Podium"
+                : "Performance Trends"}
+            </CardTitle>
+            <CardDescription>
+              {selectedSessionId
+                ? "Top performers of the selected session"
+                : "Continuous engagement across last 10 sessions"}
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {selectedSessionId ? (
+              <div className="p-6">
+                <SessionPodium sessionId={selectedSessionId} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-6 text-[10px] hover:bg-primary/10"
+                  onClick={() => setSelectedSessionId(null)}
+                >
+                  <ArrowLeft className="w-3 h-3 mr-2" /> Back to Trends
+                </Button>
+              </div>
+            ) : (
+              <div className="h-[350px] mt-10">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={perfData.recentScores}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id="colorEngagement"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      strokeOpacity={0.1}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fontWeight: "bold" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "12px",
+                      }}
+                      cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="score"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={4}
+                      fillOpacity={1}
+                      fill="url(#colorEngagement)"
+                      animationDuration={1500}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 };
 
 const StudentAnalytics = () => {
@@ -126,33 +473,41 @@ const StudentAnalytics = () => {
     enabled: !!profile,
   });
 
-
-
   const strengths = swData.strengths || [];
   const weaknesses = swData.weaknesses || [];
-  
+
   // Subject filter state for strengths and weaknesses
-  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>("all");
-  
+  const [selectedSubjectFilter, setSelectedSubjectFilter] =
+    useState<string>("all");
+
   // Get unique subjects from strengths and weaknesses
   const uniqueSubjects = Array.from(
-    new Set([...strengths.map(s => s.subject), ...weaknesses.map(w => w.subject)])
+    new Set([
+      ...strengths.map((s) => s.subject),
+      ...weaknesses.map((w) => w.subject),
+    ]),
   ).filter(Boolean);
-  
+
   // Filter strengths and weaknesses based on selected subject
-  const filteredStrengths = selectedSubjectFilter === "all" 
-    ? strengths 
-    : strengths.filter(s => s.subject === selectedSubjectFilter);
-    
-  const filteredWeaknesses = selectedSubjectFilter === "all"
-    ? weaknesses
-    : weaknesses.filter(w => w.subject === selectedSubjectFilter);
-  
+  const filteredStrengths =
+    selectedSubjectFilter === "all"
+      ? strengths
+      : strengths.filter((s) => s.subject === selectedSubjectFilter);
+
+  const filteredWeaknesses =
+    selectedSubjectFilter === "all"
+      ? weaknesses
+      : weaknesses.filter((w) => w.subject === selectedSubjectFilter);
+
   const loading =
     statsLoading || subjectLoading || trendLoading || swLoading || ctLoading;
 
-  // We no longer return the full-page spinner here. We'll show skeletons instead.
-  // if (loading || profileLoading) { ... }
+  // Only show empty state when offline AND no cached data at all
+  const hasAnyData =
+    (stats && stats.overallPercentage > 0) ||
+    subjectData.length > 0 ||
+    trendData.length > 0;
+  const offlineNoCache = useOfflineLoading(loading && !hasAnyData);
 
   // Transform subject data for radar chart
   const radarData = subjectData.map((s) => ({
@@ -163,11 +518,19 @@ const StudentAnalytics = () => {
   // Dynamically determine the max value for the radar chart domain
   const maxRadarValue = Math.max(
     10,
-    ...radarData.map((d) => Math.max(d.A || 0, d.fullMark || 0))
+    ...radarData.map((d) => Math.max(d.A || 0, d.fullMark || 0)),
   );
 
+  if (offlineNoCache) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Analytics" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-8 pt-16 sm:pt-20">
+    <div className="min-h-screen p-3 sm:p-6 space-y-3 sm:space-y-5 pt-16 sm:pt-20">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -190,30 +553,80 @@ const StudentAnalytics = () => {
           </p>
         </div>
       </motion.div>
-      <Tabs 
-        value={activeTab} 
+      <Tabs
+        value={activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
-        className="space-y-6"
+        className="space-y-4"
       >
-        <TabsList className="grid grid-cols-2 w-full max-w-xl h-auto p-1 bg-muted/20 backdrop-blur-sm border border-white/5 rounded-2xl">
-          <TabsTrigger value="overview" className="flex items-center gap-2 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+        <TabsList className="grid grid-cols-3 w-full max-w-xl h-auto p-1 bg-muted/20 backdrop-blur-sm border border-white/5 rounded-2xl">
+          <TabsTrigger
+            value="overview"
+            className="flex items-center gap-1.5 py-2 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
+          >
             <LayoutDashboard className="w-4 h-4" />
             <span className="font-semibold">Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="performance" className="flex items-center gap-2 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+          <TabsTrigger
+            value="performance"
+            className="flex items-center gap-1.5 py-2 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
+          >
             <BarChart3 className="w-4 h-4" />
             <span className="font-semibold">Performance</span>
           </TabsTrigger>
+          <TabsTrigger
+            value="engagement"
+            className="flex items-center gap-1.5 py-2 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span className="font-semibold">Engagement</span>
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="engagement" className="space-y-8 mt-6">
+          <StudentEngagementTab studentId={profile?.id || ""} />
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-8 mt-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Overall Score", value: `${stats.overallPercentage}%`, color: "text-neon-purple", sub: "Average across all tests", icon: <TrendingUp className="w-3 h-3 mr-1" />, loading: statsLoading },
-              { label: "Tests Taken", value: stats.totalTests, color: "text-neon-cyan", sub: "Graded tests completed", loading: statsLoading },
-              { label: "Best Subject", value: stats.bestSubject, color: "text-neon-green", sub: "Highest average score", loading: statsLoading },
-              { label: "Attendance", value: `${stats.attendancePercentage}%`, color: "text-blue-500", sub: stats.attendancePercentage >= 90 ? "Excellent" : stats.attendancePercentage >= 75 ? "Good" : "Needs improvement", loading: statsLoading },
+              {
+                label: "Overall Score",
+                value: `${stats.overallPercentage}%`,
+                color: "text-neon-purple",
+                sub: "Average across all tests",
+                icon: <TrendingUp className="w-3 h-3 mr-1" />,
+                loading:
+                  statsLoading && (!stats || stats.overallPercentage === 0),
+              },
+              {
+                label: "Tests Taken",
+                value: stats.totalTests,
+                color: "text-neon-cyan",
+                sub: "Graded tests completed",
+                loading: statsLoading && (!stats || stats.totalTests === 0),
+              },
+              {
+                label: "Best Subject",
+                value: stats.bestSubject,
+                color: "text-neon-green",
+                sub: "Highest average score",
+                loading:
+                  statsLoading && (!stats || stats.bestSubject === "N/A"),
+              },
+              {
+                label: "Attendance",
+                value: `${stats.attendancePercentage}%`,
+                color: "text-blue-500",
+                sub:
+                  stats.attendancePercentage >= 90
+                    ? "Excellent"
+                    : stats.attendancePercentage >= 75
+                      ? "Good"
+                      : "Needs improvement",
+                loading:
+                  statsLoading && (!stats || stats.attendancePercentage === 0),
+              },
             ].map((card, i) => (
               <Card key={i} className="glass-card">
                 <CardHeader className="pb-2">
@@ -247,7 +660,7 @@ const StudentAnalytics = () => {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
             >
-              {subjectLoading ? (
+              {subjectLoading && radarData.length === 0 ? (
                 <Card className="glass-card h-[400px] flex items-center justify-center">
                   <Skeleton className="h-[80%] w-[80%] rounded-full" />
                 </Card>
@@ -299,8 +712,8 @@ const StudentAnalytics = () => {
                       </ResponsiveContainer>
                     ) : (
                       <div className="flex items-center justify-center h-full text-muted-foreground">
-                        No subject data available yet. Complete some tests to see your
-                        performance.
+                        No subject data available yet. Complete some tests to
+                        see your performance.
                       </div>
                     )
                   }
@@ -361,7 +774,7 @@ const StudentAnalytics = () => {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 }}
             >
-              {trendLoading ? (
+              {trendLoading && trendData.length === 0 ? (
                 <Card className="glass-card h-[400px] flex items-center justify-center">
                   <Skeleton className="h-[70%] w-[90%]" />
                 </Card>
@@ -424,8 +837,8 @@ const StudentAnalytics = () => {
                       </ResponsiveContainer>
                     ) : (
                       <div className="flex items-center justify-center h-full text-muted-foreground">
-                        No trend data available yet. Your progress will appear after
-                        completing tests.
+                        No trend data available yet. Your progress will appear
+                        after completing tests.
                       </div>
                     )
                   }
@@ -519,489 +932,514 @@ const StudentAnalytics = () => {
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-8 mt-6">
-
-      {/* Strengths & Weaknesses */}
-      <div className="space-y-4">
-        {/* Subject Filter Header */}
-        {uniqueSubjects.length > 0 && (
-          <Card className="glass-card border-primary/20">
-            <CardContent className="pt-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <Filter className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold text-lg">Filter by Subject</h3>
-                </div>
-                <Select value={selectedSubjectFilter} onValueChange={setSelectedSubjectFilter}>
-                  <SelectTrigger className="w-full sm:w-[250px] bg-background/50 border-primary/20">
-                    <SelectValue placeholder="All Subjects" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Subjects</SelectItem>
-                    {uniqueSubjects.map((subject) => (
-                      <SelectItem key={subject} value={subject}>
-                        {subject}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Strengths and Weaknesses Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-neon-blue" /> Key Strengths
-              </CardTitle>
-              {selectedSubjectFilter !== "all" && (
-                <CardDescription>
-                  Showing strengths in {selectedSubjectFilter}
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
-              {swLoading ? (
-                <>
-                  <Skeleton className="h-20 w-full" />
-                  <Skeleton className="h-20 w-full" />
-                </>
-              ) : filteredStrengths.length > 0 ? (
-                filteredStrengths.map((item, idx) => {
-                  // Find chapters for this topic
-                  const topicData = chapterTopicData.topics.find(t => t.name === item.topic);
-                  const chapters = topicData?.chapters || [];
-                  
-                  return (
-                    <div
-                      key={idx}
-                      className="bg-green-500/10 p-4 rounded-lg border border-green-500/20 flex justify-between items-start"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          {item.topic ? (
-                            <p className="font-semibold text-green-400">
-                              {item.topic}
-                            </p>
-                          ) : (
-                            <p className="font-semibold text-green-400">
-                              {item.subject}
-                            </p>
-                          )}
-                          {item.mastery !== undefined && (
-                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
-                              {item.mastery}%
-                            </span>
-                          )}
-                        </div>
-                        {chapters.length > 0 && (
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Chapter: {chapters.join(', ')}
-                          </p>
-                        )}
-                        <p className="text-sm text-muted-foreground">{item.desc}</p>
-                      </div>
-                      <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-1" />
+          {/* Strengths & Weaknesses */}
+          <div className="space-y-4">
+            {/* Subject Filter Header */}
+            {uniqueSubjects.length > 0 && (
+              <Card className="glass-card border-primary/20">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-5 h-5 text-primary" />
+                      <h3 className="font-semibold text-lg">
+                        Filter by Subject
+                      </h3>
                     </div>
-                  );
-                })
-              ) : (
-                <p className="text-center text-muted-foreground py-4">
-                  {selectedSubjectFilter === "all" 
-                    ? "Complete more tests to identify your strengths."
-                    : `No strengths identified in ${selectedSubjectFilter} yet.`}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-red-500" /> Areas for Improvement
-              </CardTitle>
-              {selectedSubjectFilter !== "all" && (
-                <CardDescription>
-                  Showing weaknesses in {selectedSubjectFilter}
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
-              {swLoading ? (
-                <>
-                  <Skeleton className="h-20 w-full" />
-                  <Skeleton className="h-20 w-full" />
-                </>
-              ) : filteredWeaknesses.length > 0 ? (
-                filteredWeaknesses.map((item, idx) => {
-                  // Find chapters for this topic
-                  const topicData = chapterTopicData.topics.find(t => t.name === item.topic);
-                  const chapters = topicData?.chapters || [];
-                  
-                  return (
-                    <div
-                      key={idx}
-                      className="bg-red-500/10 p-4 rounded-lg border border-red-500/20 flex justify-between items-start"
+                    <Select
+                      value={selectedSubjectFilter}
+                      onValueChange={setSelectedSubjectFilter}
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          {item.topic ? (
-                            <p className="font-semibold text-red-400">
-                              {item.topic}
-                            </p>
-                          ) : (
-                            <p className="font-semibold text-red-400">
-                              {item.subject}
-                            </p>
-                          )}
-                          {item.mastery !== undefined && (
-                            <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
-                              {item.mastery}%
-                            </span>
-                          )}
-                        </div>
-                        {chapters.length > 0 && (
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Chapter: {chapters.join(', ')}
-                          </p>
-                        )}
-                        <p className="text-sm text-muted-foreground">{item.desc}</p>
-                      </div>
-                      <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-1" />
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-center text-muted-foreground py-4">
-                  {selectedSubjectFilter === "all"
-                    ? "Complete more tests to see areas needing improvement."
-                    : `No areas for improvement identified in ${selectedSubjectFilter} yet.`}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Chapter & Topic Performance Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ExpandableChartWidget
-            title="Chapter Performance"
-            description="Average scores by chapter"
-            insights="Identifying chapters with lower scores helps you prioritize which areas need more study time."
-            isLoading={ctLoading}
-            className="h-[400px]"
-            renderSmall={() =>
-              chapterTopicData.chapters.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chapterTopicData.chapters.slice(0, 8)}
-                    layout="vertical"
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-                    <XAxis type="number" domain={[0, 100]} hide />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={100}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#1a1a1a",
-                        border: "1px solid #333",
-                      }}
-                      cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload[0]) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-background border rounded p-2 text-xs">
-                              <p className="font-semibold">{data.name}</p>
-                              <p>Score: {data.avgScore}%</p>
-                              <p>Questions: {data.totalQuestions}</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
-                      {chapterTopicData.chapters
-                        .slice(0, 8)
-                        .map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={
-                              entry.avgScore >= 80
-                                ? "#00C49F"
-                                : entry.avgScore >= 60
-                                ? "#8884d8"
-                                : "#ff7373"
-                            }
-                          />
+                      <SelectTrigger className="w-full sm:w-[250px] bg-background/50 border-primary/20">
+                        <SelectValue placeholder="All Subjects" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Subjects</SelectItem>
+                        {uniqueSubjects.map((subject) => (
+                          <SelectItem key={subject} value={subject}>
+                            {subject}
+                          </SelectItem>
                         ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No chapter data available.
-                </div>
-              )
-            }
-            renderExpanded={() =>
-              chapterTopicData.chapters.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chapterTopicData.chapters}
-                    layout="vertical"
-                    margin={{ left: 40 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#444"
-                      horizontal={false}
-                    />
-                    <XAxis type="number" domain={[0, 100]} stroke="#888" />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={150}
-                      tick={{ fontSize: 14 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#1a1a1a",
-                        border: "1px solid #333",
-                        fontSize: "14px",
-                      }}
-                      cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                    />
-                    <Bar dataKey="avgScore" radius={[0, 4, 4, 0]} barSize={30}>
-                      {chapterTopicData.chapters.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={
-                            entry.avgScore >= 80
-                              ? "#00C49F"
-                              : entry.avgScore >= 60
-                              ? "#8884d8"
-                              : "#ff7373"
-                          }
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No data available.
-                </div>
-              )
-            }
-          />
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-          <ExpandableChartWidget
-            title="Topic Performance"
-            description="Average scores by topic"
-            insights="Topic-level analysis helps you pinpoint specific concepts that need further clarification."
-            isLoading={ctLoading}
-            className="h-[400px]"
-            renderSmall={() =>
-              chapterTopicData.topics.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chapterTopicData.topics.slice(0, 8)}
-                    layout="vertical"
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-                    <XAxis type="number" domain={[0, 100]} hide />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={100}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#1a1a1a",
-                        border: "1px solid #333",
-                      }}
-                      cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload[0]) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-background border rounded p-2 text-xs">
-                              <p className="font-semibold">{data.name}</p>
-                              <p>Score: {data.avgScore}%</p>
-                              <p className="text-muted-foreground">
-                                {data.chapters.join(", ")}
+            {/* Strengths and Weaknesses Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="glass-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="w-5 h-5 text-neon-blue" /> Key Strengths
+                  </CardTitle>
+                  {selectedSubjectFilter !== "all" && (
+                    <CardDescription>
+                      Showing strengths in {selectedSubjectFilter}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
+                  {swLoading &&
+                  filteredStrengths.length === 0 &&
+                  filteredWeaknesses.length === 0 ? (
+                    <>
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </>
+                  ) : filteredStrengths.length > 0 ? (
+                    filteredStrengths.map((item, idx) => {
+                      // Find chapters for this topic
+                      const topicData = chapterTopicData.topics.find(
+                        (t) => t.name === item.topic,
+                      );
+                      const chapters = topicData?.chapters || [];
+
+                      return (
+                        <div
+                          key={idx}
+                          className="bg-green-500/10 p-4 rounded-lg border border-green-500/20 flex justify-between items-start"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              {item.topic ? (
+                                <p className="font-semibold text-green-400">
+                                  {item.topic}
+                                </p>
+                              ) : (
+                                <p className="font-semibold text-green-400">
+                                  {item.subject}
+                                </p>
+                              )}
+                              {item.mastery !== undefined && (
+                                <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
+                                  {item.mastery}%
+                                </span>
+                              )}
+                            </div>
+                            {chapters.length > 0 && (
+                              <p className="text-xs text-muted-foreground mb-1">
+                                Chapter: {chapters.join(", ")}
                               </p>
+                            )}
+                            <p className="text-sm text-muted-foreground">
+                              {item.desc}
+                            </p>
+                          </div>
+                          <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-1" />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-center text-muted-foreground py-4">
+                      {selectedSubjectFilter === "all"
+                        ? "Complete more tests to identify your strengths."
+                        : `No strengths identified in ${selectedSubjectFilter} yet.`}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-red-500" /> Areas for
+                    Improvement
+                  </CardTitle>
+                  {selectedSubjectFilter !== "all" && (
+                    <CardDescription>
+                      Showing weaknesses in {selectedSubjectFilter}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
+                  {swLoading &&
+                  filteredWeaknesses.length === 0 &&
+                  filteredStrengths.length === 0 ? (
+                    <>
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </>
+                  ) : filteredWeaknesses.length > 0 ? (
+                    filteredWeaknesses.map((item, idx) => {
+                      // Find chapters for this topic
+                      const topicData = chapterTopicData.topics.find(
+                        (t) => t.name === item.topic,
+                      );
+                      const chapters = topicData?.chapters || [];
+
+                      return (
+                        <div
+                          key={idx}
+                          className="bg-red-500/10 p-4 rounded-lg border border-red-500/20 flex justify-between items-start"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              {item.topic ? (
+                                <p className="font-semibold text-red-400">
+                                  {item.topic}
+                                </p>
+                              ) : (
+                                <p className="font-semibold text-red-400">
+                                  {item.subject}
+                                </p>
+                              )}
+                              {item.mastery !== undefined && (
+                                <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
+                                  {item.mastery}%
+                                </span>
+                              )}
                             </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
-                      {chapterTopicData.topics
-                        .slice(0, 8)
-                        .map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={
-                              entry.avgScore >= 80
-                                ? "#00C49F"
-                                : entry.avgScore >= 60
-                                ? "#82ca9d"
-                                : "#ff7373"
-                            }
-                          />
-                        ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No topic data available.
-                </div>
-              )
-            }
-            renderExpanded={() =>
-              chapterTopicData.topics.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chapterTopicData.topics}
-                    layout="vertical"
-                    margin={{ left: 40 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#444"
-                      horizontal={false}
-                    />
-                    <XAxis type="number" domain={[0, 100]} stroke="#888" />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={150}
-                      tick={{ fontSize: 14 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#1a1a1a",
-                        border: "1px solid #333",
-                      }}
-                      cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                    />
-                    <Bar dataKey="avgScore" radius={[0, 4, 4, 0]} barSize={30}>
-                      {chapterTopicData.topics.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={
-                            entry.avgScore >= 80
-                              ? "#00C49F"
-                              : entry.avgScore >= 60
-                              ? "#82ca9d"
-                              : "#ff7373"
-                          }
+                            {chapters.length > 0 && (
+                              <p className="text-xs text-muted-foreground mb-1">
+                                Chapter: {chapters.join(", ")}
+                              </p>
+                            )}
+                            <p className="text-sm text-muted-foreground">
+                              {item.desc}
+                            </p>
+                          </div>
+                          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-1" />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-center text-muted-foreground py-4">
+                      {selectedSubjectFilter === "all"
+                        ? "Complete more tests to see areas needing improvement."
+                        : `No areas for improvement identified in ${selectedSubjectFilter} yet.`}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Chapter & Topic Performance Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ExpandableChartWidget
+                title="Chapter Performance"
+                description="Average scores by chapter"
+                insights="Identifying chapters with lower scores helps you prioritize which areas need more study time."
+                isLoading={ctLoading}
+                className="h-[400px]"
+                renderSmall={() =>
+                  chapterTopicData.chapters.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chapterTopicData.chapters.slice(0, 8)}
+                        layout="vertical"
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                        <XAxis type="number" domain={[0, 100]} hide />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          width={100}
+                          tick={{ fontSize: 10 }}
                         />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No data available.
-                </div>
-              )
-            }
-          />
-        </div>
-
-        {/* Weak Areas Summary */}
-        {(chapterTopicData.chapters.filter((c) => c.avgScore < 60).length > 0 ||
-          chapterTopicData.topics.filter((t) => t.avgScore < 60).length >
-            0) && (
-          <Card className="glass-card mt-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500" /> Focus Areas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Weak Chapters */}
-                {chapterTopicData.chapters.filter((c) => c.avgScore < 60)
-                  .length > 0 && (
-                  <div className="bg-red-500/5 rounded-lg p-4 border border-red-500/20">
-                    <h4 className="font-semibold text-red-400 mb-3 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" /> Chapters to Focus On
-                    </h4>
-                    <div className="space-y-2">
-                      {chapterTopicData.chapters
-                        .filter((c) => c.avgScore < 60)
-                        .slice(0, 3)
-                        .map((chapter, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between items-center"
-                          >
-                            <span className="text-sm">{chapter.name}</span>
-                            <span className="text-red-400 font-medium">
-                              {chapter.avgScore}%
-                            </span>
-                          </div>
-                        ))}
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#1a1a1a",
+                            border: "1px solid #333",
+                          }}
+                          cursor={{ fill: "rgba(255,255,255,0.1)" }}
+                          content={({ active, payload }) => {
+                            if (active && payload && payload[0]) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-background border rounded p-2 text-xs">
+                                  <p className="font-semibold">{data.name}</p>
+                                  <p>Score: {data.avgScore}%</p>
+                                  <p>Questions: {data.totalQuestions}</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
+                          {chapterTopicData.chapters
+                            .slice(0, 8)
+                            .map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={
+                                  entry.avgScore >= 80
+                                    ? "#00C49F"
+                                    : entry.avgScore >= 60
+                                      ? "#8884d8"
+                                      : "#ff7373"
+                                }
+                              />
+                            ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No chapter data available.
                     </div>
-                  </div>
-                )}
-
-                {/* Weak Topics */}
-                {chapterTopicData.topics.filter((t) => t.avgScore < 60).length >
-                  0 && (
-                  <div className="bg-orange-500/5 rounded-lg p-4 border border-orange-500/20">
-                    <h4 className="font-semibold text-orange-400 mb-3 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" /> Topics to Focus On
-                    </h4>
-                    <div className="space-y-2">
-                      {chapterTopicData.topics
-                        .filter((t) => t.avgScore < 60)
-                        .slice(0, 3)
-                        .map((topic, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between items-center"
-                          >
-                            <span className="text-sm">{topic.name}</span>
-                            <span className="text-orange-400 font-medium">
-                              {topic.avgScore}%
-                            </span>
-                          </div>
-                        ))}
+                  )
+                }
+                renderExpanded={() =>
+                  chapterTopicData.chapters.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chapterTopicData.chapters}
+                        layout="vertical"
+                        margin={{ left: 40 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#444"
+                          horizontal={false}
+                        />
+                        <XAxis type="number" domain={[0, 100]} stroke="#888" />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          width={150}
+                          tick={{ fontSize: 14 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#1a1a1a",
+                            border: "1px solid #333",
+                            fontSize: "14px",
+                          }}
+                          cursor={{ fill: "rgba(255,255,255,0.1)" }}
+                        />
+                        <Bar
+                          dataKey="avgScore"
+                          radius={[0, 4, 4, 0]}
+                          barSize={30}
+                        >
+                          {chapterTopicData.chapters.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={
+                                entry.avgScore >= 80
+                                  ? "#00C49F"
+                                  : entry.avgScore >= 60
+                                    ? "#8884d8"
+                                    : "#ff7373"
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No data available.
                     </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </motion.div>
-    </TabsContent>
+                  )
+                }
+              />
 
+              <ExpandableChartWidget
+                title="Topic Performance"
+                description="Average scores by topic"
+                insights="Topic-level analysis helps you pinpoint specific concepts that need further clarification."
+                isLoading={ctLoading}
+                className="h-[400px]"
+                renderSmall={() =>
+                  chapterTopicData.topics.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chapterTopicData.topics.slice(0, 8)}
+                        layout="vertical"
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                        <XAxis type="number" domain={[0, 100]} hide />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          width={100}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#1a1a1a",
+                            border: "1px solid #333",
+                          }}
+                          cursor={{ fill: "rgba(255,255,255,0.1)" }}
+                          content={({ active, payload }) => {
+                            if (active && payload && payload[0]) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-background border rounded p-2 text-xs">
+                                  <p className="font-semibold">{data.name}</p>
+                                  <p>Score: {data.avgScore}%</p>
+                                  <p className="text-muted-foreground">
+                                    {data.chapters.join(", ")}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar dataKey="avgScore" radius={[0, 4, 4, 0]}>
+                          {chapterTopicData.topics
+                            .slice(0, 8)
+                            .map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={
+                                  entry.avgScore >= 80
+                                    ? "#00C49F"
+                                    : entry.avgScore >= 60
+                                      ? "#82ca9d"
+                                      : "#ff7373"
+                                }
+                              />
+                            ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No topic data available.
+                    </div>
+                  )
+                }
+                renderExpanded={() =>
+                  chapterTopicData.topics.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chapterTopicData.topics}
+                        layout="vertical"
+                        margin={{ left: 40 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#444"
+                          horizontal={false}
+                        />
+                        <XAxis type="number" domain={[0, 100]} stroke="#888" />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          width={150}
+                          tick={{ fontSize: 14 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#1a1a1a",
+                            border: "1px solid #333",
+                          }}
+                          cursor={{ fill: "rgba(255,255,255,0.1)" }}
+                        />
+                        <Bar
+                          dataKey="avgScore"
+                          radius={[0, 4, 4, 0]}
+                          barSize={30}
+                        >
+                          {chapterTopicData.topics.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={
+                                entry.avgScore >= 80
+                                  ? "#00C49F"
+                                  : entry.avgScore >= 60
+                                    ? "#82ca9d"
+                                    : "#ff7373"
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No data available.
+                    </div>
+                  )
+                }
+              />
+            </div>
+
+            {/* Weak Areas Summary */}
+            {(chapterTopicData.chapters.filter((c) => c.avgScore < 60).length >
+              0 ||
+              chapterTopicData.topics.filter((t) => t.avgScore < 60).length >
+                0) && (
+              <Card className="glass-card mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-red-500" /> Focus Areas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Weak Chapters */}
+                    {chapterTopicData.chapters.filter((c) => c.avgScore < 60)
+                      .length > 0 && (
+                      <div className="bg-red-500/5 rounded-lg p-4 border border-red-500/20">
+                        <h4 className="font-semibold text-red-400 mb-3 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" /> Chapters to Focus
+                          On
+                        </h4>
+                        <div className="space-y-2">
+                          {chapterTopicData.chapters
+                            .filter((c) => c.avgScore < 60)
+                            .slice(0, 3)
+                            .map((chapter, idx) => (
+                              <div
+                                key={idx}
+                                className="flex justify-between items-center"
+                              >
+                                <span className="text-sm">{chapter.name}</span>
+                                <span className="text-red-400 font-medium">
+                                  {chapter.avgScore}%
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Weak Topics */}
+                    {chapterTopicData.topics.filter((t) => t.avgScore < 60)
+                      .length > 0 && (
+                      <div className="bg-orange-500/5 rounded-lg p-4 border border-orange-500/20">
+                        <h4 className="font-semibold text-orange-400 mb-3 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" /> Topics to Focus On
+                        </h4>
+                        <div className="space-y-2">
+                          {chapterTopicData.topics
+                            .filter((t) => t.avgScore < 60)
+                            .slice(0, 3)
+                            .map((topic, idx) => (
+                              <div
+                                key={idx}
+                                className="flex justify-between items-center"
+                              >
+                                <span className="text-sm">{topic.name}</span>
+                                <span className="text-orange-400 font-medium">
+                                  {topic.avgScore}%
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </motion.div>
+        </TabsContent>
       </Tabs>
     </div>
   );
 };
-
 
 export default StudentAnalytics;

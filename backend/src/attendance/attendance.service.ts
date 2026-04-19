@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   MarkAttendanceDto,
@@ -6,10 +6,16 @@ import {
   AttendanceMapResponseDto,
   AttendancePercentageResponseDto,
 } from './dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AttendanceService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AttendanceService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService
+  ) {}
 
   async getStudentsByClass(
     classId: string,
@@ -57,9 +63,7 @@ export class AttendanceService {
       present: false,
     }));
 
-    console.log(`[Attendance Service] Returning ${result.length} students with roll numbers:`, 
-      result.map(s => ({ name: s.name, roll_number: s.roll_number }))
-    );
+    this.logger.log(`Returning ${result.length} students for class ${classId}`);
 
     return result;
   }
@@ -153,6 +157,14 @@ export class AttendanceService {
     await this.prisma.attendance.createMany({
       data: attendanceRecords,
     });
+
+    // Notify absent students
+    const absentStudentIds = attendanceRecords.filter(r => r.status === 'absent').map(r => r.student_id);
+    if (absentStudentIds.length > 0) {
+      this.dispatchAbsenceEmails(absentStudentIds, attendanceDate).catch(e => {
+         this.logger.error(`Error sending absence emails: ${e.message}`, e.stack);
+      });
+    }
 
     const presentCount = dto.students.filter((s) => 
       s.status === 'present' || s.status === 'late' || s.present
@@ -771,5 +783,24 @@ export class AttendanceService {
       });
 
     return monthlySummary;
+  }
+
+  private async dispatchAbsenceEmails(studentIds: string[], date: Date) {
+    try {
+       const students = await this.prisma.profiles.findMany({
+         where: { id: { in: studentIds } },
+         select: { email: true, name: true }
+       });
+
+       const dateStr = date.toLocaleDateString();
+
+       for (const student of students) {
+         if (student.email) {
+           await this.mailService.sendAbsenceNotificationEmail(student, dateStr);
+         }
+       }
+    } catch (error) {
+       this.logger.error('Failed to dispatch absence emails', error.stack);
+    }
   }
 }

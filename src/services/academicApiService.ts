@@ -83,6 +83,13 @@ export interface FileCategory {
   created_at: string;
 }
 
+export interface LifeCoachCategory {
+  id: number;
+  name: string;
+  school_id: string;
+  created_at: string;
+}
+
 export interface ExamType {
   id: number;
   name: string;
@@ -271,6 +278,20 @@ export const academicService = {
 
   async deleteFileCategory(id: number): Promise<{ message: string }> {
     return apiClient.delete(`/academic/file-categories/${id}`);
+  },
+
+  // ==================== LIFE COACH CATEGORIES ====================
+  async createLifeCoachCategory(name: string): Promise<LifeCoachCategory> {
+    return apiClient.post('/academic/life-coach-categories', { name });
+  },
+  async getLifeCoachCategories(): Promise<LifeCoachCategory[]> {
+    return apiClient.get('/academic/life-coach-categories');
+  },
+  async updateLifeCoachCategory(id: number, name: string): Promise<LifeCoachCategory> {
+    return apiClient.patch(`/academic/life-coach-categories/${id}`, { name });
+  },
+  async deleteLifeCoachCategory(id: number): Promise<{ message: string }> {
+    return apiClient.delete(`/academic/life-coach-categories/${id}`);
   },
 
   // ==================== EXAM TYPES ====================

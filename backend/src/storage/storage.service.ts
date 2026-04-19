@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class StorageService {
+  private readonly logger = new Logger(StorageService.name);
   private supabase: SupabaseClient;
   private readonly filesBucket: string;
 
@@ -22,7 +23,7 @@ export class StorageService {
         throw new Error(`Invalid SUPABASE_URL protocol: ${url.protocol}. Must be http:// or https://`);
       }
       if (!supabaseUrl.includes('supabase.co') && !supabaseUrl.includes('supabase')) {
-        console.warn(`Warning: SUPABASE_URL (${supabaseUrl.substring(0, 50)}...) doesn't appear to be a Supabase URL. Expected format: https://xxxxx.supabase.co`);
+        this.logger.warn(`Warning: SUPABASE_URL (${supabaseUrl.substring(0, 50)}...) doesn't appear to be a Supabase URL. Expected format: https://xxxxx.supabase.co`);
       }
     } catch (error) {
       if (error instanceof TypeError) {
@@ -33,7 +34,7 @@ export class StorageService {
 
     // Validate service key format (should be a JWT-like string)
     if (supabaseServiceKey.length < 50) {
-      console.warn(`Warning: SUPABASE_SERVICE_ROLE_KEY appears to be too short. Service role keys are typically long JWT strings.`);
+      this.logger.warn(`SUPABASE_SERVICE_ROLE_KEY appears to be too short. Service role keys are typically long JWT strings.`);
     }
 
     // Create Supabase client with service role key to bypass RLS

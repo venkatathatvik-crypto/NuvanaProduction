@@ -18,5 +18,5 @@ export class AiResponseDto {
     // Quick Reply Button Support
     quickReplies?: QuickReplyButton[];  // Quick reply buttons to show
     waitingForInput?: boolean;          // Indicates AI is waiting for user selection
-    inputType?: 'questionCount' | 'questionType' | 'difficulty';  // What we're asking for
+    inputType?: 'quizConfig' | 'studyPlanConfig' | 'lessonPlanConfig' | 'questionCount' | 'questionType' | 'difficulty' | 'studyPlanDays' | 'studyPlanHours';  // What we're asking for
 }

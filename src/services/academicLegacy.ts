@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/apiClient";
 import { NestedClass, FlattenedClass } from "@/schemas/academic";
 import { academicService } from "./academicApiService";
+import { logger } from '@/lib/logger';
 export type { FlattenedClass, NestedClass };
 
 interface RawSubjectData {
@@ -142,7 +143,7 @@ export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> =>
 
     return flattenedClasses;
   } catch (error) {
-    console.error("Error fetching classes:", error);
+    logger.error("Error fetching classes:", error);
     throw new Error("Failed to load class data.");
   }
 };
@@ -155,7 +156,7 @@ export const getExamTypes = async (schoolId: string): Promise<string[]> => {
     }
     return examTypes.map((item) => item.name);
   } catch (error) {
-    console.error("Error fetching exam types:", error);
+    logger.error("Error fetching exam types:", error);
     throw new Error("Failed to load exam types.");
   }
 };
@@ -232,7 +233,7 @@ export const deleteTeacherFile = async (
   try {
     await apiClient.delete(`/file-upload/files/${fileId}`);
   } catch (error: unknown) {
-    console.error("Error deleting file:", error);
+    logger.error("Error deleting file:", error);
     const message = error instanceof Error ? error.message : "Failed to delete file.";
     throw new Error(message);
   }
@@ -252,7 +253,7 @@ export const incrementFileDownload = async (
     );
     return data.downloadCount;
   } catch (error: unknown) {
-    console.error("Error incrementing download count:", error);
+    logger.error("Error incrementing download count:", error);
     const message = error instanceof Error ? error.message : "Failed to update download count.";
     throw new Error(message);
   }
@@ -380,7 +381,7 @@ export const getStudentData = async (
     const studentDetails = data.student_details;
 
     if (!studentDetails) {
-      console.warn("No student_details found for student:", studentId);
+      logger.warn("No student_details found for student:", studentId);
       return null;
     }
 
@@ -395,7 +396,7 @@ export const getStudentData = async (
       roll_number: studentDetails.roll_number || undefined,
     };
   } catch (error: unknown) {
-    console.error("Error fetching student data:", error);
+    logger.error("Error fetching student data:", error);
     const message = error instanceof Error ? error.message : "Failed to load student data.";
     throw new Error(message);
   }
@@ -436,7 +437,7 @@ export const getStudentFiles = async (
       fileType: record.fileType as 'pdf' | 'video',
     }));
   } catch (error) {
-    console.error("Error fetching student files:", error);
+    logger.error("Error fetching student files:", error);
     throw new Error("Failed to load files.");
   }
 };
@@ -484,7 +485,7 @@ export const getStudentVoiceNotes = async (
       uploadDate: record.uploadDate || record.createdAt,
     }));
   } catch (error) {
-    console.error("Error fetching student voice notes:", error);
+    logger.error("Error fetching student voice notes:", error);
     throw new Error("Failed to load voice notes.");
   }
 };
@@ -1004,7 +1005,7 @@ export const getTeacherVoiceNotes = async (
       size: record.size,
     }));
   } catch (error) {
-    console.error("Error fetching voice notes:", error);
+    logger.error("Error fetching voice notes:", error);
     throw new Error("Failed to load voice notes.");
   }
 };
@@ -1059,7 +1060,7 @@ export const uploadTeacherVoiceNote = async (
       size: data.size,
     };
   } catch (error: unknown) {
-    console.error("Error uploading voice note:", error);
+    logger.error("Error uploading voice note:", error);
     const message = error instanceof Error ? error.message : "Failed to upload voice note.";
     throw new Error(message);
   }
@@ -1074,7 +1075,7 @@ export const deleteTeacherVoiceNote = async (
   try {
     await apiClient.delete(`/file-upload/voice-notes/${voiceNoteId}`);
   } catch (error: unknown) {
-    console.error("Error deleting voice note:", error);
+    logger.error("Error deleting voice note:", error);
     const message = error instanceof Error ? error.message : "Failed to delete voice note.";
     throw new Error(message);
   }
@@ -1221,7 +1222,7 @@ export const getStudentPendingTestsCount = async (
     const tests = await getStudentTestsFromService(classId, studentId);
     return tests.filter(t => t.submissionStatus === "not_started" && t.examTypeCategory !== "Internal Assessment").length;
   } catch (error) {
-    console.error("Error in getStudentPendingTestsCount:", error);
+    logger.error("Error in getStudentPendingTestsCount:", error);
     return 0;
   }
 };
@@ -1238,7 +1239,7 @@ export const getStudentPendingAssessmentsCount = async (
     const tests = await getStudentTestsFromService(classId, studentId);
     return tests.filter(t => t.submissionStatus === "not_started" && t.examTypeCategory === "Internal Assessment").length;
   } catch (error) {
-    console.error("Error in getStudentPendingAssessmentsCount:", error);
+    logger.error("Error in getStudentPendingAssessmentsCount:", error);
     return 0;
   }
 };
@@ -1251,7 +1252,7 @@ export const getStudentAverageMarksPercentage = async (
     const stats = await analyticsApi.getStudentStatsSummary(studentId);
     return stats.overallPercentage || 0;
   } catch (error) {
-    console.error("Error in getStudentAverageMarksPercentage:", error);
+    logger.error("Error in getStudentAverageMarksPercentage:", error);
     return 0;
   }
 };

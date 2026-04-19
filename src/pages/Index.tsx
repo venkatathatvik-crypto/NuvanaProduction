@@ -89,7 +89,7 @@ const Index = () => {
       >
         <p className="text-sm text-muted-foreground flex items-center gap-1">
           <img
-            src="/PBNL1.png"
+            src={`${import.meta.env.BASE_URL}PBNL1.png`}
             alt="NuvanaCore"
             className="h-12 w-auto ml-1 inline-block"
 

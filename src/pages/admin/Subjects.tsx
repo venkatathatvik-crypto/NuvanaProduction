@@ -19,6 +19,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { logger } from '@/lib/logger';
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminSubjects() {
   const { profile } = useAuth();
@@ -155,7 +157,7 @@ export default function AdminSubjects() {
       queryClient.invalidateQueries({ queryKey: ['subjects-gradeSubjects'] });
       queryClient.invalidateQueries({ queryKey: ['assignments-subjects'] });
     } catch (error: any) {
-      console.error("Subject CSV Import Error:", error);
+      logger.error("Subject CSV Import Error:", error);
       toast.error("Failed to process CSV file");
     } finally {
       setIsImportingSubjects(false);
@@ -206,8 +208,18 @@ export default function AdminSubjects() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-4 w-44" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-64 rounded-xl" />
+            <Skeleton className="h-64 rounded-xl" />
+          </div>
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
       </div>
     );
   }

@@ -1,5 +1,37 @@
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ClassBandStyles } from './classband.styles';
+import { QuickReplyButton } from '../dto/ai-response.dto';
+
+/**
+ * Study Plan Quick Reply Generator
+ * Returns a single studyPlanConfig response so the frontend shows an inline config form
+ */
+export const StudyPlanQuickReply = (
+    topic: string,
+    days?: number,
+    hoursPerDay?: number,
+    ragContext?: string
+): { message: string; quickReplies: QuickReplyButton[]; inputType: string; waitingForInput: boolean } | null => {
+
+    // If any parameter is missing, ask the frontend to show the config form
+    if (!days || !hoursPerDay) {
+        return {
+            message: `📚 **Let's create your study plan for "${topic}"!**
+
+${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]'
+    ? '📖 I have access to your study materials and will structure the plan around them.'
+    : '📝 I will create a general study plan based on standard curriculum.'}
+
+Configure your study plan below and hit **Generate Study Plan**.`,
+            quickReplies: [],
+            inputType: 'studyPlanConfig',
+            waitingForInput: true
+        };
+    }
+
+    // All parameters collected — no config needed
+    return null;
+};
 
 /**
  * Study Plan Prompt Template (LangChain)
@@ -37,14 +69,28 @@ RESPONSE STRUCTURE:
  * Legacy function for backward compatibility
  * Enhanced to create comprehensive study plans with focus on weak areas
  * Now generates pure Markdown - frontend transforms to collapsible sections
+ * Accepts optional days and hoursPerDay for precise timeframe control
  * @deprecated Use StudyPlanPromptTemplate.invoke() instead
  */
-export const StudyPlanPrompt = (topic: string, goals: string, timeframe: string, classBand: string) => {
+export const StudyPlanPrompt = (
+    topic: string,
+    goals: string,
+    timeframe: string,
+    classBand: string,
+    days?: number,
+    hoursPerDay?: number
+) => {
     const classBandStyle = ClassBandStyles[classBand];
+
+    // Build a precise timeframe string if days/hours are provided
+    const effectiveTimeframe = (days && hoursPerDay)
+        ? `${days} days, ${hoursPerDay} hour${hoursPerDay > 1 ? 's' : ''} per day (Total: ${days * hoursPerDay} hours)`
+        : timeframe;
+
     return `TASK: Generate a comprehensive, personalized study plan for "${topic}"
 
 GOALS: ${goals}
-TIMEFRAME: ${timeframe}
+TIMEFRAME: ${effectiveTimeframe}
 STYLE: ${classBandStyle}
 
 CRITICAL INSTRUCTIONS:
@@ -56,12 +102,14 @@ CRITICAL INSTRUCTIONS:
 6. **Use Uploaded Materials** - Reference the RAG context to structure the plan around actual study materials
 7. **Age-Appropriate Pacing** - Adjust difficulty and pace based on class band
 8. **Include Practice** - Mix reading, solving, and testing activities
+${days && hoursPerDay ? `9. **Strict Time Budget** - Plan MUST fit exactly ${days} days with ${hoursPerDay} hour${hoursPerDay > 1 ? 's' : ''} of study per day. Break each day into clear time blocks that total ${hoursPerDay} hour${hoursPerDay > 1 ? 's' : ''}.` : ''}
 
 RESPONSE STRUCTURE (use this exact format with ## emoji headers):
 
 ## 📚 Study Plan Overview
 
 [Brief introduction to what this plan covers and the learning objectives]
+${days && hoursPerDay ? `\n**Duration:** ${days} Days | **Daily Study Time:** ${hoursPerDay} Hour${hoursPerDay > 1 ? 's' : ''} | **Total Study Time:** ${days * hoursPerDay} Hours\n` : ''}
 
 ## 🎯 Topics to Cover
 
@@ -124,5 +172,6 @@ PERSONALIZATION NOTES:
 - If student is strong overall, include advanced/challenge problems
 - Reference specific page numbers and sections from uploaded study materials
 - Adjust daily time based on student's grade level and capacity
+${days && hoursPerDay ? `- STRICT CONSTRAINT: Each day's activities MUST total exactly ${hoursPerDay} hour${hoursPerDay > 1 ? 's' : ''} of study time` : ''}
 - NO HTML TAGS - pure Markdown only`;
 };

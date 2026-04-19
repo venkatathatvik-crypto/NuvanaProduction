@@ -1,5 +1,9 @@
+import { logger } from '@/lib/logger';
+import { syncQueueManager } from '@/lib/syncQueue';
 /**
- * Centralized API client with automatic token refresh and retry logic
+ * Centralized API client with automatic token refresh and retry logic.
+ * Offline-first: OfflineQueuedError signals that a mutation was accepted
+ * into the sync queue instead of being sent immediately.
  */
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://nuvana360server.onrender.com';
@@ -12,6 +16,24 @@ export class ApiError extends Error {
   constructor(public message: string, public data: any, public status: number) {
     super(message);
     this.name = 'ApiError';
+  }
+}
+
+/**
+ * Thrown (or returned) when a mutation was queued for later sync rather than
+ * executed immediately.  The global TanStack Query error handler checks for
+ * this type and suppresses the error toast so the OfflineIndicator can handle
+ * the UX instead.
+ */
+export class OfflineQueuedError extends Error {
+  readonly idKey: string;
+  readonly label: string;
+
+  constructor(idKey: string, label: string) {
+    super(`Queued offline: ${label}`);
+    this.name = 'OfflineQueuedError';
+    this.idKey = idKey;
+    this.label = label;
   }
 }
 
@@ -62,7 +84,12 @@ class ApiClient {
         });
 
         if (!response.ok) {
-          throw new Error('Token refresh failed');
+          // If the server explicitly rejected the refresh token (e.g. 401 or 400),
+          // THEN we clear the session.
+          if (response.status === 401 || response.status === 400) {
+            throw new Error('Token refresh rejected by server');
+          }
+          throw new Error(`Token refresh failed with status ${response.status}`);
         }
 
         const rawData = await response.json();
@@ -74,13 +101,26 @@ class ApiClient {
 
         localStorage.setItem('access_token', data.access_token);
         return data.access_token;
-      } catch (error) {
-        // Clear tokens on refresh failure
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+      } catch (error: any) {
+        // ── CRITICAL OFFLINE FIX ──────────────────────────────────────────
+        // Only clear tokens and force logout if the error is an ACTUAL
+        // authentication failure from the server.
+        // If it's a network error (e.g. TypeError: Failed to fetch), we 
+        // simply throw it so the calling request can fail gracefully
+        // (and potentially use cached data) without logging the user out.
+        const isAuthError = error.message?.includes('rejected by server') || 
+                           error.status === 401 || 
+                           error.status === 400;
+
+        if (isAuthError) {
+          logger.warn('[ApiClient] Token refresh rejected, clearing session');
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+        } else {
+          logger.log('[ApiClient] Network error during token refresh (offline?), keeping session');
+        }
         
-        // Emit session expired event instead of hard redirect
-        window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
         return null;
       } finally {
         this.isRefreshing = false;
@@ -122,7 +162,39 @@ class ApiClient {
         headers,
       });
     } catch (error) {
-      console.error('Network error during API request:', error);
+      logger.error('Network error during API request:', error);
+
+      // ── CRITICAL OFFLINE MUTATION FIX ─────────────────────────────────────
+      // If the request is a mutation (POST/PUT/PATCH/DELETE) and we are
+      // offline, accept it into the sync queue instead of throwing a generic
+      // error. This makes the UI feel "instant" even without a connection.
+      const isMutation = fetchOptions.method && 
+                         ['POST', 'PUT', 'PATCH', 'DELETE'].includes(fetchOptions.method);
+      
+      const isAuthRoute = endpoint.includes('/auth/');
+
+      if (isMutation && !isAuthRoute) {
+        // Generate a human-readable label for the sync queue
+        const pathParts = endpoint.split('/').filter(Boolean);
+        const label = pathParts.length > 0 ? 
+                     `Syncing ${pathParts[pathParts.length - 1].replace(/-/g, ' ')}` : 
+                     'Syncing data';
+
+        // Enqueue the mutation for later processing
+        const idKey = await syncQueueManager.enqueue({
+          endpoint,
+          method: fetchOptions.method as any,
+          body: fetchOptions.body ? JSON.parse(fetchOptions.body as string) : undefined,
+          label,
+          maxRetries: 3,
+          feature: pathParts[0] || 'general'
+        });
+
+        // Throw specialized error that tells TanStack Query to suppress the
+        // error toast (handled by OfflineIndicator instead).
+        throw new OfflineQueuedError(idKey, label);
+      }
+
       throw new ApiError(
         'Unable to connect to the server. Please check your internet connection.',
         null,
@@ -277,7 +349,7 @@ class ApiClient {
         body: formData,
       });
     } catch (error) {
-      console.error('Network error during file upload:', error);
+      logger.error('Network error during file upload:', error);
       throw new ApiError(
         'Unable to connect to the server for upload. Please check your internet connection.',
         null,

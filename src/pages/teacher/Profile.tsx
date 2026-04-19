@@ -23,6 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { schoolService } from "@/services/schoolService";
 import { queryKeys } from "@/lib/queryKeys";
+import { logger } from '@/lib/logger';
 
 const ProfileSkeleton = () => (
   <div className="min-h-screen p-6 animate-in fade-in duration-500">
@@ -154,7 +155,7 @@ const TeacherProfile = () => {
         toast.error("Failed to upload photo");
       }
     } catch (error) {
-      console.error("Error uploading photo:", error);
+      logger.error("Error uploading photo:", error);
       toast.error("Failed to upload photo");
     } finally {
       setUploadingPhoto(false);

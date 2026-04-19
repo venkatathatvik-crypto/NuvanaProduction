@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Shield, Mail, Lock, ArrowLeft } from "lucide-react";
+import { Shield, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ApiError } from "@/lib/apiClient";
 import { toast } from "sonner";
+import { logger } from '@/lib/logger';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +31,7 @@ export default function AdminLogin() {
       navigate("/admin");
 
     } catch (error: any) {
-      console.error("Login error:", error);
+      logger.error("Login error:", error);
       
       // Check for password reset requirement
       if (error instanceof ApiError && error.data?.code === 'RESET_REQUIRED') {
@@ -83,7 +85,7 @@ export default function AdminLogin() {
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-6" noValidate>
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>
               <div className="relative">
@@ -104,13 +106,15 @@ export default function AdminLogin() {
               <div className="relative">
                 <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
                 <Input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                // required
+                  className="pl-10 pr-10"
                 />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground">
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 

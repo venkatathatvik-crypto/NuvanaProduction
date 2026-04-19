@@ -16,6 +16,7 @@ import {
   getStudentMonthlyAttendanceSummary,
 } from "@/services/attendanceService";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import {
   BarChart,
   Bar,
@@ -76,7 +77,9 @@ const Attendance = () => {
     enabled: !!profile?.id && !!selectedMonth,
   });
 
-  const loading = loadingOverall || loadingSubjects || loadingSummary;
+  const hasData = overallAttendanceRaw !== undefined || subjectAttendance.length > 0 || monthlySummary.length > 0;
+  const loading = (loadingOverall || loadingSubjects || loadingSummary) && !hasData;
+  const offlineLoading = useOfflineLoading(loading);
 
   // Prepare chart data for the selected month
   const chartData = useMemo(() => {
@@ -148,7 +151,9 @@ const Attendance = () => {
           </motion.div>
         </div>
 
-        {loading ? (
+        {offlineLoading ? (
+          <OfflineEmptyState pageName="Attendance" />
+        ) : loading ? (
           <div className="flex justify-center items-center py-20">
             <LoadingSpinner />
           </div>

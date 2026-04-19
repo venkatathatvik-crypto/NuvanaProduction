@@ -21,9 +21,13 @@ import { apiClient } from "@/lib/apiClient";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { WifiOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { schoolService } from "@/services/schoolService";
 import { queryKeys } from "@/lib/queryKeys";
+import { logger } from '@/lib/logger';
+import { ConnectivityGuard } from "@/components/ConnectivityGuard";
 
 const ProfileSkeleton = () => (
   <div className="min-h-screen p-6 animate-in fade-in duration-500">
@@ -107,6 +111,8 @@ const StudentProfile = () => {
     enabled: !!profile?.school_id,
   });
 
+  // Must be called unconditionally — before any early returns
+  const { isOnline } = useNetworkStatus();
   const userEmail = profile?.email || "";
 
   const handlePhotoUpload = async (
@@ -137,25 +143,32 @@ const StudentProfile = () => {
         toast.error("Failed to upload photo");
       }
     } catch (error) {
-      console.error("Error uploading photo:", error);
+      logger.error("Error uploading photo:", error);
       toast.error("Failed to upload photo");
     } finally {
       setUploadingPhoto(false);
     }
   };
 
-  if (loading || profileLoading) {
+  const isInitialLoading = (loading && !studentData) || (profileLoading && !profile);
+
+  if (isInitialLoading) {
     return <ProfileSkeleton />;
   }
 
   if (!profile || !studentData) {
     return (
-      <div className="min-h-screen p-6 bg-background flex items-center justify-center">
-        <Card className="glass-card p-6">
-          <p className="text-muted-foreground">
-            Unable to load student profile.
-          </p>
-        </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-lg bg-zinc-900 border border-zinc-700 text-zinc-100">
+          {!isOnline ? (
+            <>
+              <WifiOff className="h-4 w-4 text-orange-400 shrink-0" />
+              <span>You&rsquo;re offline — profile not cached yet</span>
+            </>
+          ) : (
+            <span>Unable to load student profile.</span>
+          )}
+        </div>
       </div>
     );
   }
@@ -207,9 +220,11 @@ const StudentProfile = () => {
                   <User className="w-16 h-16 text-muted-foreground" />
                 )}
                 {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Camera className="w-8 h-8 text-white" />
-                </div>
+                <ConnectivityGuard message="You need to be online to change your profile photo.">
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Camera className="w-8 h-8 text-white" />
+                  </div>
+                </ConnectivityGuard>
                 <input
                   ref={fileInputRef}
                   type="file"

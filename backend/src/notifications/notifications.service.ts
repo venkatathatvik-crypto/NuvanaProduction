@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotificationDto, CreateBatchNotificationDto } from './dto';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async createNotification(dto: CreateNotificationDto, schoolId: string) {
@@ -66,7 +68,7 @@ export class NotificationsService {
     const invalidIds = dto.recipient_ids.filter((id) => !validRecipientIds.includes(id));
 
     if (invalidIds.length > 0) {
-      console.warn(`Invalid recipient IDs: ${invalidIds.join(', ')}`);
+      this.logger.warn(`Invalid recipient IDs: ${invalidIds.join(', ')}`);
     }
 
     if (validRecipientIds.length === 0) {

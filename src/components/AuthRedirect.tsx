@@ -13,8 +13,10 @@ const AuthRedirect = ({ children }: AuthRedirectProps) => {
   // Wait for initial auth check
   if (loading) return <LoadingSpinner />;
 
-  // If we have a session but profile is still loading, wait
-  if (session && profileLoading) return <LoadingSpinner />;
+  // If we have a session but profile is still loading and we don't have a 
+  // cached version yet, wait. If we HAVE a profile, we proceed with 
+  // the redirection even if it's currently revalidating in the background.
+  if (session && profileLoading && !profile) return <LoadingSpinner />;
 
   // If authenticated with valid profile, redirect based on role
   if (session && profile) {

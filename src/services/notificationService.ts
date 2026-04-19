@@ -1,5 +1,6 @@
 // Notification service for creating and managing notifications
 import { apiClient } from "@/lib/apiClient";
+import { logger } from '@/lib/logger';
 
 export interface Notification {
   id: string;
@@ -41,7 +42,7 @@ export const createNotification = async (
       is_urgent: params.is_urgent || false,
     });
   } catch (error) {
-    console.error("Error creating notification:", error);
+    logger.error("Error creating notification:", error);
     throw new Error("Failed to create notification");
   }
 };
@@ -64,7 +65,7 @@ export const createNotificationsForClass = async (
       is_urgent: params.is_urgent || false,
     });
   } catch (error) {
-    console.error("Error creating batch notifications:", error);
+    logger.error("Error creating batch notifications:", error);
     // Don't throw - notifications should not block main actions
   }
 };
@@ -78,7 +79,7 @@ export const getNotifications = async (
     const notifications = await apiClient.get(`/notifications/recipient/${recipientId}?limit=${limit}`);
     return notifications || [];
   } catch (error) {
-    console.error("Error fetching notifications:", error);
+    logger.error("Error fetching notifications:", error);
     return [];
   }
 };
@@ -91,7 +92,7 @@ export const getUnreadNotificationCount = async (
     const result = await apiClient.get(`/notifications/recipient/${recipientId}/unread-count`);
     return result.count || 0;
   } catch (error) {
-    console.error("Error fetching unread count:", error);
+    logger.error("Error fetching unread count:", error);
     return 0;
   }
 };
@@ -104,7 +105,7 @@ export const markNotificationAsRead = async (
   try {
     await apiClient.patch(`/notifications/${notificationId}/read/recipient/${recipientId}`);
   } catch (error) {
-    console.error("Error marking notification as read:", error);
+    logger.error("Error marking notification as read:", error);
   }
 };
 
@@ -115,7 +116,7 @@ export const markAllNotificationsAsRead = async (
   try {
     await apiClient.patch(`/notifications/recipient/${recipientId}/read-all`);
   } catch (error) {
-    console.error("Error marking all as read:", error);
+    logger.error("Error marking all as read:", error);
   }
 };
 
@@ -127,7 +128,7 @@ export const getStudentIdsInClass = async (
     const result = await apiClient.get(`/notifications/class/${classId}/student-ids`);
     return result.student_ids || [];
   } catch (error) {
-    console.error("Error fetching student IDs:", error);
+    logger.error("Error fetching student IDs:", error);
     return [];
   }
 };

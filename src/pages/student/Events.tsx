@@ -5,58 +5,40 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState, useEffect } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentData, getStudentTests, StudentTest } from "@/services/academic";
-import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 
 const Events = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
-  const [internalAssessments, setInternalAssessments] = useState<StudentTest[]>([]);
-  const [allTests, setAllTests] = useState<StudentTest[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchTests = async () => {
-      if (profileLoading) return;
+  // Step 1: fetch student data (class_id)
+  const { data: studentData } = useQuery({
+    queryKey: ["student-data", profile?.id],
+    queryFn: () => getStudentData(profile!.id),
+    enabled: !!profile?.id && !profileLoading,
+    staleTime: 5 * 60 * 1000,
+  });
 
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
+  // Step 2: fetch all tests for the student's class
+  const { data: testsData = [], isLoading: loading } = useQuery<StudentTest[]>({
+    queryKey: ["student-tests", studentData?.class_id, profile?.id],
+    queryFn: () => getStudentTests(studentData!.class_id, profile!.id),
+    enabled: !!studentData?.class_id && !!profile?.id,
+    staleTime: 5 * 60 * 1000,
+  });
 
-      try {
-        const studentData = await getStudentData(profile.id);
-        if (!studentData) {
-          setLoading(false);
-          return;
-        }
+  const internalAssessments = testsData.filter(t => t.examTypeCategory === 'Internal Assessment');
+  const allTests = testsData
+    .filter(t => t.dueDate)
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
-        // Fetch all tests
-        const testsData = await getStudentTests(studentData.class_id, profile.id);
-        
-        // Filter only Internal Assessments
-        const assessments = testsData.filter(test => test.examTypeCategory === 'Internal Assessment');
-        setInternalAssessments(assessments);
-        
-        // Set all tests and sort by due date (closest deadline first)
-        const sortedTests = testsData
-          .filter(test => test.dueDate) // Only include tests with due dates
-          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-        setAllTests(sortedTests);
-      } catch (error: any) {
-        console.error("Error fetching tests:", error);
-        toast.error("Failed to load tests");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTests();
-  }, [profile, profileLoading]);
+  const isInitialLoading = loading && testsData.length === 0;
+  const offlineLoading = useOfflineLoading(isInitialLoading);
 
   const upcomingEvents = [
     {
@@ -165,6 +147,9 @@ const Events = () => {
           </motion.div>
         </div>
 
+        {offlineLoading ? (
+          <OfflineEmptyState pageName="Assignments & Deadlines" />
+        ) : (
         <Tabs defaultValue="assessments" className="w-full">
           <TabsList className="grid w-full grid-cols-3 h-auto">
             <TabsTrigger value="assessments" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
@@ -180,7 +165,7 @@ const Events = () => {
 
           {/* Internal Assessments Tab */}
           <TabsContent value="assessments" className="space-y-4 mt-6">
-            {loading ? (
+            {isInitialLoading ? (
               <div className="flex items-center justify-center py-12">
                 <LoadingSpinner />
               </div>
@@ -323,7 +308,7 @@ const Events = () => {
 
 
           <TabsContent value="deadlines" className="space-y-4 mt-6">
-            {loading ? (
+            {isInitialLoading ? (
               <div className="flex items-center justify-center py-12">
                 <LoadingSpinner />
               </div>
@@ -423,6 +408,7 @@ const Events = () => {
             ))}
           </TabsContent>
         </Tabs>
+        )}
       </div>
     </div>
   );

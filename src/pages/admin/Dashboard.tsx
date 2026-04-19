@@ -14,6 +14,7 @@ import {
   MessageSquare,
   User,
   Target,
+  Heart,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,13 @@ const AdminDashboard = () => {
       color: "text-red-500",
       path: "/admin/engagement",
       description: "School-wide participation analytics",
+    },
+    {
+      label: "Life Coach",
+      icon: Heart,
+      color: "text-pink-500",
+      path: "/admin/life-coach",
+      description: "Manage life coach books & categories",
     },
     {
       label: "My Profile",

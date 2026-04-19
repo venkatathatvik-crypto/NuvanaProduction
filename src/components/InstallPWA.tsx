@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { logger } from '@/lib/logger';
 
 export const InstallPWA = () => {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -41,9 +42,9 @@ export const InstallPWA = () => {
         const { outcome } = await deferredPrompt.userChoice;
 
         if (outcome === 'accepted') {
-            console.log('User accepted the install prompt');
+            logger.log('User accepted the install prompt');
         } else {
-            console.log('User dismissed the install prompt');
+            logger.log('User dismissed the install prompt');
         }
 
         // Clear the deferredPrompt

@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/apiClient";
+import { logger } from '@/lib/logger';
 
 /**
  * Upload a profile photo via the backend API
@@ -21,7 +22,7 @@ export const uploadProfilePhoto = async (
 
     return response.avatar_url;
   } catch (error) {
-    console.error("Error uploading profile photo:", error);
+    logger.error("Error uploading profile photo:", error);
     return null;
   }
 };
@@ -41,7 +42,7 @@ export const deleteProfilePhoto = async (userId: string): Promise<boolean> => {
     await apiClient.patch(`/users/${userId}`, { avatar_url: null });
     return true;
   } catch (error) {
-    console.error("Error deleting profile photo:", error);
+    logger.error("Error deleting profile photo:", error);
     return false;
   }
 };

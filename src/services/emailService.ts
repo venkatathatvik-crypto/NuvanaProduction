@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 // Email service - Supabase removed
 // TODO: Implement backend email API endpoint when needed
 
@@ -15,7 +16,7 @@ interface SendEmailParams {
  */
 export const sendEmail = async (params: SendEmailParams): Promise<boolean> => {
   // TODO: Implement backend email API endpoint
-  console.warn('Email functionality not yet implemented in backend API');
+  logger.warn('Email functionality not yet implemented in backend API');
   return false;
 };
 
@@ -25,7 +26,7 @@ export const sendEmail = async (params: SendEmailParams): Promise<boolean> => {
  */
 export const getStudentEmailsInClass = async (classId: string): Promise<string[]> => {
   // TODO: Implement backend API endpoint to get student emails by class
-  console.warn('getStudentEmailsInClass not yet implemented in backend API');
+  logger.warn('getStudentEmailsInClass not yet implemented in backend API');
   return [];
 };
 

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Request, Logger } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AiService } from './ai.service';
 import { AiRequestDto, AiTaskType } from './dto/ai-request.dto';
@@ -10,15 +10,27 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 @UseGuards(RolesGuard)
 @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 AI requests per minute
 export class AiController {
+    private readonly logger = new Logger(AiController.name);
     constructor(private readonly aiService: AiService) { }
+
+    // Map JWT user fields to additionalContext
+    // JWT payload: { sub, email, role (string), school_id }
+    private buildContext(req: any, existing?: any) {
+        return {
+            ...existing,
+            userId: req.user.sub,
+            role: req.user.role,
+            schoolId: req.user.school_id,
+        };
+    }
 
     @Post('start')
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async start(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/start - Request received (Default Mode)`);
+        this.logger.log(`[AI Controller] POST /ai/start - Request received (Default Mode)`);
         dto.taskType = AiTaskType.START;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -26,9 +38,9 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async explain(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/explain - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/explain - Request received`);
         dto.taskType = AiTaskType.EXPLAIN;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -36,9 +48,9 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async solve(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/solve - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/solve - Request received`);
         dto.taskType = AiTaskType.SOLVE;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -46,9 +58,9 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async doubt(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/doubt - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/doubt - Request received`);
         dto.taskType = AiTaskType.DOUBT;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -56,7 +68,7 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async summary(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/summary - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/summary - Request received`);
         dto.taskType = AiTaskType.SUMMARY;
         return this.aiService.processRequest(dto);
     }
@@ -65,7 +77,7 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async expand(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/expand - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/expand - Request received`);
         dto.taskType = AiTaskType.EXPAND;
         return this.aiService.processRequest(dto);
     }
@@ -74,7 +86,7 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async studyPlan(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/studyplan - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/studyplan - Request received`);
         dto.taskType = AiTaskType.STUDY_PLAN;
         return this.aiService.processRequest(dto);
     }
@@ -83,7 +95,7 @@ export class AiController {
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async predict(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/predict - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/predict - Request received`);
         dto.taskType = AiTaskType.PREDICT;
         return this.aiService.processRequest(dto);
     }
@@ -91,18 +103,20 @@ export class AiController {
     @Post('mocktest')
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
-    async mockTest(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/mocktest - Request received`);
+    async mockTest(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
+        this.logger.log(`[AI Controller] POST /ai/mocktest - Request received`);
         dto.taskType = AiTaskType.MOCK_TEST;
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
     @Post('lifeskill')
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
-    async lifeSkill(@Body() dto: AiRequestDto): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/lifeskill - Request received`);
+    async lifeSkill(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
+        this.logger.log(`[AI Controller] POST /ai/lifeskill - Request received`);
         dto.taskType = AiTaskType.LIFE_SKILL;
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -112,9 +126,9 @@ export class AiController {
     @Roles('teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async teacherLessonPlan(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/teacherlessonplan - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/teacherlessonplan - Request received`);
         dto.taskType = AiTaskType.TEACHER_LESSON_PLAN;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -122,9 +136,9 @@ export class AiController {
     @Roles('teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async teacherEmailDraft(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/teacheremaildraft - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/teacheremaildraft - Request received`);
         dto.taskType = AiTaskType.TEACHER_EMAIL_DRAFT;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 
@@ -132,9 +146,9 @@ export class AiController {
     @Roles('teacher', 'school_admin', 'super_admin')
     @HttpCode(HttpStatus.OK)
     async teacherGradePaper(@Body() dto: AiRequestDto, @Request() req): Promise<AiResponseDto> {
-        console.log(`[AI Controller] POST /ai/teachergradepaper - Request received`);
+        this.logger.log(`[AI Controller] POST /ai/teachergradepaper - Request received`);
         dto.taskType = AiTaskType.TEACHER_GRADE_PAPER;
-        dto.additionalContext = { ...dto.additionalContext, userId: req.user.id, roleId: req.user.role_id, schoolId: req.user.school_id };
+        dto.additionalContext = this.buildContext(req, dto.additionalContext);
         return this.aiService.processRequest(dto);
     }
 }

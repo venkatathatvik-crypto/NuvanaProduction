@@ -103,6 +103,8 @@ model files {
   download_count      Int?                  @default(0)
   file_type           String?               @default("pdf")
   created_at          DateTime?             @default(now()) @db.Timestamptz(6)
+  rag_status          String?
+  rag_error           String?
   engagement_sessions engagement_sessions[]
   file_categories     file_categories?      @relation(fields: [category_id], references: [id], onUpdate: NoAction)
   classes             classes               @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -173,6 +175,7 @@ model profiles {
   engagement_analytics                       engagement_analytics[]
   engagement_sessions                        engagement_sessions[]
   files                                      files[]
+  life_coach_books                           life_coach_books[]
   notifications                              notifications[]
   pdf_annotations                            pdf_annotations[]
   user_roles                                 user_roles                   @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -234,6 +237,8 @@ model schools {
   files                      files[]
   grade_levels               grade_levels[]
   grade_subjects             grade_subjects[]
+  life_coach_books           life_coach_books[]
+  life_coach_categories      life_coach_categories[]
   notifications              notifications[]
   pdf_annotations            pdf_annotations[]
   profiles                   profiles[]
@@ -593,6 +598,35 @@ model whatsapp_templates {
   updated_at    DateTime? @default(now()) @db.Timestamptz(6)
 
   @@index([use_case], map: "idx_whatsapp_templates_use_case")
+}
+
+model life_coach_books {
+  id                    String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id             String                @db.Uuid
+  title                 String                @db.VarChar(255)
+  category_id           Int
+  storage_url           String                @db.VarChar(500)
+  uploaded_by           String                @db.Uuid
+  file_type             String?               @default("pdf") @db.VarChar(50)
+  rag_status            String?               @db.VarChar(50)
+  rag_error             String?
+  created_at            DateTime?             @default(now()) @db.Timestamptz(6)
+  life_coach_categories life_coach_categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schools               schools               @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles              profiles              @relation(fields: [uploaded_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_life_coach_books_school")
+}
+
+model life_coach_categories {
+  id               Int                @id @default(autoincrement())
+  school_id        String             @db.Uuid
+  name             String             @db.VarChar(255)
+  created_at       DateTime?          @default(now()) @db.Timestamptz(6)
+  life_coach_books life_coach_books[]
+  schools          schools            @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_life_coach_categories_school")
 }
 
 enum attendance_status_enum {

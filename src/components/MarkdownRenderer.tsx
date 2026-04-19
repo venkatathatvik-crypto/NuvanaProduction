@@ -108,7 +108,7 @@ export const MarkdownRenderer = ({ content, className = '' }: MarkdownRendererPr
             <h2 className="text-2xl font-bold mb-3 mt-5 text-primary">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-xl font-semibold mb-2 mt-4 text-secondary">{children}</h3>
+            <h3 className="text-xl font-semibold mb-2 mt-4 text-primary/80">{children}</h3>
           ),
           h4: ({ children }) => (
             <h4 className="text-lg font-semibold mb-2 mt-3">{children}</h4>
@@ -182,7 +182,7 @@ export const MarkdownRenderer = ({ content, className = '' }: MarkdownRendererPr
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-3 text-sm border-r border-border/20 last:border-r-0 whitespace-pre-wrap">
+            <td className="px-4 py-3 text-sm text-foreground border-r border-border/20 last:border-r-0 whitespace-pre-wrap">
               {children}
             </td>
           ),
@@ -206,7 +206,7 @@ export const MarkdownRenderer = ({ content, className = '' }: MarkdownRendererPr
           
           // Custom styling for emphasis/italic
           em: ({ children }) => (
-            <em className="italic text-secondary">{children}</em>
+            <em className="italic text-foreground/80">{children}</em>
           ),
 
           // Custom styling for collapsible sections
@@ -223,7 +223,7 @@ export const MarkdownRenderer = ({ content, className = '' }: MarkdownRendererPr
                 </div>
                 {children}
               </div>
-              <div className="text-muted-foreground group-open:rotate-180 transition-transform duration-500">
+              <div className="text-foreground/60 group-open:rotate-180 transition-transform duration-500">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>

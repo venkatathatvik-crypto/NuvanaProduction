@@ -5,7 +5,9 @@ import {
   useState,
   ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { UserProfile, authService, UserRole } from "@/lib/auth";
+import { getCachedProfile, clearQueryCache } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 // Session type - simplified to just contain user data
@@ -42,6 +44,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -62,52 +65,78 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return;
         }
 
-        // Validate session with backend
-        logger.log("[AuthProvider] Validating session with backend...");
-        setProfileLoading(true);
-        const userProfile = await authService.validateSession();
-
-        if (userProfile) {
-          // Session is valid, set session and profile
-          // Get the current token in case it was refreshed during validation
-          const currentToken = authService.getAccessToken();
-          
-          logger.log(
-            "[AuthProvider] Session valid, user:",
-            userProfile.email,
-            "role:",
-            userProfile.role
-          );
-          setSession({
-            user: {
-              id: userProfile.id,
-              email: userProfile.email || "",
-            },
-            access_token: currentToken,
-          });
-          setProfile(userProfile);
-        } else {
-          // Session validation failed, clear everything
-          logger.log(
-            "[AuthProvider] Session validation returned null, clearing auth"
-          );
-          setSession(null);
-          setProfile(null);
+        // ── OFFLINE-FIRST: INSTANT CACHE RESTORE ────────────────────────────
+        // We prioritize showing the user's last-known data so the dashboard
+        // appears immediately even if the network is flaky or offline.
+        logger.log("[AuthProvider] Found token — restoring from IndexedDB cache first...");
+        try {
+          const cachedProfile = await getCachedProfile();
+          if (cachedProfile) {
+            logger.log(
+              "[AuthProvider] Success: restored profile from cache (stale-while-revalidate), user:",
+              cachedProfile.email
+            );
+            setSession({
+              user: { id: cachedProfile.id, email: cachedProfile.email || "" },
+              access_token: accessToken,
+            });
+            setProfile(cachedProfile);
+            
+            // ── OFFLINE-FIRST INDUSTRY STANDARD: UNBLOCK IMMEDIATELY ──────
+            // We set loading=false NOW so the UI (Dashboard) renders instantly.
+            // validateSession will continue in the background to confirm the
+            // session is still fresh.
+            setLoading(false);
+          }
+        } catch (cacheError) {
+          logger.warn("[AuthProvider] Cache read check failed:", cacheError);
         }
-      } catch (error) {
-        console.error(
-          "[AuthProvider] Error during auth initialization:",
-          error
-        );
+
+        // ── BACKGROUND VALIDATION (STALE-WHILE-REVALIDATE) ─────────────────
+        // We call validateSession to check if the session is still valid.
+        
+        // Only show a blocking spinner if we DON'T have a cached profile yet.
+        // If we have a profile, this revalidation happens silently in the background.
+        if (!profile) {
+          setProfileLoading(true);
+        }
+        
+        try {
+          // validateSession() has a 5s timeout.
+          const userProfile = await authService.validateSession();
+
+          if (userProfile) {
+            const currentToken = authService.getAccessToken();
+            logger.log("[AuthProvider] Session verified with backend");
+            setSession({
+              user: { id: userProfile.id, email: userProfile.email || "" },
+              access_token: currentToken,
+            });
+            setProfile(userProfile);
+          } else {
+            // Server explicitly said session is invalid
+            logger.log("[AuthProvider] Session invalid, clearing auth");
+            setSession(null);
+            setProfile(null);
+          }
+        } catch (error: any) {
+          logger.error("[AuthProvider] Network/Validation error:", error);
+          // If we already have a profile from cache, we DON'T clear it on 
+          // network error. We only clear it on a 401 (handled in authService).
+        } finally {
+          setProfileLoading(false);
+          setLoading(false);
+        }
+      } catch (globalError) {
+        logger.error("[AuthProvider] Global initialization error:", globalError);
         setSession(null);
         setProfile(null);
-      } finally {
-        setProfileLoading(false);
         setLoading(false);
       }
     };
 
     initializeAuth();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle session expiry - defined before useEffect to avoid closure issues
@@ -163,6 +192,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Logout function
   const logout = async () => {
     await authService.logout();
+
+    // Clear in-memory query cache so the next user doesn't see stale data
+    queryClient.clear();
+
+    // Clear the persisted query cache from IndexedDB to prevent cross-user
+    // data leaks if a different account logs in on the same browser
+    await clearQueryCache();
+
     setSession(null);
     setProfile(null);
   };

@@ -42,6 +42,7 @@ import { attendanceApi } from "@/services/attendanceApiService";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { logger } from '@/lib/logger';
 
 const TeacherAttendance = () => {
   const navigate = useNavigate();
@@ -105,8 +106,8 @@ const TeacherAttendance = () => {
       try {
         // Fetch students from the selected class
         const studentsData = await getStudentsByClass(selectedClass.class_id);
-        console.log('[Teacher Attendance] Students data received:', studentsData);
-        console.log('[Teacher Attendance] Sample student:', studentsData[0]);
+        logger.log('[Teacher Attendance] Students data received:', studentsData);
+        logger.log('[Teacher Attendance] Sample student:', studentsData[0]);
 
         // Fetch existing attendance records for today
         const attendanceMap = await getAttendanceForDate(
@@ -132,10 +133,10 @@ const TeacherAttendance = () => {
           };
         });
 
-        console.log('[Teacher Attendance] Merged students:', mergedStudents);
+        logger.log('[Teacher Attendance] Merged students:', mergedStudents);
         setStudents(mergedStudents);
       } catch (error) {
-        console.error("Error fetching students:", error);
+        logger.error("Error fetching students:", error);
         toast.error("Failed to load students for selected class.");
         setStudents([]);
       } finally {
@@ -292,7 +293,7 @@ const TeacherAttendance = () => {
         );
       }
     } catch (error) {
-      console.error("Error importing CSV:", error);
+      logger.error("Error importing CSV:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to import CSV file";
       toast.error(errorMessage);
     }
@@ -365,7 +366,7 @@ const TeacherAttendance = () => {
           target_url: "/student/attendance",
         });
       } catch (notifError) {
-        console.error("Failed to send notifications:", notifError);
+        logger.error("Failed to send notifications:", notifError);
       }
 
       // Send email notifications
@@ -377,7 +378,7 @@ const TeacherAttendance = () => {
           selectedClass.class_name
         );
       } catch (emailError) {
-        console.error("Failed to send emails:", emailError);
+        logger.error("Failed to send emails:", emailError);
       }
 
       // Invalidate all attendance-related queries
@@ -392,7 +393,7 @@ const TeacherAttendance = () => {
       queryClient.invalidateQueries({ queryKey: ['student-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['student-analytics'] });
     } catch (error) {
-      console.error("Error submitting attendance:", error);
+      logger.error("Error submitting attendance:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to submit attendance. Please try again.";
       toast.error(errorMessage);
     } finally {
@@ -569,7 +570,7 @@ const TeacherAttendance = () => {
           target_url: "/student/attendance",
         });
       } catch (notifError) {
-        console.error("Failed to send notifications:", notifError);
+        logger.error("Failed to send notifications:", notifError);
       }
 
       // Send emails
@@ -584,7 +585,7 @@ const TeacherAttendance = () => {
           selectedClass.class_name
         );
       } catch (emailError) {
-        console.error("Failed to send emails:", emailError);
+        logger.error("Failed to send emails:", emailError);
       }
 
       // Invalidate all attendance-related queries
@@ -607,7 +608,7 @@ const TeacherAttendance = () => {
         setSelectedDates([]);
       }
     } catch (error) {
-      console.error("Error submitting bulk attendance:", error);
+      logger.error("Error submitting bulk attendance:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to submit attendance. Please try again.";
       toast.error(errorMessage);
     } finally {
