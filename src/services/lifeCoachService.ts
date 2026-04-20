@@ -9,7 +9,6 @@ export interface LifeCoachBook {
   uploadDate: string;
   ragStatus: string;
   ragError?: string;
-  size?: string;
 }
 
 export const lifeCoachService = {

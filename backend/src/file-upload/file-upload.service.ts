@@ -742,7 +742,7 @@ export class FileUploadService {
       this.logger.error(`[Life Coach] PDF processing failed for book ${bookRecord.id}`, error);
       this.prisma.life_coach_books.update({
         where: { id: bookRecord.id },
-        data: { rag_status: 'failed', rag_error: error.message },
+        data: { rag_status: 'failed', rag_error: (error?.message || 'Unknown error').substring(0, 500) },
       }).catch(() => {});
     });
 
@@ -757,7 +757,7 @@ export class FileUploadService {
     };
   }
 
-  async getLifeCoachBooks(schoolId: string) {
+  async getLifeCoachBooks(schoolId: string, skip = 0, take = 100) {
     const books = await this.prisma.life_coach_books.findMany({
       where: { school_id: schoolId },
       include: {
@@ -765,13 +765,15 @@ export class FileUploadService {
         profiles: { select: { name: true } },
       },
       orderBy: { created_at: 'desc' },
+      skip,
+      take,
     });
     return books.map((book) => ({
       id: book.id,
       title: book.title,
       category: book.life_coach_categories?.name || 'Unknown',
       categoryId: book.category_id,
-      uploadedBy: book.profiles?.name || 'Unknown',
+      uploadedBy: book.profiles?.name || 'Unknown (deleted)',
       uploadDate: book.created_at,
       ragStatus: book.rag_status,
       ragError: book.rag_error,

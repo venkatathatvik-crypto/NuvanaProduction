@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
   Inject,
   Logger,
 } from "@nestjs/common";
@@ -797,6 +798,10 @@ export class AcademicService {
 
   // ==================== LIFE COACH CATEGORIES ====================
   async createLifeCoachCategory(dto: CreateLifeCoachCategoryDto, schoolId: string) {
+    const existing = await this.prisma.life_coach_categories.findFirst({
+      where: { name: { equals: dto.name, mode: 'insensitive' }, school_id: schoolId },
+    });
+    if (existing) throw new ConflictException("A category with this name already exists");
     return this.prisma.life_coach_categories.create({
       data: { name: dto.name, school_id: schoolId },
     });
@@ -814,6 +819,10 @@ export class AcademicService {
       where: { id, school_id: schoolId },
     });
     if (!category) throw new NotFoundException("Life coach category not found");
+    const duplicate = await this.prisma.life_coach_categories.findFirst({
+      where: { name: { equals: dto.name, mode: 'insensitive' }, school_id: schoolId, NOT: { id } },
+    });
+    if (duplicate) throw new ConflictException("A category with this name already exists");
     return this.prisma.life_coach_categories.update({
       where: { id },
       data: { name: dto.name },
@@ -825,6 +834,12 @@ export class AcademicService {
       where: { id, school_id: schoolId },
     });
     if (!category) throw new NotFoundException("Life coach category not found");
+    const booksInCategory = await this.prisma.life_coach_books.findFirst({
+      where: { category_id: id },
+    });
+    if (booksInCategory) {
+      throw new BadRequestException("Cannot delete category that contains books. Please delete all books in this category first.");
+    }
     await this.prisma.life_coach_categories.delete({ where: { id } });
     return { message: "Life coach category deleted successfully" };
   }

@@ -45,6 +45,11 @@ export default function LifeCoachBooks() {
     queryKey: ["life-coach-books"],
     queryFn: () => lifeCoachService.getBooks(),
     enabled: !!profile?.school_id,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasProcessing = Array.isArray(data) && data.some((b) => b.ragStatus === "processing");
+      return hasProcessing ? 5000 : false;
+    },
   });
 
   const addCategory = async () => {
@@ -268,9 +273,17 @@ export default function LifeCoachBooks() {
                         <td className="p-2 text-muted-foreground">{book.category}</td>
                         <td className="p-2 text-muted-foreground">{book.uploadedBy}</td>
                         <td className="p-2">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${book.ragStatus === "completed" ? "bg-green-500/20 text-green-400" : book.ragStatus === "processing" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>
-                            {book.ragStatus === "completed" ? "Ready" : book.ragStatus === "processing" ? "Processing" : "Failed"}
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${book.ragStatus === "completed" ? "bg-green-500/20 text-green-400" : book.ragStatus === "processing" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}
+                            title={book.ragStatus === "failed" && book.ragError ? book.ragError : undefined}
+                          >
+                            {book.ragStatus === "completed" ? "Ready" : book.ragStatus === "processing" ? "Processing…" : "Failed"}
                           </span>
+                          {book.ragStatus === "failed" && book.ragError && (
+                            <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={book.ragError}>
+                              {book.ragError}
+                            </p>
+                          )}
                         </td>
                         <td className="p-2 text-muted-foreground">{book.uploadDate ? new Date(book.uploadDate).toLocaleDateString() : "N/A"}</td>
                         <td className="p-2 text-right"><Button size="sm" variant="destructive" onClick={() => requestDeleteBook(book.id)}><Trash2 className="w-4 h-4" /></Button></td>
@@ -289,7 +302,7 @@ export default function LifeCoachBooks() {
         onOpenChange={setShowDeleteCategoryDialog}
         onConfirm={confirmDeleteCategory}
         title="Delete Category"
-        description="Are you sure you want to delete this category? This action cannot be undone and will permanently remove the category."
+        description="Are you sure you want to delete this category? You can only delete categories that have no books. If this category has books, delete them first."
         confirmText="Delete"
         variant="destructive"
       />
