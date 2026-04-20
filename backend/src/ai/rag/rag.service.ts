@@ -29,7 +29,12 @@ export class RagService implements OnModuleInit {
     ) {
         const connectionString = this.configService.get<string>('DATABASE_URL');
         if (connectionString) {
-            this.pool = new Pool({ connectionString });
+            this.pool = new Pool({
+                connectionString,
+                ssl: connectionString.includes('sslmode=require')
+                    ? { rejectUnauthorized: false }
+                    : false,
+            });
             // Don't set isConnected here - wait for onModuleInit to confirm connection
         }
     }
