@@ -31,9 +31,7 @@ export class RagService implements OnModuleInit {
         if (connectionString) {
             this.pool = new Pool({
                 connectionString,
-                ssl: connectionString.includes('sslmode=require')
-                    ? { rejectUnauthorized: false }
-                    : false,
+                ssl: { rejectUnauthorized: false },
             });
             // Don't set isConnected here - wait for onModuleInit to confirm connection
         }
