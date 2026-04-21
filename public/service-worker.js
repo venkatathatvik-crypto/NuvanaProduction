@@ -36,9 +36,7 @@ self.addEventListener('activate', (event) => {
       //    After unregistration the browser will no longer run this file.
       await self.registration.unregister();
 
-      // 3. Tell all open tabs to reload so the Workbox SW is picked up.
-      const clients = await self.clients.matchAll({ type: 'window' });
-      clients.forEach((client) => client.navigate(client.url));
+      // Do not navigate/reload tabs — causes infinite reload loop.
     })()
   );
 });
