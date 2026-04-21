@@ -17,7 +17,9 @@
       "Bash(find backend:*)",
       "Read(//c/c/**)",
       "Bash(find /c -type f -name *Student*Chat*)",
-      "Read(//c/Users/saite/OneDrive/Desktop/**)"
+      "Read(//c/Users/saite/OneDrive/Desktop/**)",
+      "Read(//etc/nginx/**)",
+      "Bash(ssh -o StrictHostKeyChecking=no nuvanacoreinfra@34.180.13.154 \"cat /etc/nginx/sites-available/nuvana\")"
     ]
   }
 }
