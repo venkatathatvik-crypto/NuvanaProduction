@@ -15,9 +15,10 @@ info:
     name: Nuvana Team
 
 servers:
+  - url: https://api.nuvanacore.com
+    description: Production
   - url: http://localhost:3000
     description: Local development
-  - url: https://api.nuvana.in
     description: Production
 
 tags:
