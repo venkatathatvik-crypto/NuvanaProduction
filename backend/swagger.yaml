@@ -19,7 +19,6 @@ servers:
     description: Production
   - url: http://localhost:3000
     description: Local development
-    description: Production
 
 tags:
   - name: Health
