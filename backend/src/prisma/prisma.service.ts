@@ -2,50 +2,47 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from "@nestjs/commo
 import { PrismaClient } from "../../generated/prisma/client";
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { Connector, IpAddressTypes, AuthTypes } from '@google-cloud/cloud-sql-connector';
+
+let _connector: Connector | null = null;
+
+async function createPool(): Promise<Pool> {
+  const instanceConnectionName = process.env.CLOUD_SQL_INSTANCE_CONNECTION_NAME;
+  if (!instanceConnectionName) {
+    throw new Error('CLOUD_SQL_INSTANCE_CONNECTION_NAME is required but not set');
+  }
+
+  _connector = new Connector();
+  const clientOpts = await _connector.getOptions({
+    instanceConnectionName,
+    ipType: IpAddressTypes.PUBLIC,
+    authType: AuthTypes.PASSWORD,
+  });
+  return new Pool({
+    ...clientOpts,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    max: 30,
+    idleTimeoutMillis: 60000,
+    connectionTimeoutMillis: 30000,
+  });
+}
+
+export async function createPrismaService(): Promise<PrismaService> {
+  const pool = await createPool();
+  const adapter = new PrismaPg(pool);
+  return new PrismaService(pool, adapter);
+}
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor() {
-    const connectionString = process.env.DATABASE_URL as string;
-    const preSuperLogger = new Logger(PrismaService.name);
-    
-    if (!connectionString) {
-      preSuperLogger.error('❌ DATABASE_URL is not defined in environment variables!');
-    } else {
-      try {
-        const url = new URL(connectionString.replace('postgresql://', 'http://')); // URL parser trick
-        preSuperLogger.log(`🔍 Attempting to connect to DB host: ${url.hostname}`);
-        preSuperLogger.log(`🔍 Database name: ${url.pathname.split('/')[1]}`);
-        preSuperLogger.log(`🔍 SSL Mode: ${url.searchParams.get('sslmode') || 'not set'}`);
-      } catch (e) {
-        preSuperLogger.warn('⚠️ Could not parse DATABASE_URL for logging, but proceeding with connection attempt.');
-      }
-    }
-    
-    const pool = new Pool({
-      connectionString,
-      max: 30, // Maximum number of clients in the pool (increased for production load)
-      idleTimeoutMillis: 60000, // Close idle clients after 60 seconds
-      connectionTimeoutMillis: 30000, // Return an error after 30 seconds if connection cannot be established
-    });
-
-    const adapter = new PrismaPg(pool);
-    
-    super({ 
+  constructor(private readonly pool: Pool, adapter: PrismaPg) {
+    super({
       adapter,
-      log: process.env.NODE_ENV === 'development'
-        ? ['query', 'error', 'warn']
-        : ['error'],
-    });
-
-    // NOW we can use this.logger
-    pool.on('error', (err) => {
-      this.logger.error('❌ Unexpected pool error:', err);
-      if (err.message.includes('ENOTFOUND')) {
-        this.logger.error('🔍 DIAGNOSIS: DNS Resolution failed. The system cannot find the database host.');
-      }
+      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
     });
   }
 
@@ -53,33 +50,29 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     let retries = 5;
     const startTime = Date.now();
     this.logger.log(`🚀 Initializing Database connection (Attempt 1/5)...`);
-    
+
+    this.pool.on('error', (err) => {
+      this.logger.error('❌ Pool error:', err.message);
+    });
+
     while (retries > 0) {
       try {
         const attemptStart = Date.now();
         await this.$connect();
         const duration = Date.now() - attemptStart;
-        this.logger.log(`✅ Database connected successfully in ${duration}ms with connection pooling (max: 30 connections)`);
+        const mode = _connector ? 'Cloud SQL Connector' : 'direct connection';
+        this.logger.log(`✅ Database connected via ${mode} in ${duration}ms with connection pooling (max: 30 connections)`);
         return;
       } catch (error) {
         retries--;
         const elapsed = (Date.now() - startTime) / 1000;
-        this.logger.error(`❌ Failed to connect to database (Attempt ${5 - retries}/5). Elapsed: ${elapsed.toFixed(1)}s`);
-        this.logger.error(`❌ Error Message: ${error.message}`);
-        
-        if (error.message.includes('ENOTFOUND')) {
-          this.logger.error('🔍 DIAGNOSIS: DNS Resolution Failure. Your machine cannot resolve the database hostname.');
-        } else if (error.message.includes('ECONNREFUSED')) {
-          this.logger.error('🔍 DIAGNOSIS: Connection Refused. The database server is reachable but rejecting connections.');
-        } else if (error.message.includes('ETIMEDOUT') || error.message.includes('timeout')) {
-          this.logger.error('🔍 DIAGNOSIS: Connection Timeout. Network is slow or firewall is blocking the port.');
-        }
+        this.logger.error(`❌ Failed to connect (Attempt ${5 - retries}/5). Elapsed: ${elapsed.toFixed(1)}s`);
+        this.logger.error(`❌ Error: ${error.message}`);
 
         if (retries === 0) {
-          this.logger.warn('⚠️ Could not connect to database after 5 attempts. Application will continue, but database features will fail.');
+          this.logger.warn('⚠️ Could not connect after 5 attempts. Database features will fail.');
         } else {
           this.logger.log('⏳ Retrying in 2 seconds...');
-          // Wait for 2 seconds before retrying
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
@@ -88,6 +81,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleDestroy() {
     await this.$disconnect();
+    await this.pool.end();
+    if (_connector) {
+      _connector.close();
+      _connector = null;
+    }
     this.logger.log('Database disconnected');
   }
 
