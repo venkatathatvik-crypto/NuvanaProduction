@@ -3,3 +3,6 @@ node_modules
 .env
 /generated/prisma
 service-account.json
+certs/client-cert.pem
+certs/client-key.pem
+certs/server-ca.pem

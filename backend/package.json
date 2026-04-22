@@ -26,6 +26,7 @@
         "@bull-board/api": "^6.16.4",
         "@bull-board/express": "^6.16.4",
         "@bull-board/nestjs": "^6.16.4",
+        "@google-cloud/cloud-sql-connector": "^1.10.0",
         "@google-cloud/vertexai": "^1.10.0",
         "@google/genai": "^1.41.0",
         "@google/generative-ai": "^0.24.1",

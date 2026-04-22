@@ -2,44 +2,52 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingService } from './embedding.service';
-
-/**
- * RAG Service for vector storage and retrieval
- * 
- * Note: This service uses raw PostgreSQL with pgvector for maximum control over:
- * - Complex metadata filtering (class_id, subject)
- * - Custom similarity threshold with fallback logic
- * - Performance optimization with custom indexes
- * 
- * While LangChain provides PGVector support, our specific requirements (complex filtering,
- * similarity threshold fallback) are better handled with custom SQL queries.
- * 
- * The service maintains compatibility with LangChain Document format through the ingestion pipeline.
- */
+import { Connector, IpAddressTypes, AuthTypes } from '@google-cloud/cloud-sql-connector';
 
 @Injectable()
 export class RagService implements OnModuleInit {
     private pool: Pool;
+    private connector: Connector | null = null;
     private isConnected = false;
     private readonly logger = new Logger(RagService.name);
 
     constructor(
         private configService: ConfigService,
         private embeddingService: EmbeddingService,
-    ) {
-        const connectionString = this.configService.get<string>('DATABASE_URL');
-        if (connectionString) {
-            this.pool = new Pool({
-                connectionString,
-                ssl: { rejectUnauthorized: false },
+    ) {}
+
+    private async createPool(): Promise<Pool> {
+        const instanceConnectionName = this.configService.get<string>('CLOUD_SQL_INSTANCE_CONNECTION_NAME');
+
+        if (instanceConnectionName) {
+            this.logger.log(`RAG: Using Cloud SQL Connector for instance: ${instanceConnectionName}`);
+            this.connector = new Connector();
+            const clientOpts = await this.connector.getOptions({
+                instanceConnectionName,
+                ipType: IpAddressTypes.PUBLIC,
+                authType: AuthTypes.PASSWORD,
             });
-            // Don't set isConnected here - wait for onModuleInit to confirm connection
+            return new Pool({
+                ...clientOpts,
+                user: this.configService.get<string>('DB_USER'),
+                password: this.configService.get<string>('DB_PASSWORD'),
+                database: this.configService.get<string>('DB_NAME'),
+            });
         }
+
+        throw new Error('RAG: CLOUD_SQL_INSTANCE_CONNECTION_NAME is required but not set');
     }
 
     async onModuleInit() {
-        if (!this.pool) {
-            this.logger.warn('RAG: No DATABASE_URL configured. RAG disabled.');
+        if (!this.configService.get('CLOUD_SQL_INSTANCE_CONNECTION_NAME')) {
+            this.logger.warn('RAG: CLOUD_SQL_INSTANCE_CONNECTION_NAME not set. RAG disabled.');
+            return;
+        }
+
+        try {
+            this.pool = await this.createPool();
+        } catch (error) {
+            this.logger.error('RAG: Failed to create database pool:', error);
             return;
         }
 
