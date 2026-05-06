@@ -19,7 +19,21 @@
       "Bash(find /c -type f -name *Student*Chat*)",
       "Read(//c/Users/saite/OneDrive/Desktop/**)",
       "Read(//etc/nginx/**)",
-      "Bash(ssh -o StrictHostKeyChecking=no nuvanacoreinfra@34.180.13.154 \"cat /etc/nginx/sites-available/nuvana\")"
+      "Bash(ssh -o StrictHostKeyChecking=no nuvanacoreinfra@34.180.13.154 \"cat /etc/nginx/sites-available/nuvana\")",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.cloud.google.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:oneuptime.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:fabriciojorge.medium.com)",
+      "WebFetch(domain:codelabs.developers.google.com)",
+      "WebFetch(domain:discuss.google.dev)",
+      "WebFetch(domain:myshittycode.com)",
+      "WebFetch(domain:node-postgres.com)",
+      "WebFetch(domain:dev.to)",
+      "Bash(curl -s \"https://worldtimeapi.org/api/timezone/Etc/UTC\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('UTC now:', d.get\\('utc_datetime','N/A'\\)\\)\")"
     ]
   }
 }
