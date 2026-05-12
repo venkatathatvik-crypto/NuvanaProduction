@@ -11,6 +11,7 @@ import {
   Notification,
 } from "@/services";
 import { formatDistanceToNow } from "date-fns";
+import { logger } from '@/lib/logger';
 
 const NotificationBell = () => {
   const { profile } = useAuth();
@@ -32,7 +33,7 @@ const NotificationBell = () => {
       setNotifications(notifs);
       setUnreadCount(count);
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      logger.error("Error fetching notifications:", error);
     } finally {
       setLoading(false);
     }

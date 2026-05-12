@@ -9,12 +9,14 @@ import { RecommendationService } from './recommender/recommendation.service';
 import { TopicsService } from './recommender/topics.service';
 import { QuizDeduplicationService } from './quiz-deduplication.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
     imports: [
-        ConfigModule,   // 👈 REQUIRED for GEMINI_API_KEY
+        ConfigModule,   // 👈 REQUIRED for GCP credentials
         PrismaModule,   // 👈 REQUIRED for database access (MasteryService, TopicsService)
         RagModule,
+        AnalyticsModule, // 👈 REQUIRED for performance data
     ],
     controllers: [AiController],
     providers: [

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TestForm } from "@/components/mcq/TestForm";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { ArrowLeft, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,11 @@ import {
   TeacherTest,
 } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { logger } from '@/lib/logger';
 
 const TestDetails = () => {
   const { testId } = useParams();
-  console.log("testId", testId);
+  logger.log("testId", testId);
   const navigate = useNavigate();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -43,11 +45,11 @@ const TestDetails = () => {
 
       try {
         const testData = await getTeacherTest(testId, profile.id);
-        console.log("-------------------", testData);
+        logger.log("-------------------", testData);
 
         setTest(testData);
       } catch (error: any) {
-        console.error("Error fetching test:", error);
+        logger.error("Error fetching test:", error);
         toast.error("Test not found");
         navigate("/teacher/tests");
       } finally {
@@ -115,7 +117,7 @@ const TestDetails = () => {
 
       toast.success("Test updated successfully");
     } catch (error: any) {
-      console.error("Error updating test:", error);
+      logger.error("Error updating test:", error);
       toast.error(error.message || "Failed to update test");
     }
   };
@@ -139,7 +141,7 @@ const TestDetails = () => {
           : "Test published successfully"
       );
     } catch (error: any) {
-      console.error("Error updating test status:", error);
+      logger.error("Error updating test status:", error);
       toast.error(error.message || "Failed to update test status");
     }
   };
@@ -161,7 +163,7 @@ const TestDetails = () => {
       s.score,
       totalMarks,
       s.timeTakenSeconds,
-      new Date(s.submittedAt).toLocaleString(),
+      format(new Date(s.submittedAt), "dd/MM/yyyy HH:mm:ss"),
     ]);
 
     const csvContent = [
@@ -304,7 +306,7 @@ const TestDetails = () => {
                           {submission.timeTakenSeconds % 60}s
                         </TableCell>
                         <TableCell>
-                          {new Date(submission.submittedAt).toLocaleString()}
+                          {format(new Date(submission.submittedAt), "dd/MM/yyyy HH:mm")}
                         </TableCell>
                       </TableRow>
                     ))}

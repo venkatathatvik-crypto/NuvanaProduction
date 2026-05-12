@@ -59,7 +59,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportAnalyticsPDF } from "@/lib/pdfExport";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getTeacherClasses,
   FlattenedClass,
@@ -81,10 +81,15 @@ import {
 } from "@/services/academic";
 import { useAuth } from "@/auth/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import { toast } from "sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { schoolService } from "@/services/schoolService";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EngagementOverview } from "@/components/engagement/EngagementOverview";
+import { Target } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 // Professional colors optimized for white background (PDF export)
 const PROFESSIONAL_COLORS = {
@@ -144,6 +149,8 @@ interface TopicChapterData {
 const AnalyticsDashboard = () => {
   const { profile, profileLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'class';
   const queryClient = useQueryClient();
   const [selectedStudent, setSelectedStudent] = useState<string>("");
 
@@ -445,7 +452,7 @@ const AnalyticsDashboard = () => {
           },
         }));
       } catch (error: any) {
-        console.error("Error fetching student analytics:", error);
+        logger.error("Error fetching student analytics:", error);
         toast.error("Failed to load student analytics");
       }
     };
@@ -502,7 +509,7 @@ const AnalyticsDashboard = () => {
           const data = await getStudentAnalyticsForTeacher(s.id, selectedClass?.class_id || "");
           setStudentAnalyticsData(prev => ({ ...prev, [s.id]: data }));
         } catch (err) {
-          console.error(`Failed to fetch analytics for student ${s.id}`, err);
+          logger.error(`Failed to fetch analytics for student ${s.id}`, err);
         }
       });
 
@@ -517,7 +524,7 @@ const AnalyticsDashboard = () => {
 
       await exportAnalyticsPDF({
         elementId: "analytics-full-report",
-        logoUrl: schoolInfo?.logo_url || "/logo.png",
+        logoUrl: schoolInfo?.logo_url || `${import.meta.env.BASE_URL}logo.png`,
         schoolName: schoolInfo?.name || "Nuvana Academy",
         watermarkOpacity: 0.05,
         watermarkWidth: 80,
@@ -530,7 +537,7 @@ const AnalyticsDashboard = () => {
       }
       toast.success("Full report generated successfully!");
     } catch (err) {
-      console.error("PDF Export Error:", err);
+      logger.error("PDF Export Error:", err);
       toast.error("Failed to export PDF");
     }
   };
@@ -560,8 +567,18 @@ const AnalyticsDashboard = () => {
     ];
   };
 
-  if (loading) return <LoadingSpinner />;
-  if (!selectedClass)
+  // Only show empty state when offline AND no cached classes at all
+  const offlineNoCache = useOfflineLoading(loading && !classes.length);
+
+  if (offlineNoCache) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Analytics" />
+      </div>
+    );
+  }
+
+  if (!loading && !selectedClass)
     return (
       <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">
         No classes found
@@ -626,30 +643,45 @@ const AnalyticsDashboard = () => {
             <CheckCircle className="w-4 h-4 mr-2" />
             Save PDF
           </Button>
-          <div className="w-full sm:w-48 ml-0 lg:ml-2">
-            <Select
-              value={selectedClass?.class_id}
-              onValueChange={(id) =>
-                setSelectedClass(classes.find((c) => c.class_id === id))
-              }
-            >
-              <SelectTrigger className="glass w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {classes.map((cls) => (
-                  <SelectItem key={cls.class_id} value={cls.class_id}>
-                    {cls.class_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col sm:flex-row gap-3 items-center">
+            <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">
+              Active Class:
+            </span>
+            {loading ? (
+              <Skeleton className="w-[180px] h-10 rounded-xl" />
+            ) : (
+              <Select
+                value={selectedClass?.class_id}
+                onValueChange={(val) => {
+                  const cls = classes.find((c) => c.class_id === val);
+                  if (cls) setSelectedClass(cls);
+                }}
+              >
+                <SelectTrigger className="w-[180px] sm:w-[220px] h-11 bg-background/50 border-input hover:bg-background/80 transition-all rounded-xl shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    <SelectValue placeholder="Select class" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50">
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.class_id} value={cls.class_id}>
+                      {cls.class_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
       </motion.div>
 
-      <Tabs defaultValue="class" className="space-y-4 sm:space-y-6">
-        <TabsList className="grid grid-cols-4 w-full max-w-xl h-auto">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(val) => setSearchParams({ tab: val })}
+        className="space-y-4 sm:space-y-6"
+      >
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl h-auto">
           <TabsTrigger
             value="class"
             className="text-xs sm:text-sm px-1 sm:px-3 py-2"
@@ -671,6 +703,14 @@ const AnalyticsDashboard = () => {
             <span className="hidden sm:inline">Student Analysis</span>
             <span className="sm:hidden">Students</span>
           </TabsTrigger>
+          
+          <TabsTrigger
+            value="engagement"
+            className="text-xs sm:text-sm px-1 sm:px-3 py-2"
+          >
+            <span className="hidden sm:inline">Engagement</span>
+            <span className="sm:hidden">Engage</span>
+          </TabsTrigger>
           <TabsTrigger
             value="test"
             className="text-xs sm:text-sm px-1 sm:px-3 py-2"
@@ -683,8 +723,16 @@ const AnalyticsDashboard = () => {
         {/* ---------------- CLASS LEVEL INSIGHTS ---------------- */}
         <TabsContent value="class" className="space-y-6">
           {classInsightsLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="h-[400px] flex items-center justify-center">
+                <Skeleton className="h-[80%] w-[90%]" />
+              </Card>
+              <Card className="h-[400px] flex items-center justify-center">
+                <Skeleton className="h-[80%] w-[90%]" />
+              </Card>
+              <Card className="lg:col-span-2 h-[400px] flex items-center justify-center">
+                <Skeleton className="h-[80%] w-[95%]" />
+              </Card>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -694,6 +742,7 @@ const AnalyticsDashboard = () => {
                 title="📈 Class Performance Trend"
                 description="Average scores and attendance over the last 6 months"
                 insights="The correlation between attendance and performance is visible. Consider interventions for students with attendance below 80% to improve overall class average."
+                isLoading={classInsightsLoading}
                 renderSmall={() =>
                   performanceTrendData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -813,6 +862,7 @@ const AnalyticsDashboard = () => {
                 title="📚 Subject Averages"
                 description="Overall class performance by subject"
                 insights="Compare subject performance to identify class-wide strengths and weaknesses. A significant dip in one subject might indicate a need for curriculum review."
+                isLoading={classInsightsLoading}
                 renderSmall={() =>
                   subjectAverageData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -931,6 +981,7 @@ const AnalyticsDashboard = () => {
                 title="🔗 Attendance vs. Marks Correlation"
                 description="Does attendance impact performance? Each dot represents a student."
                 insights="Positive correlation suggests attendance drives performance. Outliers (low attendance, high marks) might be self-studies, while (high attendance, low marks) might need learning support."
+                isLoading={classInsightsLoading}
                 className="lg:col-span-2"
                 renderSmall={() =>
                   attendanceVsMarksData.length > 0 ? (
@@ -1091,8 +1142,12 @@ const AnalyticsDashboard = () => {
         {/* ---------------- STUDENT LEVEL ANALYSIS ---------------- */}
         <TabsContent value="student" className="space-y-8">
           {studentAnalysisLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="space-y-6">
+              <Skeleton className="h-24 w-full rounded-xl" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Skeleton className="h-[400px] rounded-xl" />
+                <Skeleton className="h-[400px] rounded-xl" />
+              </div>
             </div>
           ) : studentsList.length === 0 ? (
             <div className="text-center py-20 text-muted-foreground">
@@ -1199,8 +1254,10 @@ const AnalyticsDashboard = () => {
                   </p>
                 </div>
               ) : !studentAnalyticsData[selectedStudent] ? (
-                <div className="flex justify-center p-20">
-                  <LoadingSpinner />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Skeleton className="h-[400px] rounded-xl" />
+                  <Skeleton className="h-[400px] rounded-xl" />
+                  <Skeleton className="h-[300px] rounded-xl lg:col-span-2" />
                 </div>
               ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1210,6 +1267,7 @@ const AnalyticsDashboard = () => {
                       title="Individual Subject Performance"
                       description="Strengths and weaknesses across subjects"
                       insights="A balanced shape indicates consistent performance. Spikes outward indicate strengths, while dips inward show areas for improvement."
+                      isLoading={!studentAnalyticsData[selectedStudent]}
                       renderSmall={() => (
                         <ResponsiveContainer width="100%" height="100%">
                           <RadarChart
@@ -1296,6 +1354,7 @@ const AnalyticsDashboard = () => {
                       title="Performance Trend"
                       description="Score progression over the last 6 months"
                       insights="Upward trends indicate improvement. Plateaus or drops should be investigated to ensure continuous growth."
+                      isLoading={!studentAnalyticsData[selectedStudent]}
                       renderSmall={() =>
                         studentAnalyticsData[selectedStudent].progress &&
                         studentAnalyticsData[selectedStudent].progress.length >
@@ -1592,7 +1651,7 @@ const AnalyticsDashboard = () => {
                                   )}
                                   
                                   {/* Topic Filter (dynamic based on chapter) */}
-                                  {availableTopics.length > 0 && (
+                                  {/* {availableTopics.length > 0 && (
                                     <Select value={studentAnalysisTopicFilter} onValueChange={setStudentAnalysisTopicFilter}>
                                       <SelectTrigger className="w-full sm:w-[180px]">
                                         <SelectValue placeholder="Topic" />
@@ -1604,7 +1663,7 @@ const AnalyticsDashboard = () => {
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                  )}
+                                  )} */}
                                   
                                   {/* Score Threshold */}
                                   <Select value={studentAnalysisScoreThreshold.toString()} onValueChange={(v) => setStudentAnalysisScoreThreshold(Number(v))}>
@@ -1660,7 +1719,7 @@ const AnalyticsDashboard = () => {
                                   {fullyFilteredStrengths.map((item, index) => (
                                     <div
                                       key={index}
-                                      className="flex justify-between items-center p-3 bg-secondary/10 rounded-lg"
+                                      className="flex justify-between items-center p-3 border border-green-200/2 rounded-lg"
                                     >
                                       <div>
                                         <p className="font-semibold text-sm">
@@ -1709,7 +1768,7 @@ const AnalyticsDashboard = () => {
                                   {fullyFilteredWeaknesses.map((item, index) => (
                                     <div
                                       key={index}
-                                      className="flex justify-between items-center p-3 bg-red-50/50 rounded-lg"
+                                      className="flex justify-between items-center p-3 rounded-lg border-red-300/3 border"
                                     >
                                       <div>
                                         <p className="font-semibold text-sm">
@@ -1749,6 +1808,7 @@ const AnalyticsDashboard = () => {
                         title="Chapter Mastery"
                         description="Understanding by chapter"
                         insights="Detailed chapter breakdown helps in assigning specific revision material."
+                        isLoading={!studentAnalyticsData[selectedStudent]}
                         renderSmall={() => (
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart
@@ -1852,6 +1912,7 @@ const AnalyticsDashboard = () => {
                         title="Topic Mastery"
                         description="Understanding by specific topic"
                         insights="Granular topic analysis. Focus on topics with red bars."
+                        isLoading={!studentAnalyticsData[selectedStudent]}
                         renderSmall={() => (
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart
@@ -1961,8 +2022,9 @@ const AnalyticsDashboard = () => {
         {/* ---------------- TEST METRICS ---------------- */}
         <TabsContent value="test" className="space-y-6">
           {testMetricsLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Skeleton className="h-[400px] rounded-xl" />
+              <Skeleton className="h-[400px] rounded-xl" />
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1970,6 +2032,7 @@ const AnalyticsDashboard = () => {
                 title="📝 Recent Test Performance"
                 description="Comparing class average vs. top performer in each test"
                 insights="Tracking the gap between class average and top scores can indicate if the teaching pace is appropriate. A widening gap might suggest some students are lagging behind."
+                isLoading={testMetricsLoading}
                 renderSmall={() =>
                   recentTestsData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2181,6 +2244,7 @@ const AnalyticsDashboard = () => {
                 title="🧠 Question Type Analysis"
                 description="Breakdown of question types used across all tests"
                 insights="A diverse mix of question types ensures comprehensive assessment. Ensure there's a good balance between objective (Recall) and subjective (Analyze/Create) questions."
+                isLoading={testMetricsLoading}
                 renderSmall={() =>
                   questionTypeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2309,8 +2373,12 @@ const AnalyticsDashboard = () => {
         {/* ---------------- CHAPTER & TOPIC ANALYTICS ---------------- */}
         <TabsContent value="topics" className="space-y-6">
           {analyticsLoading ? (
-            <div className="flex justify-center p-20">
-              <LoadingSpinner />
+            <div className="space-y-6">
+              <Skeleton className="h-20 w-full rounded-xl" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Skeleton className="h-[450px] rounded-xl" />
+                <Skeleton className="h-[450px] rounded-xl" />
+              </div>
             </div>
           ) : (
             <>
@@ -2430,7 +2498,7 @@ const AnalyticsDashboard = () => {
                             )}
                             
                             {/* Topic Filter */}
-                            {availableTopics.length > 0 && (
+                            {/* {availableTopics.length > 0 && (
                               <Select value={topicsTabTopicFilter} onValueChange={setTopicsTabTopicFilter}>
                                 <SelectTrigger className="w-full sm:w-[180px]">
                                   <SelectValue placeholder="Topic" />
@@ -2444,7 +2512,7 @@ const AnalyticsDashboard = () => {
                                   ))}
                                 </SelectContent>
                               </Select>
-                            )}
+                            )} */}
                             
                             {/* Clear Filters Button */}
                             {(topicsTabSubjectFilter !== "all" || topicsTabChapterFilter !== "all" || topicsTabTopicFilter !== "all") && (
@@ -2468,6 +2536,7 @@ const AnalyticsDashboard = () => {
                 title="Chapter Performance"
                 description="Average scores by chapter (sorted by performance)"
                 insights="Identifying low-performing chapters allows for targeted revision sessions. High-performing chapters can be used as benchmarks for effective teaching strategies."
+                isLoading={analyticsLoading}
                 renderSmall={() =>
                   filteredChapters.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2611,6 +2680,7 @@ const AnalyticsDashboard = () => {
                 title="Topic Performance"
                 description="Average scores by topic (sorted by performance)"
                 insights="Topic-level analysis helps pinpoint specific concepts that students struggle with. Use this data to adjust lesson plans for the next academic year or upcoming tests."
+                isLoading={analyticsLoading}
                 renderSmall={() =>
                   filteredTopics.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2826,7 +2896,7 @@ const AnalyticsDashboard = () => {
                   </Select>
                   
                   {/* Topic Filter */}
-                  <Select value={weakAreasTopicFilter} onValueChange={setWeakAreasTopicFilter}>
+                  {/* <Select value={weakAreasTopicFilter} onValueChange={setWeakAreasTopicFilter}>
                     <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder="Topic" />
                     </SelectTrigger>
@@ -2850,7 +2920,7 @@ const AnalyticsDashboard = () => {
                         ));
                       })()}
                     </SelectContent>
-                  </Select>
+                  </Select> */}
                   
                   {/* Score Threshold */}
                   <Select value={weakAreasScoreThreshold.toString()} onValueChange={(v) => setWeakAreasScoreThreshold(Number(v))}>
@@ -3005,6 +3075,11 @@ const AnalyticsDashboard = () => {
               })()}
               </>
             )}
+        </TabsContent>
+
+        {/* ---------------- ENGAGEMENT TAB ---------------- */}
+        <TabsContent value="engagement" className="mt-8">
+          <EngagementOverview />
         </TabsContent>
       </Tabs>
 

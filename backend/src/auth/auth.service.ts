@@ -4,26 +4,33 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
   Inject,
+  Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from "../prisma/prisma.service";
+import { MailService } from "../mail/mail.service";
 import * as bcrypt from "bcrypt";
 import { RegisterSuperAdminDto } from "./dto/register-super-admin.dto";
 import { RegisterUserDto } from "./dto/register-user.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private mailService: MailService,
   ) {}
 
   async registerSuperAdmin(dto: RegisterSuperAdminDto) {
@@ -127,6 +134,11 @@ export class AuthService {
     // Invalidate user caches
     await this.invalidateUserCaches(schoolId);
 
+    // Send Welcome Email asynchronously
+    this.mailService.sendWelcomeEmail({ email: user.email, name: user.name }, dto.temporaryPassword).catch(e => {
+        this.logger.error(`Non-blocking error during welcome email: ${e.message}`);
+    });
+
     return {
       id: user.id,
       email: user.email,
@@ -139,7 +151,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto, expectedRole?: string) {
+  async login(dto: LoginDto, expectedRole?: string, ipAddress?: string, userAgent?: string) {
     // Validate user credentials with school_id if provided (case-insensitive email)
     const user = await this.validateUser(dto.email.toLowerCase(), dto.password, dto.school_id);
 
@@ -189,6 +201,15 @@ export class AuthService {
       school_id: user.school_id,
     });
 
+    // Fire login notification asynchronously — does not block the response
+    const loginTime = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    this.mailService.sendLoginNotificationEmail(
+      { email: user.email, name: user.name },
+      loginTime,
+      ipAddress,
+      userAgent,
+    ).catch(e => this.logger.error(`Non-blocking login email error: ${e.message}`));
+
     return {
       user: {
         id: user.id,
@@ -201,22 +222,102 @@ export class AuthService {
     };
   }
 
-  async resetPassword(dto: ResetPasswordDto) {
-    // Find user
-    const user = await this.prisma.profiles.findUnique({
-      where: { id: dto.userId },
+  async logout(token: string) {
+    try {
+      // Decode token to get expiration
+      const payload = this.jwtService.decode(token) as any;
+      if (!payload || !payload.exp) return;
+
+      // Calculate remaining time in milliseconds
+      const now = Math.floor(Date.now() / 1000);
+      const remainingTime = payload.exp - now;
+
+      if (remainingTime > 0) {
+        // Store in Redis with TTL matching remaining token life
+        // Key format: blacklist:<token>
+        await this.cacheManager.set(`blacklist:${token}`, 'revoked', remainingTime * 1000);
+      }
+    } catch (error) {
+      this.logger.error('Error blacklisting token during logout:', error);
+    }
+  }
+
+  async isTokenBlacklisted(token: string): Promise<boolean> {
+    const blacklisted = await this.cacheManager.get(`blacklist:${token}`);
+    return !!blacklisted;
+  }
+
+  /**
+   * Step 1: User requests a password reset — generates OTP, caches it, sends email
+   */
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const normalizedEmail = dto.email.toLowerCase();
+
+    const whereClause = dto.school_id
+      ? { email: normalizedEmail, school_id: dto.school_id }
+      : { email: normalizedEmail };
+
+    const user = await this.prisma.profiles.findFirst({
+      where: whereClause,
     });
 
+    // Always respond the same way to prevent email enumeration
     if (!user) {
-      throw new NotFoundException("User not found");
+      return { message: 'If an account with that email exists, a reset code has been sent.' };
     }
 
-    // Hash new password
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const cacheKey = `reset_otp:${normalizedEmail}:${dto.school_id || 'global'}`;
+
+    // Store OTP in Redis — 15 minutes TTL
+    await this.cacheManager.set(cacheKey, otp, 15 * 60 * 1000);
+    this.logger.debug(`[TESTING] Password reset OTP for ${normalizedEmail}: ${otp}`);
+
+    // Send OTP email (non-blocking)
+    this.mailService.sendPasswordResetEmail(
+      { email: user.email, name: user.name },
+      otp,
+    ).catch(e => this.logger.error(`Non-blocking password reset email error: ${e.message}`));
+
+    this.logger.log(`Password reset OTP generated for ${normalizedEmail}`);
+    return { message: 'If an account with that email exists, a reset code has been sent.' };
+  }
+
+  /**
+   * Step 2: User submits OTP + new password — verifies OTP and updates password
+   */
+  async resetPassword(dto: ResetPasswordDto) {
+    const normalizedEmail = dto.email.toLowerCase();
+    const cacheKey = `reset_otp:${normalizedEmail}:${dto.school_id || 'global'}`;
+
+    // Verify OTP from Redis
+    const storedOtp = await this.cacheManager.get<string>(cacheKey);
+
+    if (!storedOtp) {
+      throw new BadRequestException('Reset code has expired. Please request a new one.');
+    }
+
+    if (storedOtp !== dto.otp) {
+      throw new BadRequestException('Invalid reset code. Please check and try again.');
+    }
+
+    // Find user
+    const whereClause = dto.school_id
+      ? { email: normalizedEmail, school_id: dto.school_id }
+      : { email: normalizedEmail };
+
+    const user = await this.prisma.profiles.findFirst({ where: whereClause });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    // Hash new password and update
     const hashedPassword = await this.hashPassword(dto.newPassword);
 
-    // Update password and set is_first_login to false
     await this.prisma.profiles.update({
-      where: { id: dto.userId },
+      where: { id: user.id },
       data: {
         password_hash: hashedPassword,
         is_first_login: false,
@@ -224,10 +325,11 @@ export class AuthService {
       } as any,
     });
 
-    return {
-      message:
-        "Password reset successful. You can now login with your new password.",
-    };
+    // Invalidate OTP so it can't be reused
+    await this.cacheManager.del(cacheKey);
+
+    this.logger.log(`Password successfully reset for ${normalizedEmail}`);
+    return { message: 'Password reset successful. You can now log in with your new password.' };
   }
 
   async refreshToken(refreshToken: string) {

@@ -12,10 +12,14 @@ import {
   type StudentVoiceNote,
 } from "@/services/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { logger } from '@/lib/logger';
+import { isFileCached, cacheFile } from "@/lib/fileCache";
+import { CheckCircle2 } from "lucide-react";
 
 interface VoiceNoteWithPlayState extends StudentVoiceNote {
   isPlaying?: boolean;
@@ -45,9 +49,32 @@ const Notes = () => {
     queryFn: () => getStudentVoiceNotes(studentData!.class_id, profile!.school_id),
     enabled: !!studentData?.class_id && !!profile,
   });
+  const [cachedNotes, setCachedNotes] = useState<Set<string>>(new Set());
+
+  // Check cache status for all notes
+  useEffect(() => {
+    const checkCache = async () => {
+      if (!voiceNotesData || voiceNotesData.length === 0) return;
+      
+      const newCachedNotes = new Set<string>();
+      await Promise.all(
+        voiceNotesData.map(async (note: any) => {
+          if (await isFileCached(note.storageUrl)) {
+            newCachedNotes.add(note.id);
+          }
+        })
+      );
+      setCachedNotes(newCachedNotes);
+    };
+    checkCache();
+  }, [voiceNotesData]);
+
+  const isInitialLoading = loadingNotes && voiceNotesData.length === 0;
+  const offlineLoadingNotes = useOfflineLoading(isInitialLoading);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   const voiceNotes = voiceNotesData as VoiceNoteWithPlayState[];
 
@@ -96,17 +123,19 @@ const Notes = () => {
 
   const handlePlayPause = async (note: VoiceNoteWithPlayState) => {
     if (currentPlayingId === note.id) {
-      // Pause current
+      // Toggle pause/resume for current note
       if (audioRef.current) {
         if (audioRef.current.paused) {
           try {
             await audioRef.current.play();
+            setIsAudioPlaying(true);
           } catch (error) {
-            console.error("Resume error:", error);
+            logger.error("Resume error:", error);
             toast.error("Playback failed.");
           }
         } else {
           audioRef.current.pause();
+          setIsAudioPlaying(false);
         }
       }
     } else {
@@ -117,16 +146,13 @@ const Notes = () => {
           audioRef.current.src = note.storageUrl;
           audioRef.current.load();
           await audioRef.current.play();
-          
           setCurrentPlayingId(note.id);
-          // Note: We don't update state here anymore for isPlaying, 
-          // but we can track currentPlayingId to show UI change.
-          // Since voiceNotes is coming from useQuery, we can't easily mutate it.
-          // But we can check note.id === currentPlayingId in the render.
+          setIsAudioPlaying(true);
         } catch (error) {
-          console.error("Playback error:", error);
+          logger.error("Playback error:", error);
           toast.error("Cannot play this audio format. Please download it instead.");
           setCurrentPlayingId(null);
+          setIsAudioPlaying(false);
         }
       }
     }
@@ -134,6 +160,16 @@ const Notes = () => {
 
   const handleDownload = async (note: VoiceNoteWithPlayState) => {
     try {
+      // Explicitly cache for offline use
+      toast.promise(cacheFile(note.storageUrl), {
+        loading: 'Preparing for offline...',
+        success: () => {
+          setCachedNotes(prev => new Set(prev).add(note.id));
+          return 'Saved for offline use';
+        },
+        error: 'Failed to save for offline'
+      });
+
       // Force download the file
       const response = await fetch(note.storageUrl);
       const blob = await response.blob();
@@ -145,9 +181,8 @@ const Notes = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      toast.success("Voice note downloaded successfully");
     } catch (error) {
-      console.error("Error downloading voice note:", error);
+      logger.error("Error downloading voice note:", error);
       toast.error("Failed to download voice note.");
     }
   };
@@ -169,7 +204,7 @@ const Notes = () => {
           >
             <h1 className="text-4xl font-bold neon-text">Audio Notes</h1>
             <p className="text-muted-foreground">
-              Listen to teacher's voice notes by subject
+              Listen to teacher's audio notes by subject
             </p>
           </motion.div>
         </div>
@@ -178,21 +213,24 @@ const Notes = () => {
           ref={audioRef}
           onEnded={() => {
             setCurrentPlayingId(null);
+            setIsAudioPlaying(false);
           }}
         />
 
-        {loadingNotes ? (
+        {offlineLoadingNotes ? (
+          <OfflineEmptyState pageName="Audio Notes" />
+        ) : isInitialLoading ? (
           <div className="flex items-center justify-center min-h-[400px]">
             <LoadingSpinner />
           </div>
-        ) : subjects.length === 0 ? (
+        ) :subjects.length === 0 ? (
           <Card className="glass-card p-12 text-center">
             <Music className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-2xl font-semibold mb-2">
               No Audio Notes Available
             </h2>
             <p className="text-muted-foreground">
-              There are no voice notes available for your class at the moment.
+              There are no audio notes available for your class at the moment.
             </p>
           </Card>
         ) : (
@@ -282,6 +320,11 @@ const Notes = () => {
                                 <Badge variant="outline">
                                   {formatDuration(note.duration)}
                                 </Badge>
+                                {cachedNotes.has(note.id) && (
+                                  <Badge variant="outline" className="text-green-400 border-green-500/50 flex gap-1 items-center">
+                                    <CheckCircle2 className="w-3 h-3" /> Stored
+                                  </Badge>
+                                )}
                                 <Badge variant="outline">
                                   {formatFileSize(note.fileSize)}
                                 </Badge>
@@ -303,7 +346,7 @@ const Notes = () => {
                               className="glass"
                               onClick={() => handlePlayPause(note)}
                             >
-                              {currentPlayingId === note.id && !audioRef.current?.paused ? (
+                              {currentPlayingId === note.id && isAudioPlaying ? (
                                 <>
                                   <Pause className="w-4 h-4 mr-2" />
                                   Pause
@@ -345,9 +388,9 @@ const Notes = () => {
               Study Tips
             </h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Listen to notes while commuting or during breaks</li>
-              <li>• Download notes for offline listening</li>
-              <li>• Review notes multiple times for better retention</li>
+              <li>• Listen to audio notes while commuting or during breaks</li>
+              <li>• Download audio notes for offline listening</li>
+              <li>• Review audio notes multiple times for better retention</li>
               <li>• Take notes while listening for active learning</li>
             </ul>
           </Card>

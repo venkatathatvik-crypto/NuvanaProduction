@@ -53,6 +53,7 @@ model classes {
   announcement_classes announcement_classes[]
   grade_levels         grade_levels           @relation(fields: [grade_level_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   schools              schools                @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  engagement_sessions  engagement_sessions[]
   files                files[]
   student_details      student_details[]
   teacher_classes      teacher_classes[]
@@ -91,22 +92,26 @@ model file_categories {
 }
 
 model files {
-  id               String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  school_id        String           @db.Uuid
-  file_title       String
-  category_id      Int?
-  class_id         String           @db.Uuid
-  grade_subject_id String           @db.Uuid
-  storage_url      String
-  teacher_id       String           @db.Uuid
-  download_count   Int?             @default(0)
-  file_type        String?          @default("pdf")
-  created_at       DateTime?        @default(now()) @db.Timestamptz(6)
-  file_categories  file_categories? @relation(fields: [category_id], references: [id], onUpdate: NoAction)
-  classes          classes          @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  grade_subjects   grade_subjects   @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  schools          schools          @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  profiles         profiles         @relation(fields: [teacher_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  id                  String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id           String                @db.Uuid
+  file_title          String
+  category_id         Int?
+  class_id            String                @db.Uuid
+  grade_subject_id    String                @db.Uuid
+  storage_url         String
+  teacher_id          String                @db.Uuid
+  download_count      Int?                  @default(0)
+  file_type           String?               @default("pdf")
+  created_at          DateTime?             @default(now()) @db.Timestamptz(6)
+  rag_status          String?
+  rag_error           String?
+  engagement_sessions engagement_sessions[]
+  file_categories     file_categories?      @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  classes             classes               @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  grade_subjects      grade_subjects        @relation(fields: [grade_subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools             schools               @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles            profiles              @relation(fields: [teacher_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  pdf_annotations     pdf_annotations[]
 
   @@index([school_id], map: "idx_files_tenant")
 }
@@ -153,33 +158,41 @@ model notifications {
 }
 
 model profiles {
-  id                                         String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  school_id                                  String?             @db.Uuid
-  email                                      String              @unique
+  id                                         String                       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id                                  String?                      @db.Uuid
+  email                                      String                       @unique
   password_hash                              String
-  role_id                                    Int                 @db.SmallInt
+  role_id                                    Int                          @db.SmallInt
   name                                       String?
   avatar_url                                 String?
-  is_verified                                Boolean?            @default(false)
-  is_first_login                             Boolean?            @default(false)
+  is_verified                                Boolean?                     @default(false)
+  is_first_login                             Boolean?                     @default(false)
   verification_token                         String?
-  created_at                                 DateTime?           @default(now()) @db.Timestamptz(6)
+  created_at                                 DateTime?                    @default(now()) @db.Timestamptz(6)
   announcements                              announcements[]
-  attendance_attendance_student_idToprofiles attendance[]        @relation("attendance_student_idToprofiles")
-  attendance_attendance_taken_byToprofiles   attendance[]        @relation("attendance_taken_byToprofiles")
+  attendance_attendance_student_idToprofiles attendance[]                 @relation("attendance_student_idToprofiles")
+  attendance_attendance_taken_byToprofiles   attendance[]                 @relation("attendance_taken_byToprofiles")
+  engagement_analytics                       engagement_analytics[]
+  engagement_sessions                        engagement_sessions[]
   files                                      files[]
+  life_coach_books                           life_coach_books[]
   notifications                              notifications[]
-  user_roles                                 user_roles          @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  schools                                    schools?            @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  pdf_annotations                            pdf_annotations[]
+  user_roles                                 user_roles                   @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schools                                    schools?                     @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   quiz_history                               quiz_history[]
   student_details                            student_details?
+  student_responses                          student_responses[]
   teacher_classes                            teacher_classes[]
   teacher_details                            teacher_details?
+  teacher_efficiency_metrics                 teacher_efficiency_metrics[]
   teacher_subjects                           teacher_subjects[]
+  term_engagement_summary                    term_engagement_summary[]
   test_submissions                           test_submissions[]
   tests                                      tests[]
   timetable_periods                          timetable_periods[]
   voice_notes                                voice_notes[]
+  whatsapp_messages                          whatsapp_messages[]
 
   @@index([school_id], map: "idx_profiles_school")
 }
@@ -209,29 +222,37 @@ model questions {
 }
 
 model schools {
-  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name              String
-  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
-  admin_profile_id  String?             @db.Uuid
-  logo_url          String?
-  announcements     announcements[]
-  attendance        attendance[]
-  classes           classes[]
-  exam_types        exam_types[]
-  file_categories   file_categories[]
-  files             files[]
-  grade_levels      grade_levels[]
-  grade_subjects    grade_subjects[]
-  notifications     notifications[]
-  profiles          profiles[]
-  quiz_history      quiz_history[]
-  subjects_master   subjects_master[]
-  teacher_classes   teacher_classes[]
-  teacher_subjects  teacher_subjects[]
-  tests             tests[]
-  timetable_days    timetable_days[]
-  timetable_periods timetable_periods[]
-  voice_notes       voice_notes[]
+  id                         String                       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                       String
+  created_at                 DateTime?                    @default(now()) @db.Timestamptz(6)
+  admin_profile_id           String?                      @db.Uuid
+  logo_url                   String?
+  announcements              announcements[]
+  attendance                 attendance[]
+  classes                    classes[]
+  engagement_analytics       engagement_analytics[]
+  engagement_sessions        engagement_sessions[]
+  exam_types                 exam_types[]
+  file_categories            file_categories[]
+  files                      files[]
+  grade_levels               grade_levels[]
+  grade_subjects             grade_subjects[]
+  life_coach_books           life_coach_books[]
+  life_coach_categories      life_coach_categories[]
+  notifications              notifications[]
+  pdf_annotations            pdf_annotations[]
+  profiles                   profiles[]
+  quiz_history               quiz_history[]
+  subjects_master            subjects_master[]
+  teacher_classes            teacher_classes[]
+  teacher_efficiency_metrics teacher_efficiency_metrics[]
+  teacher_subjects           teacher_subjects[]
+  term_engagement_summary    term_engagement_summary[]
+  tests                      tests[]
+  timetable_days             timetable_days[]
+  timetable_periods          timetable_periods[]
+  voice_notes                voice_notes[]
+  whatsapp_messages          whatsapp_messages[]
 }
 
 model student_answers {
@@ -401,6 +422,213 @@ model quiz_history {
   @@index([school_id], map: "idx_quiz_history_tenant")
 }
 
+model pdf_annotations {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  file_id         String    @db.Uuid
+  school_id       String    @db.Uuid
+  page_number     Int
+  annotation_data Json
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  profile_id      String    @db.Uuid
+  note_type       String?   @default("ANNOTATION") @db.VarChar(20)
+  profiles        profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_pdf_annotations_profile")
+  files           files     @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schools         schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([file_id, profile_id, page_number, note_type], map: "idx_pdf_notes_per_user_type")
+  @@index([file_id], map: "idx_pdf_annotations_file")
+  @@index([school_id], map: "idx_pdf_annotations_tenant")
+}
+
+model engagement_analytics {
+  id                   String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  session_id           String              @db.Uuid
+  student_id           String              @db.Uuid
+  school_id            String              @db.Uuid
+  total_questions      Int?                @default(0)
+  questions_answered   Int?                @default(0)
+  questions_correct    Int?                @default(0)
+  total_points_earned  Int?                @default(0)
+  avg_response_time_ms Int?
+  participation_rate   Decimal?            @default(0.00) @db.Decimal(5, 2)
+  accuracy_rate        Decimal?            @default(0.00) @db.Decimal(5, 2)
+  engagement_score     Decimal?            @default(0.00) @db.Decimal(5, 2)
+  updated_at           DateTime?           @default(now()) @db.Timestamptz(6)
+  schools              schools             @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  engagement_sessions  engagement_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles             profiles            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([session_id, student_id], map: "unique_session_student")
+  @@index([school_id, student_id], map: "idx_engagement_analytics_school_student")
+  @@index([session_id], map: "idx_engagement_analytics_session")
+}
+
+model engagement_sessions {
+  id                   String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id            String                     @db.Uuid
+  teacher_id           String                     @db.Uuid
+  class_id             String                     @db.Uuid
+  file_id              String?                    @db.Uuid
+  session_name         String?                    @db.VarChar(255)
+  status               engagement_session_status? @default(active)
+  started_at           DateTime?                  @default(now()) @db.Timestamptz(6)
+  ended_at             DateTime?                  @db.Timestamptz(6)
+  created_at           DateTime?                  @default(now()) @db.Timestamptz(6)
+  engagement_analytics engagement_analytics[]
+  classes              classes                    @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  files                files?                     @relation(fields: [file_id], references: [id], onUpdate: NoAction)
+  schools              schools                    @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles             profiles                   @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  pop_questions        pop_questions[]
+
+  @@index([class_id, status], map: "idx_engagement_sessions_class_status")
+  @@index([file_id], map: "idx_engagement_sessions_file")
+  @@index([school_id], map: "idx_engagement_sessions_school")
+  @@index([teacher_id], map: "idx_engagement_sessions_teacher")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model pop_questions {
+  id                  String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  session_id          String              @db.Uuid
+  question_text       String
+  option_a            String
+  option_b            String
+  option_c            String
+  option_d            String
+  correct_option      String              @db.Char(1)
+  time_limit_seconds  Int?                @default(30)
+  points              Int?                @default(10)
+  sent_at             DateTime?           @default(now()) @db.Timestamptz(6)
+  expires_at          DateTime            @db.Timestamptz(6)
+  created_at          DateTime?           @default(now()) @db.Timestamptz(6)
+  engagement_sessions engagement_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_responses   student_responses[]
+
+  @@index([session_id, sent_at(sort: Desc)], map: "idx_pop_questions_session")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model student_responses {
+  id               String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  question_id      String        @db.Uuid
+  student_id       String        @db.Uuid
+  selected_option  String        @db.Char(1)
+  response_time_ms Int
+  is_correct       Boolean
+  points_earned    Int?          @default(0)
+  submitted_at     DateTime?     @default(now()) @db.Timestamptz(6)
+  pop_questions    pop_questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles         profiles      @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([question_id, student_id], map: "unique_student_question")
+  @@index([question_id], map: "idx_student_responses_question")
+  @@index([student_id], map: "idx_student_responses_student")
+}
+
+model teacher_efficiency_metrics {
+  id                        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  teacher_id                String    @db.Uuid
+  school_id                 String    @db.Uuid
+  term_id                   String?   @db.VarChar(50)
+  academic_year             String?   @db.VarChar(20)
+  total_sessions_conducted  Int?      @default(0)
+  total_questions_sent      Int?      @default(0)
+  avg_class_participation   Decimal?  @default(0.00) @db.Decimal(5, 2)
+  avg_class_accuracy        Decimal?  @default(0.00) @db.Decimal(5, 2)
+  avg_engagement_score      Decimal?  @default(0.00) @db.Decimal(5, 2)
+  combined_efficiency_score Decimal?  @default(0.00) @db.Decimal(5, 2)
+  updated_at                DateTime? @default(now()) @db.Timestamptz(6)
+  schools                   schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles                  profiles  @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([teacher_id, term_id], map: "unique_teacher_term")
+  @@index([school_id, academic_year], map: "idx_teacher_efficiency_school_year")
+}
+
+model term_engagement_summary {
+  id                     String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  student_id             String    @db.Uuid
+  school_id              String    @db.Uuid
+  term_id                String?   @db.VarChar(50)
+  academic_year          String?   @db.VarChar(20)
+  total_sessions         Int?      @default(0)
+  total_questions        Int?      @default(0)
+  questions_answered     Int?      @default(0)
+  questions_correct      Int?      @default(0)
+  avg_participation_rate Decimal?  @default(0.00) @db.Decimal(5, 2)
+  avg_accuracy_rate      Decimal?  @default(0.00) @db.Decimal(5, 2)
+  avg_engagement_score   Decimal?  @default(0.00) @db.Decimal(5, 2)
+  updated_at             DateTime? @default(now()) @db.Timestamptz(6)
+  schools                schools   @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles               profiles  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([student_id, term_id], map: "unique_student_term")
+  @@index([school_id, academic_year], map: "idx_term_summary_school_year")
+}
+
+model whatsapp_messages {
+  id            String                          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  wa_message_id String?                         @unique
+  sender_id     String?                         @db.Uuid
+  school_id     String?                         @db.Uuid
+  phone_number  String
+  message_text  String
+  status        whatsapp_message_status_enum    @default(SENT)
+  direction     whatsapp_message_direction_enum @default(OUTGOING)
+  metadata      Json?                           @default("{}")
+  created_at    DateTime?                       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?                       @default(now()) @db.Timestamptz(6)
+  schools       schools?                        @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles      profiles?                       @relation(fields: [sender_id], references: [id], onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_whatsapp_messages_school")
+  @@index([sender_id], map: "idx_whatsapp_messages_sender")
+  @@index([wa_message_id], map: "idx_whatsapp_messages_wa_id")
+}
+
+model whatsapp_templates {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  use_case      String    @unique @db.VarChar(255)
+  template_name String    @db.VarChar(255)
+  language_code String    @default("en_US") @db.VarChar(10)
+  is_active     Boolean   @default(true)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([use_case], map: "idx_whatsapp_templates_use_case")
+}
+
+model life_coach_books {
+  id                    String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  school_id             String                @db.Uuid
+  title                 String                @db.VarChar(255)
+  category_id           Int
+  storage_url           String                @db.VarChar(500)
+  uploaded_by           String                @db.Uuid
+  file_type             String?               @default("pdf") @db.VarChar(50)
+  rag_status            String?               @db.VarChar(50)
+  rag_error             String?
+  created_at            DateTime?             @default(now()) @db.Timestamptz(6)
+  life_coach_categories life_coach_categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schools               schools               @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles              profiles              @relation(fields: [uploaded_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_life_coach_books_school")
+}
+
+model life_coach_categories {
+  id               Int                @id @default(autoincrement())
+  school_id        String             @db.Uuid
+  name             String             @db.VarChar(255)
+  created_at       DateTime?          @default(now()) @db.Timestamptz(6)
+  life_coach_books life_coach_books[]
+  schools          schools            @relation(fields: [school_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([school_id], map: "idx_life_coach_categories_school")
+}
+
 enum attendance_status_enum {
   present
   absent
@@ -417,4 +645,21 @@ enum question_type_enum {
   Essay
   Short_Answer      @map("Short Answer")
   Very_Short_Answer @map("Very Short Answer")
+}
+
+enum engagement_session_status {
+  active
+  ended
+}
+
+enum whatsapp_message_direction_enum {
+  OUTGOING
+  INCOMING
+}
+
+enum whatsapp_message_status_enum {
+  SENT
+  DELIVERED
+  READ
+  FAILED
 }

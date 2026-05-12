@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
@@ -28,6 +29,9 @@ import { getTeacherClasses, FlattenedClass, getAllTeachingClasses } from "@/serv
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
+import { logger } from '@/lib/logger';
 
 const TeacherTests = () => {
   const navigate = useNavigate();
@@ -52,6 +56,7 @@ const TeacherTests = () => {
   });
 
   const loading = testsLoading || classesLoading;
+  const offlineLoading = useOfflineLoading(loading);
 
   // Filter tests based on selected tab and class
   const filteredTests = useMemo(() => {
@@ -91,7 +96,7 @@ const TeacherTests = () => {
       
       toast.success("Test deleted successfully");
     } catch (error: any) {
-      console.error("Error deleting test:", error);
+      logger.error("Error deleting test:", error);
       toast.error(error.message || "Failed to delete test");
     } finally {
       setTestToDelete(null);
@@ -123,7 +128,7 @@ const TeacherTests = () => {
             target_url: "/student/tests",
           });
         } catch (notifError) {
-          console.error("Failed to send notifications:", notifError);
+          logger.error("Failed to send notifications:", notifError);
         }
 
         // Send email notifications
@@ -135,11 +140,11 @@ const TeacherTests = () => {
             test.className || 'your class'
           );
         } catch (emailError) {
-          console.error("Failed to send emails:", emailError);
+          logger.error("Failed to send emails:", emailError);
         }
       }
     } catch (error: any) {
-      console.error("Error updating test status:", error);
+      logger.error("Error updating test status:", error);
       toast.error(error.message || "Failed to update test status");
     }
   };
@@ -179,9 +184,27 @@ const TeacherTests = () => {
         </div>
       </motion.div>
 
-      {loading ? (
-        <div className="flex items-center justify-center min-h-[400px]">
-          <LoadingSpinner />
+      {offlineLoading ? (
+        <OfflineEmptyState pageName="Tests" />
+      ) : loading ? (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <Skeleton className="h-10 w-[300px]" />
+            <Skeleton className="h-10 w-[200px]" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="glass-card p-6 space-y-4">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-24 w-full" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-9 w-20" />
+                  <Skeleton className="h-9 w-20" />
+                  <Skeleton className="h-9 w-20" />
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="space-y-6">
@@ -258,18 +281,12 @@ const TeacherTests = () => {
                         </div>
                       )}
                     </div>
-                    {test.dueDate && (
-                      <div className="text-xs text-orange-500 bg-orange-500/10 px-2 py-1 rounded w-fit flex items-center gap-1">
-                        <span>📅</span>
-                        <span>Due: {new Date(test.dueDate).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}</span>
-                      </div>
-                    )}
+                      {test.dueDate && (
+                        <div className="text-xs text-orange-500 bg-orange-500/10 px-2 py-1 rounded w-fit flex items-center gap-1">
+                          <span>📅</span>
+                          <span>Due: {format(new Date(test.dueDate), "dd/MM/yyyy HH:mm")}</span>
+                        </div>
+                      )}
 
                     <div className="grid grid-cols-2 gap-2 pt-4">
                       <Button

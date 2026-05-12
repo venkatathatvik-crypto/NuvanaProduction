@@ -22,6 +22,7 @@ interface ChatState {
   selectedSubject: string;
   selectedClassId: string;
   lastGradingData: any;
+  isLoading: boolean;
 }
 
 interface AiChatContextType {
@@ -32,6 +33,7 @@ interface AiChatContextType {
   selectedSubject: string;
   selectedClassId: string;
   lastGradingData: any;
+  isLoading: boolean;
   
   // State setters
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
@@ -40,6 +42,7 @@ interface AiChatContextType {
   setSelectedSubject: (subject: string) => void;
   setSelectedClassId: (classId: string) => void;
   setLastGradingData: (data: any) => void;
+  setIsLoading: (loading: boolean) => void;
   
   // Utility methods
   addMessage: (message: Message) => void;
@@ -55,6 +58,7 @@ const getInitialState = (): ChatState => ({
   selectedSubject: "all",
   selectedClassId: "all",
   lastGradingData: null,
+  isLoading: false,
 });
 
 export const AiChatProvider = ({ children }: { children: ReactNode }) => {
@@ -97,6 +101,10 @@ export const AiChatProvider = ({ children }: { children: ReactNode }) => {
     setCurrentState(prev => ({ ...prev, lastGradingData: data }));
   }, [setCurrentState]);
   
+  const setIsLoading = useCallback((loading: boolean) => {
+    setCurrentState(prev => ({ ...prev, isLoading: loading }));
+  }, [setCurrentState]);
+  
   // Utility methods
   const addMessage = useCallback((message: Message) => {
     setMessages(prev => [...prev, message]);
@@ -115,12 +123,14 @@ export const AiChatProvider = ({ children }: { children: ReactNode }) => {
         selectedSubject: currentState.selectedSubject,
         selectedClassId: currentState.selectedClassId,
         lastGradingData: currentState.lastGradingData,
+        isLoading: currentState.isLoading,
         setMessages,
         setActiveMode,
         setSelectedImage,
         setSelectedSubject,
         setSelectedClassId,
         setLastGradingData,
+        setIsLoading,
         addMessage,
         clearChat,
       }}

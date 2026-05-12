@@ -19,6 +19,7 @@ import {
   Mic,
   Headphones,
   CheckCircle2,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useNavigate } from "react-router-dom";
 import { aiService } from "@/services/aiService";
 import { MessageBubble } from "@/components/AiTutor/MessageBubble";
 import { useAuth } from "@/auth/AuthContext";
@@ -41,6 +43,9 @@ import { GradingApprovalModal } from "./GradingApprovalModal";
 import { schoolService } from "@/services/schoolService";
 import { exportQuizPDF } from "@/lib/quizPdfExport";
 import { QuickReplyButtons } from "./QuickReplyButtons";
+import { AiConfigForm } from "./AiConfigForm";
+import type { AiConfigValues } from "./AiConfigForm";
+import { logger } from '@/lib/logger';
 
 // Message interface (matches AiChatContext)
 interface Message {
@@ -78,24 +83,10 @@ const TEACHER_ACTION_MODES = [
   },
   {
     id: "create_quiz",
-    label: "Create Quiz",
+    label: "Generate Paper",
     icon: FileCode,
     color: "text-green-500",
     desc: "Generate test questions",
-  },
-  {
-    id: "simplify",
-    label: "Simplifier",
-    icon: BookOpen,
-    color: "text-yellow-500",
-    desc: "Make content easier",
-  },
-  {
-    id: "activity",
-    label: "Activities",
-    icon: Users,
-    color: "text-pink-500",
-    desc: "Classroom engagement",
   },
   {
     id: "email",
@@ -108,6 +99,7 @@ const TEACHER_ACTION_MODES = [
 
 const AiTeacherChat = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   
   // Use context for persistent state
   const {
@@ -123,11 +115,12 @@ const AiTeacherChat = () => {
     setSelectedClassId,
     lastGradingData,
     setLastGradingData,
+    isLoading,
+    setIsLoading,
   } = useAiChat();
   
   // Local state for UI-only concerns (not persisted)
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isContextLoading, setIsContextLoading] = useState(false);
   const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -230,7 +223,7 @@ const AiTeacherChat = () => {
             setSchoolInfo(schoolData);
           }
         } catch (error) {
-          console.error("Failed to load teacher context", error);
+          logger.error("Failed to load teacher context", error);
         } finally {
           setIsContextLoading(false);
         }
@@ -296,7 +289,7 @@ const AiTeacherChat = () => {
         recognitionRef.current.start();
         setIsListening(true);
       } catch (error) {
-        console.error("Speech recognition error:", error);
+        logger.error("Speech recognition error:", error);
       }
     } else {
       toast.error("Speech recognition not supported in this browser.");
@@ -409,7 +402,7 @@ const AiTeacherChat = () => {
         setOriginalQuizQuery("");
       }
     } catch (error) {
-      console.error("Error processing quick reply:", error);
+      logger.error("Error processing quick reply:", error);
       setMessages((prev) => [
         ...prev,
         {
@@ -419,6 +412,86 @@ const AiTeacherChat = () => {
           },
           timestamp: new Date(),
         },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfigSubmit = async (
+    config: AiConfigValues,
+    messageIndex: number,
+    configType: string
+  ) => {
+    // Build summary and request based on config type
+    let summary = '';
+    let taskType = '';
+    let extraParams: Record<string, unknown> = {};
+
+    if (configType === 'quizConfig') {
+      summary = `${config.questionCount} ${config.questionTypes} questions, ${config.difficulty} difficulty${config.chapter ? `, Chapter: ${config.chapter}` : ''}${config.topic ? `, Topic: ${config.topic}` : ''}`;
+      taskType = 'mock_test';
+      extraParams = {
+        quizParams: {
+          questionCount: config.questionCount,
+          questionTypes: config.questionTypes,
+          difficulty: config.difficulty,
+          chapter: config.chapter || undefined,
+          topic: config.topic || undefined,
+        },
+      };
+    } else if (configType === 'lessonPlanConfig') {
+      summary = `${config.numberOfDays}-day lesson plan, ${config.lessonDuration} min/lesson${config.objectives ? `, Objectives: ${config.objectives}` : ''}`;
+      taskType = 'teacher_lesson_plan';
+      extraParams = {
+        lessonPlanParams: {
+          numberOfDays: config.numberOfDays,
+          lessonDuration: config.lessonDuration,
+          objectives: config.objectives || undefined,
+        },
+      };
+    }
+
+    setMessages((prev) => [...prev, { sender: "user", content: summary, timestamp: new Date() }]);
+    setMessages((prev) =>
+      prev.map((msg, idx) =>
+        idx === messageIndex ? { ...msg, buttonsDisabled: true } : msg
+      )
+    );
+
+    setIsLoading(true);
+    try {
+      const aiResponseEncoded = await aiService.processRequest({
+        taskType,
+        query: originalQuizQuery || "generate",
+        studentId: profile?.id,
+        classId: selectedClassId && selectedClassId !== "all" ? selectedClassId : undefined,
+        subject: selectedSubject && selectedSubject !== "all" ? selectedSubject : undefined,
+        additionalContext: { role: "teacher", mode: activeMode },
+        ...extraParams,
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          content: aiResponseEncoded,
+          quickReplies: aiResponseEncoded.quickReplies,
+          waitingForInput: aiResponseEncoded.waitingForInput,
+          inputType: aiResponseEncoded.inputType,
+          timestamp: new Date(),
+        },
+      ]);
+
+      if (!aiResponseEncoded.waitingForInput) {
+        setQuizParams({});
+        setOriginalQuizQuery("");
+      }
+    } catch (error) {
+      logger.error("Error generating from config:", error);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "ai", content: { explanation: "⚠️ I encountered an error. Please try again." }, timestamp: new Date() },
       ]);
     } finally {
       setIsLoading(false);
@@ -446,9 +519,11 @@ const AiTeacherChat = () => {
       if (activeMode !== "create_quiz") {
         setActiveMode("create_quiz");
       }
-      if (!originalQuizQuery) {
-        setOriginalQuizQuery(textToSend);
-      }
+    }
+
+    // Store original query for config form follow-ups (quiz, lesson plan)
+    if ((activeMode === "create_quiz" || activeMode === "lesson_plan" || textToSend.toLowerCase().includes("quiz") || textToSend.toLowerCase().includes("test")) && !originalQuizQuery) {
+      setOriginalQuizQuery(textToSend);
     }
 
     try {
@@ -601,7 +676,7 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
       
       toast.success("Quiz PDF generated successfully!");
     } catch (error) {
-      console.error("Error generating quiz PDF:", error);
+      logger.error("Error generating quiz PDF:", error);
       toast.error("Failed to generate PDF. Please try again.");
     }
   };
@@ -744,9 +819,25 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                   content={msg.content}
                   timestamp={msg.timestamp}
                 />
-                {msg.sender === "ai" && 
-                  msg.quickReplies && 
-                  msg.quickReplies.length > 0 && 
+                {/* Inline config forms (quiz, lesson plan) */}
+                {msg.sender === "ai" &&
+                  (msg.inputType === "quizConfig" || msg.inputType === "lessonPlanConfig") &&
+                  !msg.buttonsDisabled && (
+                  <div className="ml-12 mb-4">
+                    <AiConfigForm
+                      mode={msg.inputType === "quizConfig" ? "quiz" : "lessonPlan"}
+                      defaultTopic={originalQuizQuery}
+                      onSubmit={(config) => handleConfigSubmit(config, index, msg.inputType || "")}
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
+                {/* Quick reply buttons (for other flows) */}
+                {msg.sender === "ai" &&
+                  msg.inputType !== "quizConfig" &&
+                  msg.inputType !== "lessonPlanConfig" &&
+                  msg.quickReplies &&
+                  msg.quickReplies.length > 0 &&
                   !msg.buttonsDisabled && (
                   <div className="ml-12 mb-4">
                     <QuickReplyButtons
@@ -772,15 +863,42 @@ Provide detailed feedback with marks breakdown. Since this is an image submissio
                       </Button>
                     </div>
                   )}
-                {/* Show Save as PDF button after quiz generation */}
+                {/* Show Save Quiz button after quiz generation */}
                 {msg.sender === "ai" &&
                   index === messages.length - 1 &&
                   activeMode === "create_quiz" &&
-                  msg.content?.explanation && ( // Only show if there's actual quiz content
-                    <div className="flex justify-start ml-12 mt-2">
+                  msg.content?.metadata?.quizQuestions?.length > 0 && (
+                    <div className="flex justify-start ml-12 mt-2 gap-2">
+                      <Button
+                        onClick={() => {
+                          const meta = msg.content.metadata;
+                          const questions = meta.quizQuestions.map((q: any) => ({
+                            text: q.question,
+                            questionType: q.type === 'MCQ' ? 'MCQ' : q.type === 'Essay' ? 'Essay' : 'Short Answer',
+                            options: q.type === 'MCQ' ? (q.options || ['', '', '', '']) : undefined,
+                            correctOptionIndex: q.type === 'MCQ' ? (q.correctOptionIndex ?? 0) : undefined,
+                            marks: q.marks || 2,
+                            chapter: meta.quizParams?.topic || 'General',
+                            topic: meta.quizParams?.topic || 'General',
+                          }));
+                          navigate('/teacher/tests/create', {
+                            state: {
+                              prefillQuestions: questions,
+                              prefillTitle: `${meta.quizParams?.subject || ''} Quiz - ${meta.quizParams?.topic || ''}`.trim(),
+                              prefillSubject: meta.quizParams?.subject,
+                              prefillDuration: meta.quizParams?.questionCount ? meta.quizParams.questionCount * 2 : 30,
+                            },
+                          });
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        size="sm"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Quiz
+                      </Button>
                       <Button
                         onClick={() => handleExportQuizPDF(msg)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        variant="outline"
                         size="sm"
                       >
                         <FileCode className="w-4 h-4 mr-2" />

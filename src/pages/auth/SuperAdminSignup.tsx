@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Crown, Mail, Lock, ArrowLeft, Loader2, User, KeyRound } from "lucide-react";
+import { Crown, Mail, Lock, ArrowLeft, Loader2, User, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { authService } from "@/lib/auth";
 import { toast } from "sonner";
+import { logger } from '@/lib/logger';
 
 export default function SuperAdminSignup() {
   const navigate = useNavigate();
@@ -15,6 +16,8 @@ export default function SuperAdminSignup() {
   const [password, setPassword] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showAccessCode, setShowAccessCode] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +41,7 @@ export default function SuperAdminSignup() {
       navigate("/super-admin-login");
 
     } catch (error: any) {
-      console.error("Signup error:", error);
+      logger.error("Signup error:", error);
       if (error.message.includes("Email already registered")) {
         toast.error("This email is already registered.");
       } else if (error.message.includes("Invalid super admin secret")) {
@@ -84,7 +87,7 @@ export default function SuperAdminSignup() {
             </p>
           </div>
 
-          <form onSubmit={handleSignup} className="space-y-5">
+          <form onSubmit={handleSignup} className="space-y-5" noValidate>
             <div className="space-y-2">
               <label className="text-sm font-medium">Full Name</label>
               <div className="relative">
@@ -95,7 +98,6 @@ export default function SuperAdminSignup() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="pl-10"
-                  required
                 />
               </div>
             </div>
@@ -110,7 +112,6 @@ export default function SuperAdminSignup() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
-                  required
                 />
               </div>
             </div>
@@ -120,13 +121,15 @@ export default function SuperAdminSignup() {
               <div className="relative">
                 <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
                 <Input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Min. 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  required
+                  className="pl-10 pr-10"
                 />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground">
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 
@@ -136,13 +139,15 @@ export default function SuperAdminSignup() {
               </label>
               <div className="relative">
                 <Input
-                  type="password"
+                  type={showAccessCode ? "text" : "password"}
                   placeholder="Enter platform access code"
                   value={accessCode}
                   onChange={(e) => setAccessCode(e.target.value)}
-                  className="bg-purple-500/10 border-purple-500/30"
-                  required
+                  className="bg-purple-500/10 border-purple-500/30 pr-10"
                 />
+                <button type="button" onClick={() => setShowAccessCode(!showAccessCode)} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground">
+                  {showAccessCode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
               <p className="text-xs text-muted-foreground">
                 Required for super admin registration. Contact existing admin if needed.

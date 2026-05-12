@@ -51,7 +51,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ sender, content, t
                                 />
 
                                 {content.personalizedFeedback && (
-                                    <div className="mt-3 pt-3 border-t border-dashed border-border text-sm italic text-muted-foreground flex gap-2">
+                                    <div className="mt-3 pt-3 border-t border-dashed border-border text-sm italic text-foreground/70 flex gap-2">
                                         <Sparkles className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
                                         <span>{content.personalizedFeedback}</span>
                                     </div>

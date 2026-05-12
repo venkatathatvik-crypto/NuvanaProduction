@@ -41,6 +41,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { logger } from '@/lib/logger';
 
 const VoiceUpload = () => {
   const navigate = useNavigate();
@@ -73,6 +74,9 @@ const VoiceUpload = () => {
   // Delete dialog states
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [voiceNoteToDelete, setVoiceNoteToDelete] = useState<TeacherVoiceNote | null>(null);
+
+  // Navigation guard state
+  const [navigationDialogOpen, setNavigationDialogOpen] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -134,6 +138,26 @@ const VoiceUpload = () => {
     };
   }, [audioUrl]);
 
+  // Browser-level navigation guard
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRecording || audioBlob) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isRecording, audioBlob]);
+
+  const handleBack = () => {
+    if (isRecording || audioBlob) {
+      setNavigationDialogOpen(true);
+    } else {
+      navigate("/teacher");
+    }
+  };
+
   const startRecording = async () => {
     if (!selectedGradeSubjectId || selectedTargetClassIds.length === 0) {
       toast.error("Please select a subject and at least one class first");
@@ -191,7 +215,7 @@ const VoiceUpload = () => {
 
       toast.info("Recording started...");
     } catch (error) {
-      console.error("Error accessing microphone:", error);
+      logger.error("Error accessing microphone:", error);
       toast.error("Failed to access microphone. Please check permissions.");
     }
   };
@@ -255,14 +279,14 @@ const VoiceUpload = () => {
         audioRef.current.src = "";
       }
       setIsPlaying(false);
-      toast.success("Voice note uploaded successfully!");
+      toast.success("Audio note uploaded successfully!");
 
       // Invalidate queries to reflect new voice note
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) });
       queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error: any) {
-      console.error("Error uploading voice note:", error);
+      logger.error("Error uploading voice note:", error);
       toast.error(error.message || "Failed to upload voice note.");
     } finally {
       setIsUploading(false);
@@ -353,14 +377,14 @@ const VoiceUpload = () => {
       ) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
 
-      toast.success("Voice note uploaded successfully!");
+      toast.success("Audio note uploaded successfully!");
 
       // Invalidate queries to reflect new voice note
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) });
       queryClient.invalidateQueries({ queryKey: ["student-voice-notes"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     } catch (error: any) {
-      console.error("Error uploading voice note:", error);
+      logger.error("Error uploading voice note:", error);
       toast.error(error.message || "Failed to upload voice note.");
     } finally {
       setIsUploading(false);
@@ -394,7 +418,7 @@ const VoiceUpload = () => {
         voiceNoteToDelete.storagePath,
         profile.id
       );
-      toast.success("Voice note deleted successfully");
+      toast.success("Audio note deleted successfully");
 
       // Invalidate queries using proper queryKeys
       queryClient.invalidateQueries({ 
@@ -407,7 +431,7 @@ const VoiceUpload = () => {
         queryKey: queryKeys.teacher.voiceNotes(profile.id, profile.school_id) 
       });
     } catch (error: any) {
-      console.error("Error deleting voice note:", error);
+      logger.error("Error deleting voice note:", error);
       toast.error(error.message || "Failed to delete voice note.");
     } finally {
       setVoiceNoteToDelete(null);
@@ -426,23 +450,32 @@ const VoiceUpload = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      toast.success("Voice note downloaded successfully");
+      toast.success("Audio note downloaded successfully");
     } catch (error) {
-      console.error("Error downloading voice note:", error);
+      logger.error("Error downloading voice note:", error);
       toast.error("Failed to download voice note.");
     }
   };
 
   const handlePlay = async (voiceNote: TeacherVoiceNote) => {
     if (audioRef.current) {
-      if (playingVoiceNoteId === voiceNote.id && !audioRef.current.paused) {
-        // Pause if same voice note is playing
-        audioRef.current.pause();
-        setIsPlaying(false);
-        setPlayingVoiceNoteId(null);
+      if (playingVoiceNoteId === voiceNote.id) {
+        // Toggle pause/resume for same voice note
+        if (audioRef.current.paused) {
+          try {
+            await audioRef.current.play();
+            setIsPlaying(true);
+          } catch (error) {
+            logger.error("Resume error:", error);
+            toast.error("Playback failed.");
+          }
+        } else {
+          audioRef.current.pause();
+          setIsPlaying(false);
+        }
       } else {
         try {
-          // Reset and load new source
+          // Play a different voice note
           audioRef.current.pause();
           audioRef.current.src = voiceNote.storageUrl;
           audioRef.current.load();
@@ -451,7 +484,7 @@ const VoiceUpload = () => {
           setIsPlaying(true);
           setPlayingVoiceNoteId(voiceNote.id);
         } catch (error) {
-          console.error("Playback error:", error);
+          logger.error("Playback error:", error);
           toast.error("Cannot play this audio format. Please download it instead.");
           setIsPlaying(false);
           setPlayingVoiceNoteId(null);
@@ -471,7 +504,7 @@ const VoiceUpload = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/teacher")}
+            onClick={handleBack}
             className="shrink-0"
           >
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -482,10 +515,10 @@ const VoiceUpload = () => {
             className="min-w-0"
           >
             <h1 className="text-2xl sm:text-4xl font-bold neon-text mb-1 sm:mb-2">
-              Voice Notes 🎙️
+              Audio Notes 🎙️
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base">
-              Record and upload class sessions
+              Record and upload audio notes for class sessions
             </p>
           </motion.div>
         </div>
@@ -667,7 +700,7 @@ const VoiceUpload = () => {
               </div>
 
               <div className="mt-8 pt-6 border-t border-border">
-                <p className="text-sm font-medium mb-3">Or upload audio file</p>
+                <p className="text-sm font-medium mb-3">Or upload audio file as note</p>
                 {!uploadedFile ? (
                   <div className="flex gap-2">
                     <Input
@@ -882,6 +915,18 @@ const VoiceUpload = () => {
         }
         confirmText="Delete"
         cancelText="Cancel"
+        variant="destructive"
+      />
+
+      {/* Navigation Confirmation Dialog */}
+      <ConfirmDialog
+        open={navigationDialogOpen}
+        onOpenChange={setNavigationDialogOpen}
+        onConfirm={() => navigate("/teacher")}
+        title="Discard Recording?"
+        description="You have an active recording or an unsaved audio note. Moving back will discard it. Are you sure you want to continue?"
+        confirmText="Discard & Go Back"
+        cancelText="Stay"
         variant="destructive"
       />
     </div>

@@ -1,5 +1,6 @@
 import React from "react";
 import AiTutorWidget from "@/components/AiTutor/AiTutorWidget";
+import { GlobalEngagementListener } from "@/components/engagement/GlobalEngagementListener";
 
 const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
     return (
@@ -11,7 +12,7 @@ const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
             <div
                 className="absolute inset-0 opacity-60 bg-cover bg-center pointer-events-none"
                 style={{
-                    backgroundImage: "url('/doodle-bg.png')",
+                    backgroundImage: `url('${import.meta.env.BASE_URL}doodle-bg.png')`,
                 }}
             />
 
@@ -24,6 +25,9 @@ const AppBackgroundLayout = ({ children }: { children: React.ReactNode }) => {
 
             {/* Global AI Chatbot Widget */}
             <AiTutorWidget />
+
+            {/* Global Student Engagement Listener */}
+            <GlobalEngagementListener />
         </div>
     );
 };

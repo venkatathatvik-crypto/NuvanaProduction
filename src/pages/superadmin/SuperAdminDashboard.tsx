@@ -19,10 +19,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { School, Plus, Loader2, UserPlus, Building2, LogOut } from "lucide-react";
+import { School, Plus, Loader2, UserPlus, Building2, LogOut, Eye, EyeOff } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { logger } from '@/lib/logger';
 
 interface SchoolData {
   id: string;
@@ -43,6 +44,7 @@ export default function SuperAdminDashboard() {
   const [adminName, setAdminName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -63,7 +65,7 @@ export default function SuperAdminDashboard() {
       const data = await apiClient.get<SchoolData[]>("/schools");
       setSchools(data || []);
     } catch (error: any) {
-      console.error("Error fetching schools:", error);
+      logger.error("Error fetching schools:", error);
       toast.error(error.message || "Failed to load schools");
     } finally {
       setLoading(false);
@@ -94,7 +96,7 @@ export default function SuperAdminDashboard() {
       setIsDialogOpen(false);
       fetchSchools();
     } catch (error: any) {
-      console.error("Error creating school:", error);
+      logger.error("Error creating school:", error);
       toast.error(error.message || "Failed to create school");
     } finally {
       setIsCreating(false);
@@ -157,14 +159,19 @@ export default function SuperAdminDashboard() {
                     onChange={(e) => setAdminEmail(e.target.value)}
                     disabled={isCreating}
                   />
-                  <Input
-                    className="bg-secondary/20"
-                    placeholder="Password"
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    disabled={isCreating}
-                  />
+                  <div className="relative">
+                    <Input
+                      className="bg-secondary/20 pr-10"
+                      placeholder="Password"
+                      type={showAdminPassword ? "text" : "password"}
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      disabled={isCreating}
+                    />
+                    <button type="button" onClick={() => setShowAdminPassword(!showAdminPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showAdminPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <Button

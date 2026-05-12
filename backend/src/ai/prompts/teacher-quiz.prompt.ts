@@ -3,7 +3,7 @@ import { QuickReplyButton } from '../dto/ai-response.dto';
 
 /**
  * Teacher Quiz Quick Reply Generator
- * Returns button options for step-by-step quiz parameter collection
+ * Returns a single quizConfig response so the frontend can show an inline config form
  */
 export const TeacherQuizQuickReply = (
   topic: string,
@@ -14,64 +14,24 @@ export const TeacherQuizQuickReply = (
   difficulty?: string,
   ragContext?: string
 ): { message: string; quickReplies: QuickReplyButton[]; inputType: string; waitingForInput: boolean } | null => {
-  
-  // Step 1: Ask for question count
-  if (!questionCount) {
+
+  // If any parameter is missing, ask the frontend to show the config form
+  if (!questionCount || !questionTypes || !difficulty) {
     return {
       message: `🎯 **Let's create your quiz on "${topic}"!**
 
-${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]' 
-  ? '📚 I have access to your uploaded materials and will generate questions from them.\n' 
-  : '📝 I will generate general academic questions based on standard curriculum.\n'}
+${ragContext && ragContext !== '[NO RELEVANT CONTENT FOUND]'
+  ? '📚 I have access to your uploaded materials and will generate questions from them.'
+  : '📝 I will generate general academic questions based on standard curriculum.'}
 
-**First, how many questions would you like?**
-
-💡 *Tip: 10-15 for a quick quiz, 20-30 for a comprehensive test*`,
-      quickReplies: [
-        { text: '10 Questions', value: 10, icon: '📝' },
-        { text: '15 Questions', value: 15, icon: '📝', recommended: true },
-        { text: '20 Questions', value: 20, icon: '📝' },
-        { text: '30 Questions', value: 30, icon: '📄' }
-      ],
-      inputType: 'questionCount',
+Configure your quiz below and hit **Generate Quiz**.`,
+      quickReplies: [],
+      inputType: 'quizConfig',
       waitingForInput: true
     };
   }
-  
-  // Step 2: Ask for question type
-  if (!questionTypes) {
-    return {
-      message: `Great! **${questionCount} questions** it is. ✅
 
-**Now, what type of questions would you like?**`,
-      quickReplies: [
-        { text: '📝 MCQ Only', value: 'mcq', icon: '📝' },
-        { text: '✍️ Short Answer Only', value: 'short', icon: '✍️' },
-        { text: '📄 Essay Only', value: 'essay', icon: '📄' },
-        { text: '🎯 Mixed Types', value: 'mixed', icon: '🎯', recommended: true }
-      ],
-      inputType: 'questionTypes',
-      waitingForInput: true
-    };
-  }
-  
-  // Step 3: Ask for difficulty
-  if (!difficulty) {
-    return {
-      message: `Perfect! **${questionTypes}** questions selected. ✅
-
-**Finally, choose the difficulty level:**`,
-      quickReplies: [
-        { text: '🟢 Easy', value: 'easy', icon: '🟢' },
-        { text: '🟡 Medium', value: 'medium', icon: '🟡', recommended: true },
-        { text: '🔴 Hard', value: 'hard', icon: '🔴' }
-      ],
-      inputType: 'difficulty',
-      waitingForInput: true
-    };
-  }
-  
-  // All parameters collected - no quick replies needed
+  // All parameters collected - no config needed
   return null;
 };
 
@@ -189,12 +149,22 @@ ${previousQuestions.slice(0, 5).map((q, i) => `${i + 1}. ${q.substring(0, 60)}${
 
 ⚠️ **OVERRIDE SYSTEM INSTRUCTIONS**: This is a TEACHER task, not a student task. Ignore student-focused rules.
 
+${isMcqOnly ? `🚨🚨🚨 **ABSOLUTE RULE: MCQ ONLY — NO SHORT ANSWERS, NO ESSAYS** 🚨🚨🚨
+You MUST generate ALL ${questionCount} questions as Multiple Choice Questions (MCQ) with 4 options each.
+DO NOT generate ANY short answer or essay questions. This is non-negotiable.
+` : ''}${isSaOnly ? `🚨🚨🚨 **ABSOLUTE RULE: SHORT ANSWER ONLY — NO MCQ, NO ESSAYS** 🚨🚨🚨
+You MUST generate ALL ${questionCount} questions as Short Answer questions.
+DO NOT generate ANY MCQ or essay questions. This is non-negotiable.
+` : ''}${isEssayOnly ? `🚨🚨🚨 **ABSOLUTE RULE: ESSAY ONLY — NO MCQ, NO SHORT ANSWERS** 🚨🚨🚨
+You MUST generate ALL ${questionCount} questions as Essay questions.
+DO NOT generate ANY MCQ or short answer questions. This is non-negotiable.
+` : ''}
 TASK: Generate a comprehensive quiz/test for teachers on "${topic}"
 
 SUBJECT: ${subject}
 GRADE LEVEL: ${classBand}
 QUESTION COUNT: ${questionCount}
-QUESTION TYPES: ${questionTypes || 'Mixed'}
+QUESTION TYPES: ${isMcqOnly ? 'MCQ ONLY' : isSaOnly ? 'SHORT ANSWER ONLY' : isEssayOnly ? 'ESSAY ONLY' : (questionTypes || 'Mixed')}
 DIFFICULTY: ${difficulty || 'Medium'}
 STYLE: ${classBandStyle}
 
@@ -204,23 +174,11 @@ ${ragContext}
 IMPORTANT: Generate questions DIRECTLY from the above educational content. Extract key concepts, facts, definitions, examples, and problem-solving approaches from the provided material. Questions should test understanding of THIS specific content.
 ` : 'NOTE: Generate general knowledge questions on this topic as no specific educational materials were provided.\n'}
 
+🚨 **ANALYTICS-DRIVEN GENERATION:**
+Check the "ANALYTICS CONTEXT" in the system prompt. If class-wide topic mastery or subject averages are available, prioritize generating questions for "Topics Needing Attention" to help with remediation, while maintaining the specified difficulty.
+
 ${uniquenessWarning}
 
-${isMcqOnly ? `🚨 **STRICT INSTRUCTION: MCQ ONLY MODE**
-- EVERY SINGLE QUESTION must be in Multiple Choice (MCQ) format.
-- DO NOT generate short answers, essays, or long-form written responses.
-- Even for "Analyze" or "Evaluate" levels, provide 4 distinct options (A, B, C, D).
-` : ''}
-${isSaOnly ? `🚨 **STRICT INSTRUCTION: SHORT ANSWER ONLY MODE**
-- EVERY SINGLE QUESTION must be a Short Answer question.
-- DO NOT generate Multiple Choice Questions (MCQ) or long essays.
-- Focus on questions that require 1-3 sentences or a specific key point.
-` : ''}
-${isEssayOnly ? `🚨 **STRICT INSTRUCTION: ESSAY ONLY MODE**
-- EVERY SINGLE QUESTION must be a Long Answer/Essay question.
-- DO NOT generate Multiple Choice Questions (MCQ) or brief short answers.
-- Focus on deep analysis, evaluation, and creative design.
-` : ''}
 
 🚨 **CRITICAL: YOU MUST GENERATE ACTUAL QUESTIONS - NOT DESCRIPTIONS!**
 

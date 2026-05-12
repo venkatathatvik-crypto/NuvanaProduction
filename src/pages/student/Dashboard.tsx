@@ -28,6 +28,9 @@ import { getStudentTimetable, DAY_NAMES } from "@/services/timetableService";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NotificationBell from "@/components/NotificationBell";
 import { formatDistanceToNow } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatePresence } from "framer-motion";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -45,7 +48,18 @@ const Dashboard = () => {
   // 2. Fetch Announcements
   const { data: announcements = [], isLoading: loadingAnnouncements } = useQuery({
     queryKey: ['student-announcements', studentClassId],
-    queryFn: () => getStudentAnnouncements(studentClassId!),
+    queryFn: async () => {
+      const data = await getStudentAnnouncements(studentClassId!);
+      // Expiry logic
+      const expiryDays = parseInt(import.meta.env.VITE_ANNOUNCEMENT_EXPIRY_DAYS || "7");
+      const expiryMs = expiryDays * 24 * 60 * 60 * 1000;
+      const now = new Date().getTime();
+      
+      return data.filter(announcement => {
+        const createdTime = new Date(announcement.createdAt).getTime();
+        return (now - createdTime) < expiryMs;
+      });
+    },
     enabled: !!studentClassId,
   });
 
@@ -108,17 +122,17 @@ const Dashboard = () => {
   const quickActions = [
     {
       label: "Attendance",
-      value: loadingAttendance ? "..." : `${attendancePercentage}%`,
+      value: loadingAttendance ? null : `${attendancePercentage}%`,
       icon: Users,
       color: "text-neon-blue",
       path: "/student/attendance",
     },
-    {
-      label: "Notes",
-      value: "Access",
-      icon: StickyNote,
-      color: "text-green-500",
-      path: "/student/notes"
+   {
+      label: "My Tests",
+      value: loadingTests ? null : (pendingTests > 0 ? `${pendingTests} Pending` : "Take"),
+      icon: FileText,
+      color: "text-neon-purple",
+      path: "/student/tests",
     },
     {
       label: "Books",
@@ -135,11 +149,11 @@ const Dashboard = () => {
       path: "/student/analytics",
     },
     {
-      label: "My Tests",
-      value: loadingTests ? "..." : (pendingTests > 0 ? `${pendingTests} Pending` : "Take"),
-      icon: FileText,
-      color: "text-neon-purple",
-      path: "/student/tests",
+      label: "Audio Notes",
+      value: "Access",
+      icon: StickyNote,
+      color: "text-green-500",
+      path: "/student/notes"
     },
     {
       label: "Timetable",
@@ -150,23 +164,88 @@ const Dashboard = () => {
     },
     {
       label: "Assignments",
-      value: loadingAssessments ? "..." : (pendingAssessments > 0 ? `${pendingAssessments} Pending` : "0"),
+      value: loadingAssessments ? null : (pendingAssessments > 0 ? `${pendingAssessments} Pending` : "0"),
       icon: FileText,
       color: "text-neon-blue",
       path: "/student/events",
     },
     {
-      label: "Average Marks",
-      value: loadingMarks ? "..." : `${averageMarks}%`,
+      label: "Report Card",
+      value: loadingMarks ? null : `${averageMarks}%`,
       icon: Award,
       color: "text-green-500",
       path: "/student/marks",
     },
   ];
 
+  // Critical loading check
+  // offlineNoCache: only show "no cache" empty state when offline AND no data at all.
+  // If studentData is already in cache, we skip the empty state and show the page.
+  const isInitialLoading = (profileLoading && !profile) || (loadingStudentData && !studentData);
+  const offlineNoCache = useOfflineLoading(isInitialLoading && !studentData);
+
   // Get today's day name for display
   const jsDay = new Date().getDay();
   const todayDayName = jsDay === 0 ? "Sunday" : DAY_NAMES[jsDay - 1];
+
+  if (offlineNoCache) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <OfflineEmptyState pageName="Dashboard" />
+      </div>
+    );
+  }
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen p-3 sm:p-6 opacity-60">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+            <div className="flex gap-3 shrink-0">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <Card key={i} className="glass-card p-3 sm:p-6 border-dashed border-muted/50">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                  <Skeleton className="w-10 h-10 rounded-lg opacity-20" />
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <Card className="glass-card p-4 sm:p-6 h-64">
+              <Skeleton className="h-8 w-48 mb-6" />
+              <div className="space-y-4">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            </Card>
+            <Card className="glass-card p-4 sm:p-6 h-64">
+              <Skeleton className="h-8 w-48 mb-6" />
+              <div className="space-y-4">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-3 sm:p-6">
@@ -222,7 +301,15 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] sm:text-xs text-muted-foreground truncate font-medium">{action.label}</p>
-                    <p className={`font-bold mt-1 truncate ${action.value === 'Library' ? 'text-xs sm:text-lg' : 'text-sm sm:text-xl'}`}>{action.value}</p>
+                    <div className="mt-1">
+                      {action.value === null ? (
+                        <Skeleton className="h-5 w-16 sm:h-7 sm:w-20 bg-muted/30" />
+                      ) : (
+                        <p className={`font-bold truncate ${action.value === 'Library' ? 'text-xs sm:text-lg' : 'text-sm sm:text-xl'}`}>
+                          {action.value}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <action.icon className={`w-8 h-8 sm:w-10 sm:h-10 ${action.color} shrink-0 ml-2`} />
                 </div>
@@ -249,8 +336,9 @@ const Dashboard = () => {
                 </span>
               </div>
               {loadingTodayClasses ? (
-                <div className="flex items-center justify-center py-8">
-                  <LoadingSpinner />
+                <div className="space-y-4">
+                  <Skeleton className="h-16 w-full bg-muted/30" />
+                  <Skeleton className="h-16 w-full bg-muted/20" />
                 </div>
               ) : todayClasses.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -287,8 +375,9 @@ const Dashboard = () => {
                 <h2 className="text-lg sm:text-2xl font-semibold">Announcements</h2>
               </div>
               {loadingAnnouncements ? (
-                <div className="flex items-center justify-center py-8">
-                  <LoadingSpinner />
+                <div className="space-y-4">
+                  <Skeleton className="h-24 w-full bg-muted/30" />
+                  <Skeleton className="h-24 w-full bg-muted/20" />
                 </div>
               ) : announcements.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -321,6 +410,7 @@ const Dashboard = () => {
           </motion.div>
         </div>
       </div>
+      
     </div>
   );
 };

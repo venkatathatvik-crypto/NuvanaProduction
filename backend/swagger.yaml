@@ -1,0 +1,4708 @@
+openapi: 3.0.3
+info:
+  title: Nuvana Production API
+  description: |
+    Complete API documentation for the Nuvana Education Platform backend.
+
+    **Authentication**: All endpoints (except those marked Public) require a Bearer JWT token in the `Authorization` header.
+    The `x-school-id` header is required for tenant isolation on most endpoints.
+
+    **Roles**: super_admin, school_admin, teacher, student
+
+    **Rate Limiting**: Global 100 req/min. AI endpoints: 5 req/min.
+  version: 1.0.0
+  contact:
+    name: Nuvana Team
+
+servers:
+  - url: https://api.nuvanacore.com
+    description: Production
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Health
+    description: Health check endpoints (Public)
+  - name: Auth
+    description: Authentication & session management
+  - name: Users
+    description: User profile management
+  - name: Schools
+    description: School CRUD (super_admin only)
+  - name: Academic
+    description: Grades, classes, subjects, timetable, exams
+  - name: Attendance
+    description: Student attendance tracking
+  - name: Tests
+    description: Test creation, submission, and grading
+  - name: Analytics
+    description: Student & class analytics
+  - name: Engagement
+    description: Live engagement sessions & leaderboards
+  - name: Announcements
+    description: Teacher announcements to classes
+  - name: Notifications
+    description: In-app notification system
+  - name: Messages
+    description: Direct messaging between users
+  - name: FileUpload
+    description: Voice notes, PDFs, and video uploads
+  - name: PdfAnnotations
+    description: PDF annotation storage
+  - name: AI
+    description: AI-powered tutoring & teacher tools
+  - name: RAG
+    description: Retrieval-Augmented Generation material lookup
+  - name: WhatsApp
+    description: WhatsApp messaging integration
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    SchoolId:
+      name: x-school-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Tenant school ID extracted from JWT
+
+  schemas:
+    # ─── Auth ───────────────────────────────────────────
+    RegisterSuperAdminDto:
+      type: object
+      required: [email, password, name, secret]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+        secret:
+          type: string
+
+    RegisterUserDto:
+      type: object
+      required: [email, name, role_id, temporaryPassword]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role_id:
+          type: integer
+          description: "1=super_admin, 2=school_admin, 3=teacher, 4=student"
+        school_id:
+          type: string
+          format: uuid
+        temporaryPassword:
+          type: string
+          minLength: 8
+
+    LoginDto:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        school_id:
+          type: string
+          format: uuid
+        expectedRole:
+          type: string
+
+    ResetPasswordDto:
+      type: object
+      required: [userId, newPassword]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        newPassword:
+          type: string
+          minLength: 8
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            name:
+              type: string
+            role:
+              type: string
+            school_id:
+              type: string
+              format: uuid
+
+    # ─── Users ──────────────────────────────────────────
+    UpdateProfileDto:
+      type: object
+      properties:
+        name:
+          type: string
+        avatar_url:
+          type: string
+
+    CreateStudentDetailsDto:
+      type: object
+      properties:
+        roll_number:
+          type: string
+        admission_date:
+          type: string
+          format: date-time
+        parent_contact:
+          type: string
+        class_id:
+          type: string
+          format: uuid
+
+    CreateTeacherDetailsDto:
+      type: object
+      properties:
+        bio:
+          type: string
+        specialization:
+          type: string
+        joining_date:
+          type: string
+          format: date-time
+
+    # ─── Schools ────────────────────────────────────────
+    CreateSchoolDto:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        admin_profile_id:
+          type: string
+          format: uuid
+
+    UpdateSchoolDto:
+      type: object
+      properties:
+        name:
+          type: string
+        admin_profile_id:
+          type: string
+          format: uuid
+
+    OnboardSchoolDto:
+      type: object
+      required: [name, admin_email, admin_password, admin_name]
+      properties:
+        name:
+          type: string
+        admin_email:
+          type: string
+          format: email
+        admin_password:
+          type: string
+        admin_name:
+          type: string
+
+    # ─── Academic ───────────────────────────────────────
+    CreateGradeDto:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    UpdateGradeDto:
+      type: object
+      properties:
+        name:
+          type: string
+
+    CreateClassDto:
+      type: object
+      required: [name, grade_level_id]
+      properties:
+        name:
+          type: string
+        grade_level_id:
+          type: integer
+
+    UpdateClassDto:
+      type: object
+      properties:
+        name:
+          type: string
+        grade_level_id:
+          type: integer
+
+    CreateSubjectDto:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    AssignSubjectsToGradeDto:
+      type: object
+      required: [grade_level_id, subject_master_ids]
+      properties:
+        grade_level_id:
+          type: integer
+        subject_master_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    AssignTeacherToClassDto:
+      type: object
+      required: [teacher_id, class_id]
+      properties:
+        teacher_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+
+    AssignSubjectsToTeacherDto:
+      type: object
+      required: [teacher_id, grade_subject_ids]
+      properties:
+        teacher_id:
+          type: string
+          format: uuid
+        grade_subject_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    CreateFileCategoryDto:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    UpdateFileCategoryDto:
+      type: object
+      properties:
+        name:
+          type: string
+
+    CreateExamTypeDto:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: "'Internal Assessment' or 'School Exam'"
+
+    UpdateExamTypeDto:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [Internal_Assessment, School_Exam]
+
+    CreatePeriodDto:
+      type: object
+      required: [class_id, day_of_week, period_number, subject_id, teacher_id, start_time, end_time]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: "1=Monday, 7=Sunday"
+        period_number:
+          type: integer
+          minimum: 1
+        subject_id:
+          type: string
+          format: uuid
+          description: grade_subjects.id
+        teacher_id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+          description: "HH:MM format"
+        end_time:
+          type: string
+          description: "HH:MM format"
+        room:
+          type: string
+
+    UpdatePeriodDto:
+      type: object
+      properties:
+        period_number:
+          type: integer
+          minimum: 1
+        subject_id:
+          type: string
+          format: uuid
+        teacher_id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+        end_time:
+          type: string
+        room:
+          type: string
+
+    SaveManualMarksDto:
+      type: object
+      required: [title, class_id, grade_subject_id, exam_type_id, max_marks, marks]
+      properties:
+        title:
+          type: string
+        class_id:
+          type: string
+        grade_subject_id:
+          type: string
+        exam_type_id:
+          type: integer
+        max_marks:
+          type: number
+        marks:
+          type: array
+          items:
+            type: object
+            required: [student_id, marks_obtained]
+            properties:
+              student_id:
+                type: string
+              marks_obtained:
+                type: number
+        description:
+          type: string
+
+    # ─── Attendance ─────────────────────────────────────
+    MarkAttendanceDto:
+      type: object
+      required: [classId, attendanceDate, students, teacherId]
+      properties:
+        classId:
+          type: string
+          format: uuid
+        attendanceDate:
+          type: string
+          format: date
+        students:
+          type: array
+          items:
+            type: object
+            required: [id, name, roll_number]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              roll_number:
+                type: string
+              present:
+                type: boolean
+              status:
+                type: string
+        teacherId:
+          type: string
+          format: uuid
+        periodId:
+          type: string
+          format: uuid
+
+    BulkMarkAttendanceDto:
+      type: object
+      required: [classId, attendanceDates, students, teacherId]
+      properties:
+        classId:
+          type: string
+          format: uuid
+        attendanceDates:
+          type: array
+          items:
+            type: string
+            format: date
+        students:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarkAttendanceDto/properties/students/items'
+        teacherId:
+          type: string
+          format: uuid
+
+    # ─── Tests ──────────────────────────────────────────
+    CreateTestDto:
+      type: object
+      required: [title, duration_minutes, is_published, class_id, grade_subject_id, exam_type_id, teacher_id, questions]
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        duration_minutes:
+          type: integer
+          minimum: 1
+        is_published:
+          type: boolean
+        class_id:
+          type: string
+          format: uuid
+        grade_subject_id:
+          type: string
+          format: uuid
+        exam_type_id:
+          type: integer
+        teacher_id:
+          type: string
+          format: uuid
+        due_date:
+          type: string
+          format: date-time
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateQuestionDto'
+
+    CreateQuestionDto:
+      type: object
+      required: [question_text, marks, question_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        question_text:
+          type: string
+          maxLength: 5000
+        marks:
+          type: integer
+          minimum: 1
+        chapter:
+          type: string
+        topic:
+          type: string
+        question_type:
+          type: string
+          enum: [MCQ, Essay, Short Answer, Very Short Answer]
+        correct_option_index:
+          type: integer
+        expected_answer_text:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+
+    UpdateTestDto:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        duration_minutes:
+          type: integer
+        is_published:
+          type: boolean
+        class_id:
+          type: string
+          format: uuid
+        grade_subject_id:
+          type: string
+          format: uuid
+        exam_type_id:
+          type: integer
+        due_date:
+          type: string
+          format: date-time
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateQuestionDto'
+
+    SubmitTestDto:
+      type: object
+      required: [test_id, student_id, answers]
+      properties:
+        test_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        answers:
+          type: array
+          items:
+            type: object
+            required: [question_id]
+            properties:
+              question_id:
+                type: string
+                format: uuid
+              student_selected_option_index:
+                type: integer
+                minimum: 0
+              subjective_answer_text:
+                type: string
+
+    GradeSubmissionDto:
+      type: object
+      required: [submission_id, answers]
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        answers:
+          type: array
+          items:
+            type: object
+            required: [answer_id, marks_awarded]
+            properties:
+              answer_id:
+                type: string
+                format: uuid
+              marks_awarded:
+                type: integer
+                minimum: 0
+        total_marks_obtained:
+          type: integer
+          minimum: 0
+
+    CreateTestFromAiGradingDto:
+      type: object
+      required: [student_id, test_name, subject, class_id, total_marks, marks_obtained, ai_feedback, teacher_id, school_id]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        test_name:
+          type: string
+        subject:
+          type: string
+        class_id:
+          type: string
+          format: uuid
+        total_marks:
+          type: number
+          minimum: 1
+        marks_obtained:
+          type: number
+          minimum: 0
+        ai_feedback:
+          type: string
+        test_date:
+          type: string
+          description: ISO date string, defaults to today
+        teacher_id:
+          type: string
+          format: uuid
+        school_id:
+          type: string
+          format: uuid
+        exam_type_id:
+          type: number
+
+    # ─── Engagement ─────────────────────────────────────
+    CreateSessionDto:
+      type: object
+      required: [school_id, teacher_id, class_id]
+      properties:
+        school_id:
+          type: string
+          format: uuid
+        teacher_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        session_name:
+          type: string
+
+    SendQuestionDto:
+      type: object
+      required: [question_text, option_a, option_b, option_c, option_d, correct_option, time_limit_seconds, points]
+      properties:
+        question_text:
+          type: string
+        option_a:
+          type: string
+        option_b:
+          type: string
+        option_c:
+          type: string
+        option_d:
+          type: string
+        correct_option:
+          type: string
+          enum: [A, B, C, D]
+        time_limit_seconds:
+          type: integer
+          minimum: 10
+          maximum: 120
+        points:
+          type: integer
+          minimum: 5
+          maximum: 50
+
+    # ─── Announcements ──────────────────────────────────
+    CreateAnnouncementDto:
+      type: object
+      required: [title, message, classIds, teacherId]
+      properties:
+        title:
+          type: string
+        message:
+          type: string
+        isUrgent:
+          type: boolean
+        classIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        teacherId:
+          type: string
+          format: uuid
+
+    UpdateAnnouncementDto:
+      type: object
+      properties:
+        title:
+          type: string
+        message:
+          type: string
+        isUrgent:
+          type: boolean
+
+    # ─── Notifications ──────────────────────────────────
+    CreateNotificationDto:
+      type: object
+      required: [recipient_id, title, message]
+      properties:
+        recipient_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        message:
+          type: string
+        notification_type:
+          type: string
+        source_id:
+          type: string
+          format: uuid
+        target_url:
+          type: string
+        is_urgent:
+          type: boolean
+
+    CreateBatchNotificationDto:
+      type: object
+      required: [recipient_ids, title, message]
+      properties:
+        recipient_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        title:
+          type: string
+        message:
+          type: string
+        notification_type:
+          type: string
+        source_id:
+          type: string
+          format: uuid
+        target_url:
+          type: string
+        is_urgent:
+          type: boolean
+
+    # ─── Messages ───────────────────────────────────────
+    SendMessageDto:
+      type: object
+      required: [recipientId, subject, message]
+      properties:
+        recipientId:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        message:
+          type: string
+        isUrgent:
+          type: boolean
+
+    # ─── File Upload ────────────────────────────────────
+    UploadVoiceNoteDto:
+      type: object
+      required: [title, classId, gradeSubjectId, durationSeconds]
+      properties:
+        title:
+          type: string
+        classId:
+          type: string
+        gradeSubjectId:
+          type: string
+        durationSeconds:
+          type: string
+          description: Duration in seconds (sent as string in FormData)
+
+    UploadFileDto:
+      type: object
+      required: [title, gradeSubjectId, fileType, teacherId, schoolId]
+      properties:
+        title:
+          type: string
+        classId:
+          type: string
+        gradeSubjectId:
+          type: string
+        categoryId:
+          type: string
+        fileType:
+          type: string
+          enum: [pdf, video]
+        teacherId:
+          type: string
+        schoolId:
+          type: string
+
+    # ─── PDF Annotations ────────────────────────────────
+    SaveAnnotationDto:
+      type: object
+      required: [file_id, page_number, annotation_data, note_type]
+      properties:
+        file_id:
+          type: string
+        page_number:
+          type: integer
+        annotation_data:
+          type: object
+          description: Freeform annotation JSON
+        note_type:
+          type: string
+
+    # ─── AI ─────────────────────────────────────────────
+    AiRequestDto:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        classId:
+          type: string
+        subject:
+          type: string
+        topic:
+          type: string
+        studentId:
+          type: string
+        additionalContext:
+          type: object
+        quizParams:
+          type: object
+          properties:
+            questionCount:
+              type: integer
+            difficulty:
+              type: string
+              enum: [Easy, Medium, Hard]
+            questionTypes:
+              type: object
+              properties:
+                mcq:
+                  type: integer
+                shortAnswer:
+                  type: integer
+                essay:
+                  type: integer
+            bloomLevels:
+              type: array
+              items:
+                type: string
+        studyPlanParams:
+          type: object
+          properties:
+            days:
+              type: integer
+            hoursPerDay:
+              type: integer
+
+    AiResponseDto:
+      type: object
+      properties:
+        title:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+        personalizedFeedback:
+          type: string
+        followUpQuestion:
+          type: string
+        rawResponse:
+          type: string
+        metadata:
+          type: object
+        quickReplies:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              value: {}
+              payload: {}
+              icon:
+                type: string
+              recommended:
+                type: boolean
+        waitingForInput:
+          type: boolean
+        inputType:
+          type: string
+          enum: [questionCount, questionType, difficulty, studyPlanDays, studyPlanHours]
+
+    # ─── WhatsApp ───────────────────────────────────────
+    WhatsAppSendDto:
+      type: object
+      required: [useCase, data, senderId, schoolId]
+      properties:
+        useCase:
+          type: string
+          enum: [school_announcement]
+        data:
+          type: object
+          description: Template-specific data
+          properties:
+            parentName:
+              type: string
+            studentName:
+              type: string
+            messageText:
+              type: string
+            schoolName:
+              type: string
+        phoneNumber:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: object
+            properties:
+              phoneNumber:
+                type: string
+              recipientId:
+                type: string
+        senderId:
+          type: string
+        schoolId:
+          type: string
+
+    # ─── Common ─────────────────────────────────────────
+    SuccessMessage:
+      type: object
+      properties:
+        message:
+          type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ══════════════════════════════════════════════════════
+  #  HEALTH
+  # ══════════════════════════════════════════════════════
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  services:
+                    type: object
+                    properties:
+                      database:
+                        type: string
+                      rag:
+                        type: string
+                      api:
+                        type: string
+
+  /health/ping:
+    get:
+      tags: [Health]
+      summary: Ping
+      security: []
+      responses:
+        '200':
+          description: Pong
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: pong
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  # ══════════════════════════════════════════════════════
+  #  AUTH
+  # ══════════════════════════════════════════════════════
+  /auth/super-admin/register:
+    post:
+      tags: [Auth]
+      summary: Register super admin (Public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterSuperAdminDto'
+      responses:
+        '201':
+          description: Super admin registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user (super_admin, school_admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterUserDto'
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                  name:
+                    type: string
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login (Public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password (Public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordDto'
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token (Public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+
+  /auth/validate-session:
+    post:
+      tags: [Auth]
+      summary: Validate current session
+      responses:
+        '200':
+          description: Session valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+
+  /auth/session:
+    post:
+      tags: [Auth]
+      summary: Get current user session info
+      responses:
+        '200':
+          description: Current user data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  email:
+                    type: string
+                  name:
+                    type: string
+                  role:
+                    type: string
+                  school_id:
+                    type: string
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (blacklists token)
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ══════════════════════════════════════════════════════
+  #  USERS
+  # ══════════════════════════════════════════════════════
+  /users:
+    get:
+      tags: [Users]
+      summary: Get all users for school
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+        - name: role_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+
+    patch:
+      tags: [Users]
+      summary: Update user profile (super_admin, school_admin, teacher)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileDto'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Users]
+      summary: Delete user (super_admin, school_admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /users/{id}/avatar:
+    post:
+      tags: [Users]
+      summary: Upload user avatar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Image file (jpg, jpeg, png, webp). Max 2MB."
+      responses:
+        '201':
+          description: Avatar uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avatar_url:
+                    type: string
+
+  /users/{id}/student-details:
+    post:
+      tags: [Users]
+      summary: Create/update student details (super_admin, school_admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentDetailsDto'
+      responses:
+        '201':
+          description: Student details saved
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /users/{id}/teacher-details:
+    post:
+      tags: [Users]
+      summary: Create/update teacher details (super_admin, school_admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeacherDetailsDto'
+      responses:
+        '201':
+          description: Teacher details saved
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ══════════════════════════════════════════════════════
+  #  SCHOOLS
+  # ══════════════════════════════════════════════════════
+  /schools:
+    post:
+      tags: [Schools]
+      summary: Create school (super_admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchoolDto'
+      responses:
+        '201':
+          description: School created
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Schools]
+      summary: Get all schools (super_admin)
+      responses:
+        '200':
+          description: List of schools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /schools/onboard:
+    post:
+      tags: [Schools]
+      summary: Onboard school with admin (super_admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardSchoolDto'
+      responses:
+        '201':
+          description: School onboarded with admin
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /schools/{id}:
+    get:
+      tags: [Schools]
+      summary: Get school by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: School data
+          content:
+            application/json:
+              schema:
+                type: object
+
+    patch:
+      tags: [Schools]
+      summary: Update school (super_admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSchoolDto'
+      responses:
+        '200':
+          description: School updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Schools]
+      summary: Delete school (super_admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: School deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /schools/{id}/logo:
+    post:
+      tags: [Schools]
+      summary: Upload school logo (school_admin, super_admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [logo]
+              properties:
+                logo:
+                  type: string
+                  format: binary
+                  description: "Image file (JPEG, PNG, WebP). Max 5MB."
+      responses:
+        '200':
+          description: Logo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  logo_url:
+                    type: string
+                  school:
+                    type: object
+
+  # ══════════════════════════════════════════════════════
+  #  ACADEMIC - GRADES
+  # ══════════════════════════════════════════════════════
+  /academic/grades:
+    post:
+      tags: [Academic]
+      summary: Create grade level (school_admin, super_admin)
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGradeDto'
+      responses:
+        '201':
+          description: Grade created
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all grades (school_admin, teacher, super_admin)
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of grades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/grades/{id}:
+    patch:
+      tags: [Academic]
+      summary: Update grade
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGradeDto'
+      responses:
+        '200':
+          description: Grade updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Academic]
+      summary: Delete grade
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Grade deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - CLASSES ────────────────────────────────
+  /academic/classes:
+    post:
+      tags: [Academic]
+      summary: Create class
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClassDto'
+      responses:
+        '201':
+          description: Class created
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all classes
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/classes/{id}:
+    patch:
+      tags: [Academic]
+      summary: Update class
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClassDto'
+      responses:
+        '200':
+          description: Class updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Academic]
+      summary: Delete class
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Class deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /academic/classes/{classId}/students:
+    get:
+      tags: [Academic]
+      summary: Get students by class (teacher, school_admin)
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of students in class
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  # ── ACADEMIC - SUBJECTS ───────────────────────────────
+  /academic/subjects:
+    post:
+      tags: [Academic]
+      summary: Create master subject
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubjectDto'
+      responses:
+        '201':
+          description: Subject created
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all master subjects
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of subjects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/subjects/{id}:
+    delete:
+      tags: [Academic]
+      summary: Delete subject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Subject deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - GRADE SUBJECTS ─────────────────────────
+  /academic/grade-subjects:
+    post:
+      tags: [Academic]
+      summary: Assign subjects to grade
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignSubjectsToGradeDto'
+      responses:
+        '201':
+          description: Subjects assigned to grade
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all grade-subject mappings
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of grade-subject mappings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/grade-subjects/grade/{gradeId}:
+    get:
+      tags: [Academic]
+      summary: Get subjects by grade
+      parameters:
+        - name: gradeId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Subjects for grade
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/grade-subjects/{id}:
+    delete:
+      tags: [Academic]
+      summary: Delete grade-subject mapping
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - TEACHER-CLASS ASSIGNMENTS ──────────────
+  /academic/teacher-classes:
+    post:
+      tags: [Academic]
+      summary: Assign teacher to class
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTeacherToClassDto'
+      responses:
+        '201':
+          description: Teacher assigned
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all teacher-class assignments
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/teacher-classes/teacher/{teacherId}:
+    get:
+      tags: [Academic]
+      summary: Get classes assigned to teacher (as class teacher)
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Teacher's classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/teacher-classes/teacher/{teacherId}/all:
+    get:
+      tags: [Academic]
+      summary: Get ALL classes where teacher teaches (class teacher + subject teacher)
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: All teaching classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/teacher-classes/{id}:
+    delete:
+      tags: [Academic]
+      summary: Delete teacher-class assignment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - TEACHER-SUBJECT ASSIGNMENTS ────────────
+  /academic/teacher-subjects:
+    post:
+      tags: [Academic]
+      summary: Assign subjects to teacher
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignSubjectsToTeacherDto'
+      responses:
+        '201':
+          description: Subjects assigned
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all teacher-subject assignments
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/teacher-subjects/teacher/{teacherId}:
+    get:
+      tags: [Academic]
+      summary: Get subjects by teacher
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Teacher's subjects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/teacher-subjects/teacher/{teacherId}/all:
+    get:
+      tags: [Academic]
+      summary: Get ALL subjects by teacher (detailed with grade info)
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Teacher's detailed subjects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/teacher-subjects/{id}:
+    delete:
+      tags: [Academic]
+      summary: Delete teacher-subject assignment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - FILE CATEGORIES ────────────────────────
+  /academic/file-categories:
+    post:
+      tags: [Academic]
+      summary: Create file category
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFileCategoryDto'
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all file categories
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/file-categories/{id}:
+    patch:
+      tags: [Academic]
+      summary: Update file category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFileCategoryDto'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Academic]
+      summary: Delete file category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - EXAM TYPES ────────────────────────────
+  /academic/exam-types:
+    post:
+      tags: [Academic]
+      summary: Create exam type
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExamTypeDto'
+      responses:
+        '201':
+          description: Exam type created
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [Academic]
+      summary: Get all exam types
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of exam types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /academic/exam-types/{id}:
+    patch:
+      tags: [Academic]
+      summary: Update exam type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExamTypeDto'
+      responses:
+        '200':
+          description: Exam type updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Academic]
+      summary: Delete exam type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Exam type deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - TIMETABLE ──────────────────────────────
+  /academic/timetable/class/{classId}:
+    get:
+      tags: [Academic]
+      summary: Get weekly timetable for class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Weekly timetable
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /academic/timetable/periods:
+    post:
+      tags: [Academic]
+      summary: Create or update period
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePeriodDto'
+      responses:
+        '201':
+          description: Period created/updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /academic/timetable/periods/{id}:
+    patch:
+      tags: [Academic]
+      summary: Update period
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePeriodDto'
+      responses:
+        '200':
+          description: Period updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Academic]
+      summary: Delete period
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Period deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ── ACADEMIC - HELPERS ────────────────────────────────
+  /academic/helper/grade-subject/{classId}/{subjectName}:
+    get:
+      tags: [Academic]
+      summary: Get grade_subject_id by class and subject name
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Grade subject ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+
+  /academic/helper/exam-type/{examTypeName}:
+    get:
+      tags: [Academic]
+      summary: Get exam_type_id by name
+      parameters:
+        - name: examTypeName
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Exam type ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+
+  # ── ACADEMIC - MANUAL MARKS ───────────────────────────
+  /academic/manual-marks:
+    post:
+      tags: [Academic]
+      summary: Save manual marks (teacher)
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveManualMarksDto'
+      responses:
+        '201':
+          description: Marks saved
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ══════════════════════════════════════════════════════
+  #  ATTENDANCE
+  # ══════════════════════════════════════════════════════
+  /attendance/students/class/{classId}:
+    get:
+      tags: [Attendance]
+      summary: Get students by class for attendance
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Student list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /attendance/class/{classId}/date/{date}:
+    get:
+      tags: [Attendance]
+      summary: Get attendance for specific date
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /attendance:
+    post:
+      tags: [Attendance]
+      summary: Mark attendance
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkAttendanceDto'
+      responses:
+        '201':
+          description: Attendance marked
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /attendance/bulk:
+    post:
+      tags: [Attendance]
+      summary: Mark bulk attendance (multiple dates)
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkMarkAttendanceDto'
+      responses:
+        '201':
+          description: Bulk attendance marked
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /attendance/student/{studentId}/percentage:
+    get:
+      tags: [Attendance]
+      summary: Get student attendance percentage
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Attendance percentage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  percentage:
+                    type: number
+                  totalDays:
+                    type: integer
+                  presentDays:
+                    type: integer
+
+  /attendance/student/{studentId}/pending-tests:
+    get:
+      tags: [Attendance]
+      summary: Get student pending tests count
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
+  /attendance/student/{studentId}/pending-assessments:
+    get:
+      tags: [Attendance]
+      summary: Get student pending assessments count
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
+  /attendance/student/{studentId}/average-marks:
+    get:
+      tags: [Attendance]
+      summary: Get student average marks percentage
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Average marks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  percentage:
+                    type: number
+
+  /attendance/student/{studentId}/by-subject:
+    get:
+      tags: [Attendance]
+      summary: Get student attendance broken down by subject
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Attendance by subject
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /attendance/student/{studentId}/monthly:
+    get:
+      tags: [Attendance]
+      summary: Get student monthly attendance calendar
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Monthly attendance
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /attendance/student/{studentId}/monthly-summary:
+    get:
+      tags: [Attendance]
+      summary: Get student monthly attendance summary
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Monthly summary
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ══════════════════════════════════════════════════════
+  #  TESTS
+  # ══════════════════════════════════════════════════════
+  /tests:
+    post:
+      tags: [Tests]
+      summary: Create test
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTestDto'
+      responses:
+        '201':
+          description: Test created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/teacher/{teacherId}:
+    get:
+      tags: [Tests]
+      summary: Get teacher's tests
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: List of tests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tests/grading-queue/teacher/{teacherId}:
+    get:
+      tags: [Tests]
+      summary: Get teacher's grading queue
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Grading queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tests/{id}/teacher/{teacherId}:
+    get:
+      tags: [Tests]
+      summary: Get specific test for teacher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Test details
+          content:
+            application/json:
+              schema:
+                type: object
+
+    patch:
+      tags: [Tests]
+      summary: Update test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTestDto'
+      responses:
+        '200':
+          description: Test updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Tests]
+      summary: Delete test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Test deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /tests/{id}/publish/{teacherId}:
+    patch:
+      tags: [Tests]
+      summary: Publish/unpublish test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_published]
+              properties:
+                is_published:
+                  type: boolean
+      responses:
+        '200':
+          description: Publish status updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/{id}/submissions/teacher/{teacherId}:
+    get:
+      tags: [Tests]
+      summary: Get test submissions for teacher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Submissions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tests/submissions/grade/{teacherId}:
+    post:
+      tags: [Tests]
+      summary: Grade a submission
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GradeSubmissionDto'
+      responses:
+        '201':
+          description: Submission graded
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/student/class/{classId}/student/{studentId}:
+    get:
+      tags: [Tests]
+      summary: Get tests for student
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Student's tests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tests/{id}/student/{studentId}:
+    get:
+      tags: [Tests]
+      summary: Get specific test for student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Test for student
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/submit:
+    post:
+      tags: [Tests]
+      summary: Submit test answers
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitTestDto'
+      responses:
+        '201':
+          description: Test submitted
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/submissions/{id}/student/{studentId}:
+    get:
+      tags: [Tests]
+      summary: Get student submission by submission ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Submission details
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/student/{studentId}/graded:
+    get:
+      tags: [Tests]
+      summary: Get student's graded tests
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Graded tests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tests/{testId}/submission/student/{studentId}:
+    get:
+      tags: [Tests]
+      summary: Get submission by test and student
+      parameters:
+        - name: testId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Submission details
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tests/from-ai-grading:
+    post:
+      tags: [Tests]
+      summary: Create test record from AI grading
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTestFromAiGradingDto'
+      responses:
+        '201':
+          description: Test record created from AI grading
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ══════════════════════════════════════════════════════
+  #  ANALYTICS
+  # ══════════════════════════════════════════════════════
+  /analytics/student/{studentId}/stats-summary:
+    get:
+      tags: [Analytics]
+      summary: Get student stats summary
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Stats summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  overallPercentage:
+                    type: number
+                  totalTests:
+                    type: integer
+                  bestSubject:
+                    type: string
+                  attendancePercentage:
+                    type: number
+
+  /analytics/student/{studentId}/subject-performance:
+    get:
+      tags: [Analytics]
+      summary: Get student subject performance (radar chart data)
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Subject performance array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    subject:
+                      type: string
+                    score:
+                      type: number
+                    fullMark:
+                      type: number
+
+  /analytics/student/{studentId}/progress-trend:
+    get:
+      tags: [Analytics]
+      summary: Get student progress trend
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Progress trend data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /analytics/student/{studentId}/strengths-weaknesses:
+    get:
+      tags: [Analytics]
+      summary: Get student strengths and weaknesses
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Strengths and weaknesses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  strengths:
+                    type: array
+                    items:
+                      type: object
+                  weaknesses:
+                    type: array
+                    items:
+                      type: object
+
+  /analytics/student/{studentId}/chapter-topic-analytics:
+    get:
+      tags: [Analytics]
+      summary: Get student chapter/topic analytics
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Chapter and topic analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chapters:
+                    type: array
+                    items:
+                      type: object
+                  topics:
+                    type: array
+                    items:
+                      type: object
+
+  /analytics/class/{classId}/performance-trend:
+    get:
+      tags: [Analytics]
+      summary: Get class performance trend
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Class performance trend
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /analytics/class/{classId}/subject-averages:
+    get:
+      tags: [Analytics]
+      summary: Get class subject averages
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Subject averages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /analytics/class/{classId}/attendance-vs-marks:
+    get:
+      tags: [Analytics]
+      summary: Get attendance vs marks correlation data
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Correlation data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /analytics/class/{classId}/chapter-topic-analytics:
+    get:
+      tags: [Analytics]
+      summary: Get class chapter/topic analytics
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Chapter/topic analytics
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /analytics/class/{classId}/students-with-scores:
+    get:
+      tags: [Analytics]
+      summary: Get class students with their scores
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Students with scores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /analytics/class/{classId}/recent-tests-metrics:
+    get:
+      tags: [Analytics]
+      summary: Get recent tests metrics for class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Recent test metrics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /analytics/class/{classId}/question-type-distribution:
+    get:
+      tags: [Analytics]
+      summary: Get question type distribution for class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Distribution data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /analytics/student/{studentId}/for-teacher:
+    get:
+      tags: [Analytics]
+      summary: Get student analytics for teacher view
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Student analytics for teacher
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ══════════════════════════════════════════════════════
+  #  ENGAGEMENT
+  # ══════════════════════════════════════════════════════
+  /engagement/sessions:
+    post:
+      tags: [Engagement]
+      summary: Create engagement session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionDto'
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/sessions/{id}:
+    get:
+      tags: [Engagement]
+      summary: Get session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/sessions/{id}/end:
+    post:
+      tags: [Engagement]
+      summary: End session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session ended
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/sessions/{id}/questions:
+    post:
+      tags: [Engagement]
+      summary: Send question to session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendQuestionDto'
+      responses:
+        '201':
+          description: Question sent
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/sessions/{id}/analytics:
+    get:
+      tags: [Engagement]
+      summary: Get session analytics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session analytics
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/sessions/{id}/students:
+    get:
+      tags: [Engagement]
+      summary: Get session student details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Student details for session
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /engagement/sessions/{id}/leaderboard:
+    get:
+      tags: [Engagement]
+      summary: Get session leaderboard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Leaderboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leaderboard:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        studentId:
+                          type: string
+                        studentName:
+                          type: string
+                        rank:
+                          type: integer
+                        score:
+                          type: number
+                        pointsEarned:
+                          type: number
+
+  /engagement/teacher/{teacherId}/sessions:
+    get:
+      tags: [Engagement]
+      summary: Get teacher's sessions
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Teacher's sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /engagement/student/{studentId}/summary:
+    get:
+      tags: [Engagement]
+      summary: Get student engagement summary
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Student summary
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/student/{studentId}/history:
+    get:
+      tags: [Engagement]
+      summary: Get student session history
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /engagement/student/{student_id}/performance:
+    get:
+      tags: [Engagement]
+      summary: Get student performance (last 10 scores + class rank)
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Student performance
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/class/{classId}/active:
+    get:
+      tags: [Engagement]
+      summary: Get active session for class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Active session or null
+          content:
+            application/json:
+              schema:
+                type: object
+                nullable: true
+
+  /engagement/school/{schoolId}/analytics:
+    get:
+      tags: [Engagement]
+      summary: Get school-wide engagement analytics
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: School analytics
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/school/{schoolId}/leaderboard:
+    get:
+      tags: [Engagement]
+      summary: Get teacher leaderboard for school
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Teacher leaderboard
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /engagement/school/{schoolId}/sessions:
+    get:
+      tags: [Engagement]
+      summary: Get all school sessions
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: School sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /engagement/school/{schoolId}/class-subject-analytics:
+    get:
+      tags: [Engagement]
+      summary: Get class/subject analytics for school
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Class/subject analytics
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/admin/{schoolId}/dashboard:
+    get:
+      tags: [Engagement]
+      summary: Admin dashboard (grade/class breakdown + top teacher)
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /engagement/teacher/sessions/{sessionId}/dashboard:
+    get:
+      tags: [Engagement]
+      summary: Teacher session dashboard
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ══════════════════════════════════════════════════════
+  #  ANNOUNCEMENTS
+  # ══════════════════════════════════════════════════════
+  /announcements:
+    post:
+      tags: [Announcements]
+      summary: Create announcement
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnnouncementDto'
+      responses:
+        '201':
+          description: Announcement created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /announcements/teacher/{teacherId}:
+    get:
+      tags: [Announcements]
+      summary: Get teacher's announcements
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Teacher's announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /announcements/student/class/{classId}:
+    get:
+      tags: [Announcements]
+      summary: Get announcements for student's class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Student announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /announcements/{id}:
+    get:
+      tags: [Announcements]
+      summary: Get announcement by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Announcement
+          content:
+            application/json:
+              schema:
+                type: object
+
+    patch:
+      tags: [Announcements]
+      summary: Update announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAnnouncementDto'
+      responses:
+        '200':
+          description: Announcement updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+    delete:
+      tags: [Announcements]
+      summary: Delete announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Announcement deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ══════════════════════════════════════════════════════
+  #  NOTIFICATIONS
+  # ══════════════════════════════════════════════════════
+  /notifications:
+    post:
+      tags: [Notifications]
+      summary: Create notification
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationDto'
+      responses:
+        '201':
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /notifications/batch:
+    post:
+      tags: [Notifications]
+      summary: Create batch notifications
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchNotificationDto'
+      responses:
+        '201':
+          description: Batch notifications created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /notifications/recipient/{recipientId}:
+    get:
+      tags: [Notifications]
+      summary: Get notifications for recipient
+      parameters:
+        - name: recipientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /notifications/recipient/{recipientId}/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Get unread notification count
+      parameters:
+        - name: recipientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
+  /notifications/{id}/read/recipient/{recipientId}:
+    patch:
+      tags: [Notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: recipientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /notifications/recipient/{recipientId}/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      parameters:
+        - name: recipientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: All marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /notifications/class/{classId}/student-ids:
+    get:
+      tags: [Notifications]
+      summary: Get student IDs in class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Student IDs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student_ids:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+
+  # ══════════════════════════════════════════════════════
+  #  MESSAGES
+  # ══════════════════════════════════════════════════════
+  /messages/send:
+    post:
+      tags: [Messages]
+      summary: Send a message
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageDto'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /messages/conversations:
+    get:
+      tags: [Messages]
+      summary: Get user's conversations
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /messages/conversation/{otherUserId}:
+    get:
+      tags: [Messages]
+      summary: Get conversation with specific user
+      parameters:
+        - name: otherUserId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Conversation messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /messages/{messageId}/read:
+    patch:
+      tags: [Messages]
+      summary: Mark message as read
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /messages/unread-count:
+    get:
+      tags: [Messages]
+      summary: Get unread message count
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
+  # ══════════════════════════════════════════════════════
+  #  FILE UPLOAD
+  # ══════════════════════════════════════════════════════
+  /file-upload/voice-notes:
+    post:
+      tags: [FileUpload]
+      summary: Upload voice note (teacher)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title, classId, gradeSubjectId, durationSeconds]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Audio file. Max 50MB."
+                title:
+                  type: string
+                classId:
+                  type: string
+                gradeSubjectId:
+                  type: string
+                durationSeconds:
+                  type: string
+      responses:
+        '201':
+          description: Voice note uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [FileUpload]
+      summary: Get teacher's voice notes
+      responses:
+        '200':
+          description: Voice notes list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /file-upload/voice-notes/{id}:
+    delete:
+      tags: [FileUpload]
+      summary: Delete voice note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Voice note deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /file-upload/voice-notes/class/{classId}:
+    get:
+      tags: [FileUpload]
+      summary: Get voice notes by class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Voice notes for class
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /file-upload/files:
+    post:
+      tags: [FileUpload]
+      summary: Upload file (PDF or video)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title, gradeSubjectId, fileType, teacherId, schoolId]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "PDF (max 10MB) or video (max 100MB)"
+                title:
+                  type: string
+                classId:
+                  type: string
+                gradeSubjectId:
+                  type: string
+                categoryId:
+                  type: string
+                fileType:
+                  type: string
+                  enum: [pdf, video]
+                teacherId:
+                  type: string
+                schoolId:
+                  type: string
+      responses:
+        '201':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+
+    get:
+      tags: [FileUpload]
+      summary: Get teacher's files
+      responses:
+        '200':
+          description: Files list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /file-upload/files/{id}:
+    delete:
+      tags: [FileUpload]
+      summary: Delete file
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  /file-upload/files/class/{classId}:
+    get:
+      tags: [FileUpload]
+      summary: Get files by class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Files for class
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /file-upload/files/{id}/download:
+    post:
+      tags: [FileUpload]
+      summary: Increment file download count
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Download count incremented
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downloadCount:
+                    type: integer
+
+  # ══════════════════════════════════════════════════════
+  #  PDF ANNOTATIONS
+  # ══════════════════════════════════════════════════════
+  /pdf-annotations:
+    post:
+      tags: [PdfAnnotations]
+      summary: Save annotation (teacher, student)
+      parameters:
+        - $ref: '#/components/parameters/SchoolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveAnnotationDto'
+      responses:
+        '201':
+          description: Annotation saved
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /pdf-annotations/{fileId}:
+    get:
+      tags: [PdfAnnotations]
+      summary: Get annotations for file
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Annotations list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+    delete:
+      tags: [PdfAnnotations]
+      summary: Delete annotations for file
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/SchoolId'
+      responses:
+        '200':
+          description: Annotations deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+
+  # ══════════════════════════════════════════════════════
+  #  AI
+  # ══════════════════════════════════════════════════════
+  /ai/start:
+    post:
+      tags: [AI]
+      summary: AI Start - default interaction mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/explain:
+    post:
+      tags: [AI]
+      summary: AI Explain a concept
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Explanation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/solve:
+    post:
+      tags: [AI]
+      summary: AI Solve a problem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Solution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/doubt:
+    post:
+      tags: [AI]
+      summary: AI Doubt resolution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Doubt answered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/summary:
+    post:
+      tags: [AI]
+      summary: AI Summarize content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/expand:
+    post:
+      tags: [AI]
+      summary: AI Expand on a topic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Expanded content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/studyplan:
+    post:
+      tags: [AI]
+      summary: AI Generate study plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Study plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/predict:
+    post:
+      tags: [AI]
+      summary: AI Predict performance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Prediction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/mocktest:
+    post:
+      tags: [AI]
+      summary: AI Generate mock test
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Mock test
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/lifeskill:
+    post:
+      tags: [AI]
+      summary: AI Life skill content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Life skill content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/teacherlessonplan:
+    post:
+      tags: [AI]
+      summary: AI Generate lesson plan (teacher)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Lesson plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/teacheremaildraft:
+    post:
+      tags: [AI]
+      summary: AI Draft email (teacher)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Email draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  /ai/teachergradepaper:
+    post:
+      tags: [AI]
+      summary: AI Grade paper (teacher)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRequestDto'
+      responses:
+        '200':
+          description: Grading result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiResponseDto'
+
+  # ══════════════════════════════════════════════════════
+  #  RAG
+  # ══════════════════════════════════════════════════════
+  /rag/subjects/class/{classId}:
+    get:
+      tags: [RAG]
+      summary: Get subjects with uploaded PDF materials for a class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of subject names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  # ══════════════════════════════════════════════════════
+  #  WHATSAPP
+  # ══════════════════════════════════════════════════════
+  /whatsapp/send:
+    post:
+      tags: [WhatsApp]
+      summary: Send WhatsApp message (queued)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppSendDto'
+      responses:
+        '201':
+          description: Message queued
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /whatsapp/recipients/class/{classId}:
+    get:
+      tags: [WhatsApp]
+      summary: Get WhatsApp recipients for class
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recipients list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    phoneNumber:
+                      type: string
+                    studentName:
+                      type: string
+                    parentName:
+                      type: string
+
+  /whatsapp/recipients/student/{studentId}:
+    get:
+      tags: [WhatsApp]
+      summary: Get WhatsApp recipient for student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recipient data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /whatsapp/history:
+    get:
+      tags: [WhatsApp]
+      summary: Get WhatsApp message history
+      parameters:
+        - name: schoolId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Message history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object

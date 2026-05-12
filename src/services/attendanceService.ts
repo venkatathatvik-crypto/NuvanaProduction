@@ -1,5 +1,6 @@
 // Attendance services for teachers and students
 import { attendanceApi } from "./attendanceApiService";
+import { logger } from '@/lib/logger';
 
 export interface StudentAttendance {
   id: string;
@@ -118,7 +119,7 @@ export const getStudentMonthlyAttendance = async (
   try {
     return await attendanceApi.getStudentMonthlyAttendance(studentId, year, month);
   } catch (error) {
-    console.error('Error fetching monthly attendance:', error);
+    logger.error('Error fetching monthly attendance:', error);
     return null;
   }
 };
@@ -130,7 +131,7 @@ export const getStudentMonthlyAttendanceSummary = async (
   try {
     return await attendanceApi.getStudentMonthlyAttendanceSummary(studentId);
   } catch (error) {
-    console.error('Error fetching monthly summary:', error);
+    logger.error('Error fetching monthly summary:', error);
     return [];
   }
 };

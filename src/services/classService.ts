@@ -47,7 +47,7 @@ export const getClasses = async (schoolId: string): Promise<FlattenedClass[]> =>
 
     return flattenedClasses;
   } catch (error) {
-    console.error("Error fetching classes:", error);
+    logger.error("Error fetching classes:", error);
     throw new Error("Failed to load class data.");
   }
 };
@@ -60,7 +60,7 @@ export const getExamTypes = async (schoolId: string): Promise<string[]> => {
     }
     return examTypes.map((item) => item.name);
   } catch (error) {
-    console.error("Error fetching exam types:", error);
+    logger.error("Error fetching exam types:", error);
     throw new Error("Failed to load exam types.");
   }
 };
@@ -102,7 +102,7 @@ export const getExamTypesWithCategory = async (schoolId: string): Promise<ExamTy
       };
     });
   } catch (error) {
-    console.error('Error fetching exam types:', error);
+    logger.error('Error fetching exam types:', error);
     throw new Error("Failed to load exam types.");
   }
 };
@@ -115,12 +115,12 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
     logger.log('getSubjects: Raw response for grade', gradeLevelId, gradeSubjects);
     
     if (!gradeSubjects || !Array.isArray(gradeSubjects)) {
-      console.warn('getSubjects: Invalid response format', gradeSubjects);
+      logger.warn('getSubjects: Invalid response format', gradeSubjects);
       return [];
     }
 
     if (gradeSubjects.length === 0) {
-      console.warn('getSubjects: No subjects found for grade', gradeLevelId);
+      logger.warn('getSubjects: No subjects found for grade', gradeLevelId);
       return [];
     }
 
@@ -129,7 +129,7 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
       .map((item: any) => {
         const name = item.subjects_master?.name;
         if (!name) {
-          console.warn('getSubjects: Missing subject name in item', item);
+          logger.warn('getSubjects: Missing subject name in item', item);
         }
         return name;
       })
@@ -138,8 +138,8 @@ export const getSubjects = async (gradeLevelId: number): Promise<string[]> => {
     logger.log('getSubjects: Extracted', subjectNames.length, 'subject names:', subjectNames);
     return subjectNames;
   } catch (error: any) {
-    console.error('Error fetching subjects:', error);
-    console.error('Error details:', error.message, error.response?.data || error.data);
+    logger.error('Error fetching subjects:', error);
+    logger.error('Error details:', error.message, error.response?.data || error.data);
     return [];
   }
 };
@@ -158,7 +158,7 @@ export const getFileCategories = async (schoolId: string): Promise<FileCategoryO
       name: item.name,
     }));
   } catch (error) {
-    console.error('Error fetching file categories:', error);
+    logger.error('Error fetching file categories:', error);
     throw new Error("Failed to load file categories.");
   }
 };
@@ -180,7 +180,7 @@ export const getTeacherClasses = async (
     const gradeName = tc.classes?.grade_levels?.name || 'Unknown Grade';
     
     if (!gradeId || gradeId === 0) {
-      console.warn('getTeacherClasses: Missing grade_id for class', tc.classes);
+      logger.warn('getTeacherClasses: Missing grade_id for class', tc.classes);
     }
     
     return {
@@ -215,7 +215,7 @@ export const getAllTeachingClasses = async (
       const gradeName = cls.grade_levels?.name || 'Unknown Grade';
       
       if (!gradeId || gradeId === 0) {
-        console.warn('getAllTeachingClasses: Missing grade_id for class', cls);
+        logger.warn('getAllTeachingClasses: Missing grade_id for class', cls);
       }
       
       return {
@@ -231,7 +231,7 @@ export const getAllTeachingClasses = async (
     logger.log('getAllTeachingClasses: Mapped classes', transformedClasses);
     return transformedClasses;
   } catch (error: any) {
-    console.error('Error fetching all teaching classes:', error);
+    logger.error('Error fetching all teaching classes:', error);
     throw new Error(error.message || "Failed to load teaching classes.");
   }
 };
@@ -255,7 +255,7 @@ export const getTeacherSubjectsForClass = async (
     const gradeSubjectsForGrade = await academicService.getSubjectsByGrade(gradeId);
     
     if (!gradeSubjectsForGrade || !Array.isArray(gradeSubjectsForGrade)) {
-      console.warn('getTeacherSubjectsForClass: Invalid grade subjects response', gradeSubjectsForGrade);
+      logger.warn('getTeacherSubjectsForClass: Invalid grade subjects response', gradeSubjectsForGrade);
       return [];
     }
 
@@ -265,7 +265,7 @@ export const getTeacherSubjectsForClass = async (
     const teacherSubjects = await academicService.getSubjectsByTeacher(teacherId);
     
     if (!teacherSubjects || !Array.isArray(teacherSubjects)) {
-      console.warn('getTeacherSubjectsForClass: Invalid teacher subjects response', teacherSubjects);
+      logger.warn('getTeacherSubjectsForClass: Invalid teacher subjects response', teacherSubjects);
       return [];
     }
 
@@ -286,7 +286,7 @@ export const getTeacherSubjectsForClass = async (
         const gradeSubjectId = gs.id;
 
         if (!subjectName) {
-          console.warn('getTeacherSubjectsForClass: Missing subject name in grade subject', gs);
+          logger.warn('getTeacherSubjectsForClass: Missing subject name in grade subject', gs);
           return null;
         }
 
@@ -300,8 +300,8 @@ export const getTeacherSubjectsForClass = async (
     logger.log(`getTeacherSubjectsForClass: Final result - ${filteredSubjects.length} subjects for teacher ${teacherId}, class ${classId}, grade ${gradeId}`);
     return filteredSubjects;
   } catch (error: any) {
-    console.error('Error fetching teacher subjects for class:', error);
-    console.error('Error details:', error.message, error.response?.data || error.data);
+    logger.error('Error fetching teacher subjects for class:', error);
+    logger.error('Error details:', error.message, error.response?.data || error.data);
     throw new Error(error.message || "Failed to load subjects.");
   }
 };
@@ -316,12 +316,12 @@ export const getGradeSubjectsDetailed = async (
     logger.log('getGradeSubjectsDetailed: Raw response for grade', gradeLevelId, gradeSubjects);
     
     if (!gradeSubjects || !Array.isArray(gradeSubjects)) {
-      console.warn('getGradeSubjectsDetailed: Invalid response format', gradeSubjects);
+      logger.warn('getGradeSubjectsDetailed: Invalid response format', gradeSubjects);
       return [];
     }
 
     if (gradeSubjects.length === 0) {
-      console.warn('getGradeSubjectsDetailed: No subjects found for grade', gradeLevelId);
+      logger.warn('getGradeSubjectsDetailed: No subjects found for grade', gradeLevelId);
       return [];
     }
 
@@ -332,12 +332,12 @@ export const getGradeSubjectsDetailed = async (
         const subjectId = item.id;
 
         if (!subjectName) {
-          console.warn('getGradeSubjectsDetailed: Missing subject name in item', item);
+          logger.warn('getGradeSubjectsDetailed: Missing subject name in item', item);
           return null;
         }
 
         if (!subjectId) {
-          console.warn('getGradeSubjectsDetailed: Missing subject id in item', item);
+          logger.warn('getGradeSubjectsDetailed: Missing subject id in item', item);
           return null;
         }
 
@@ -351,8 +351,8 @@ export const getGradeSubjectsDetailed = async (
     logger.log('getGradeSubjectsDetailed: Successfully mapped', mapped.length, 'subjects');
     return mapped;
   } catch (error: any) {
-    console.error('Error fetching grade subjects:', error);
-    console.error('Error details:', error.message, error.response?.data || error.data);
+    logger.error('Error fetching grade subjects:', error);
+    logger.error('Error details:', error.message, error.response?.data || error.data);
     throw new Error(error.message || "Failed to load subjects.");
   }
 };
@@ -368,7 +368,7 @@ export const getTeacherAllSubjectsDetailed = async (
     const { academicService } = await import('./academicApiService');
     return await academicService.getAllSubjectsByTeacher(teacherId);
   } catch (error: any) {
-    console.error('Error fetching all teacher subjects:', error);
+    logger.error('Error fetching all teacher subjects:', error);
     throw new Error(error.message || "Failed to load all subjects.");
   }
 };

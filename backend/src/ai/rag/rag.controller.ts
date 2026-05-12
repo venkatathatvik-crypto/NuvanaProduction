@@ -1,12 +1,13 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards, Logger } from '@nestjs/common';
 import { RagService } from './rag.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 
 @Controller('rag')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 export class RagController {
+    private readonly logger = new Logger(RagController.name);
+
     constructor(private readonly ragService: RagService) {}
 
     /**
@@ -16,7 +17,13 @@ export class RagController {
     @Get('subjects/class/:classId')
     @Roles('student', 'teacher', 'school_admin', 'super_admin')
     async getSubjectsWithMaterials(@Param('classId') classId: string): Promise<string[]> {
-        console.log(`[RAG Controller] GET /rag/subjects/class/${classId} - Getting subjects with uploaded materials`);
+        this.logger.log(`GET /rag/subjects/class/${classId} - Getting subjects with uploaded materials`);
         return this.ragService.getSubjectsWithMaterials(classId);
+    }
+
+    @Get('life-coach/categories/:schoolId')
+    @Roles('student', 'school_admin', 'super_admin')
+    async getLifeCoachCategories(@Param('schoolId') schoolId: string): Promise<string[]> {
+        return this.ragService.getLifeCoachCategoriesWithContent(schoolId);
     }
 }

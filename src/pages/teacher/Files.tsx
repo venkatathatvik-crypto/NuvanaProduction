@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Upload, FileText, Trash2, Download, Video } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Trash2, Download, Video, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getFileCategories,
   getTeacherClasses,
@@ -28,11 +29,15 @@ import {
   type GradeSubjectOption,
   type TeacherClassWithRelationship,
 } from "@/services/academic";
+import PdfViewer from "@/components/PdfViewer";
 import { getTeacherSubjectsForClass } from "@/services/classService";
 import type { FlattenedClass } from "@/schemas/academic";
 import { useAuth } from "@/auth/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { engagementApi } from "@/services/engagementApi";
+import { engagementSocket } from "@/services/engagementSocket";
+import { logger } from '@/lib/logger';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
@@ -57,6 +62,8 @@ const TeacherFiles = () => {
   const [fileTypeFilter, setFileTypeFilter] = useState<"All Types" | "pdf" | "video">("All Types");
   const [fileToDelete, setFileToDelete] = useState<TeacherFileItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [annotatingFile, setAnnotatingFile] = useState<TeacherFileItem | null>(null);
+  const [engagementSessionId, setEngagementSessionId] = useState<string | null>(null);
 
   // Fetch ALL classes where teacher teaches (both as class teacher and subject teacher)
   const { data: classes = [], isLoading: loadingClasses } = useQuery({
@@ -267,7 +274,7 @@ const TeacherFiles = () => {
             cls.class_name
           );
         } catch (err) {
-          console.error(`Failed to send alerts for class ${cls.class_name}:`, err);
+          logger.error(`Failed to send alerts for class ${cls.class_name}:`, err);
         }
       }
 
@@ -291,7 +298,7 @@ const TeacherFiles = () => {
         fileInputRef.current.value = "";
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      logger.error("Upload error:", error);
       const message =
         error instanceof Error ? error.message : "Failed to upload file.";
       toast.error(message);
@@ -329,7 +336,7 @@ const TeacherFiles = () => {
         queryKey: queryKeys.teacher.files(profile?.id ?? '', profile?.school_id ?? '') 
       });
     } catch (error) {
-      console.error("Delete error:", error);
+      logger.error("Delete error:", error);
       const message =
         error instanceof Error ? error.message : "Failed to delete file.";
       toast.error(message);
@@ -367,7 +374,7 @@ const TeacherFiles = () => {
 
       toast.success("File downloaded successfully");
     } catch (error) {
-      console.error("Download error:", error);
+      logger.error("Download error:", error);
       toast.error("Failed to download file.");
     }
   };
@@ -407,11 +414,12 @@ const TeacherFiles = () => {
     });
   }, [teacherFiles, classFilter, subjectFilter, fileTypeFilter]);
 
-  if (loadingClasses || loadingFiles || loadingSubjects) {
-    return <LoadingSpinner />;
-  }
+  // No longer blocking the whole page
+  // if (loadingClasses || loadingFiles || loadingSubjects) {
+  //   return <LoadingSpinner />;
+  // }
 
-  if (classes.length === 0) {
+  if (!loadingClasses && classes.length === 0) {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center text-xl font-semibold text-destructive">
         No classes available. You need to be assigned as a class teacher or subject teacher to upload files.
@@ -445,7 +453,7 @@ const TeacherFiles = () => {
           >
             <h1 className="text-xl sm:text-4xl font-bold neon-text truncate">Upload Files</h1>
             <p className="text-muted-foreground text-sm sm:text-base">
-              Share books, notes, and materials
+              Share books and Learning materials
             </p>
           </motion.div>
         </div>
@@ -457,37 +465,59 @@ const TeacherFiles = () => {
         >
           <Card className="glass-card p-4 sm:p-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <p className="text-3xl font-bold text-primary">
-                  {teacherFiles.length}
-                </p>
-                <p className="text-sm text-muted-foreground">Total Files</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-secondary">
-                  {totalDownloads}
-                </p>
-                <p className="text-sm text-muted-foreground">Downloads</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-accent">{subjectCount}</p>
-                <p className="text-sm text-muted-foreground">Subjects</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-neon-cyan">
-                  {fileCategories.length}
-                </p>
-                <p className="text-sm text-muted-foreground">Categories</p>
-              </div>
+              {loadingFiles ? (
+                [1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <Skeleton className="h-8 w-12 mb-2" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div>
+                    <p className="text-3xl font-bold text-primary">
+                      {teacherFiles.length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Total Files</p>
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold text-secondary">
+                      {totalDownloads}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Downloads</p>
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold text-accent">{subjectCount}</p>
+                    <p className="text-sm text-muted-foreground">Subjects</p>
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold text-neon-cyan">
+                      {fileCategories.length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Categories</p>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
+        {loadingClasses || loadingSubjects ? (
+          <Card className="glass-card p-8 space-y-6">
+            <Skeleton className="h-8 w-48" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+            <Skeleton className="h-10 w-32" />
+          </Card>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            {/* Upload form content remains the same */}
           <Card className="glass-card p-8">
             <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
               <Upload className="w-6 h-6 text-primary" />
@@ -693,6 +723,7 @@ const TeacherFiles = () => {
             </div>
           </Card>
         </motion.div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -796,6 +827,47 @@ const TeacherFiles = () => {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="glass border-primary/30 text-primary hover:bg-primary/10"
+                          onClick={async () => {
+                            // Create engagement session when opening PDF
+                            try {
+                              const token = localStorage.getItem('access_token');
+                              if (token && profile?.school_id && profile?.id) {
+                                // Find the class_id from the file's class name
+                                const targetClass = classes.find(c => c.class_name === file.class);
+                                
+                                if (targetClass) {
+                                  const session = await engagementApi.createSession({
+                                    school_id: profile.school_id,
+                                    teacher_id: profile.id,
+                                    class_id: targetClass.class_id,
+                                    file_id: file.id,
+                                    session_name: `${file.name} - ${new Date().toLocaleString()}`
+                                  }, token);
+                                  
+                                  setEngagementSessionId(session.data?.id || session.id);
+                                  
+                                  // Connect to WebSocket
+                                  engagementSocket.connect(profile.id, 'teacher');
+                                  engagementSocket.joinSession(session.data?.id || session.id, profile.id);
+                                } else {
+                                  logger.warn('Could not find class for engagement session');
+                                }
+                              }
+                            } catch (error) {
+                              logger.error('Failed to create engagement session:', error);
+                              // Continue opening PDF even if session creation fails
+                            }
+                            
+                            setAnnotatingFile(file);
+                          }}
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Annotate
+                        </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -827,15 +899,41 @@ const TeacherFiles = () => {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDeleteConfirm}
         title="Delete File"
-        description={
-          fileToDelete
-            ? `Are you sure you want to delete "${fileToDelete.name}"? This action cannot be undone and students will no longer have access to this file.`
-            : "Are you sure you want to delete this file?"
-        }
+        description={`Are you sure you want to delete "${fileToDelete?.name}"? This action cannot be undone and students will no longer have access to this file.`}
         confirmText="Delete"
         cancelText="Cancel"
         variant="destructive"
       />
+
+      {annotatingFile && (
+        <PdfViewer 
+          fileId={annotatingFile.id}
+          fileUrl={annotatingFile.storageUrl}
+          fileName={annotatingFile.name}
+          classId={annotatingFile.classId}
+          gradeSubjectId={annotatingFile.gradeSubjectId}
+          sessionId={engagementSessionId || undefined}
+          onClose={async () => {
+            // End engagement session if exists
+            if (engagementSessionId) {
+              try {
+                const token = localStorage.getItem('access_token');
+                if (token) {
+                  await engagementApi.endSession(engagementSessionId, token);
+                }
+              } catch (error) {
+                logger.error('Failed to end engagement session:', error);
+              }
+              setEngagementSessionId(null);
+            }
+            
+            setAnnotatingFile(null);
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.teacher.files(profile?.id ?? '', profile?.school_id ?? '') 
+            });
+          }}
+        />
+      )}
     </div>
   );
 };

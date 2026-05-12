@@ -9,15 +9,22 @@ import { Badge } from "@/components/ui/badge";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { getStudentData, getStudentFiles, incrementFileDownload } from "@/services/academic";
+import PdfViewer from "@/components/PdfViewer";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
+import { logger } from '@/lib/logger';
+import { isFileCached, cacheFile } from "@/lib/fileCache";
+import { CheckCircle2 } from "lucide-react";
 
 const Books = () => {
   const navigate = useNavigate();
   const { profile, profileLoading } = useAuth();
   const queryClient = useQueryClient();
   const [playingVideo, setPlayingVideo] = useState<any | null>(null);
+  const [viewingPdf, setViewingPdf] = useState<any | null>(null);
 
   // 1. Get Student Data (for class_id)
   const { data: studentData } = useQuery({
@@ -34,6 +41,28 @@ const Books = () => {
     queryFn: () => getStudentFiles(studentClassId!, profile!.school_id),
     enabled: !!studentClassId,
   });
+  const [cachedFiles, setCachedFiles] = useState<Set<string>>(new Set());
+
+  // 3. Check cache status for all files
+  useEffect(() => {
+    const checkCache = async () => {
+      if (!files || files.length === 0) return;
+      
+      const newCachedFiles = new Set<string>();
+      await Promise.all(
+        files.map(async (file) => {
+          if (await isFileCached(file.storageUrl)) {
+            newCachedFiles.add(file.id);
+          }
+        })
+      );
+      setCachedFiles(newCachedFiles);
+    };
+    checkCache();
+  }, [files]);
+
+  const loading = loadingFiles && files.length === 0;
+  const offlineLoadingFiles = useOfflineLoading(loading);
 
   const subjectColors: Record<string, string> = {
     Mathematics: "neon-cyan",
@@ -107,10 +136,20 @@ const Books = () => {
 
   const handleDownload = async (file: any) => {
     try {
-      // Increment download count
-      await incrementFileDownload(file.id);
+      // Increment download count (background)
+      void incrementFileDownload(file.id);
 
-      // Force download the file
+      // Explicitly cache for offline use
+      toast.promise(cacheFile(file.storageUrl), {
+        loading: 'Preparing for offline...',
+        success: () => {
+          setCachedFiles(prev => new Set(prev).add(file.id));
+          return 'Saved for offline use';
+        },
+        error: 'Failed to save for offline'
+      });
+
+      // Force download the file to the user's device
       const response = await fetch(file.storageUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -126,16 +165,14 @@ const Books = () => {
       queryClient.invalidateQueries({
         queryKey: ['student-files', studentClassId]
       });
-
-      toast.success("File downloaded successfully");
     } catch (error) {
-      console.error("Error downloading file:", error);
+      logger.error("Error downloading file:", error);
       toast.error("Failed to download file.");
     }
   };
 
   const handleView = (file: any) => {
-    window.open(file.storageUrl, "_blank");
+    setViewingPdf(file);
   };
 
   return (
@@ -154,9 +191,35 @@ const Books = () => {
           </motion.div>
         </div>
 
-        {loadingFiles ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <LoadingSpinner />
+        {offlineLoadingFiles ? (
+          <OfflineEmptyState pageName="Books & Materials" />
+        ) : loading && files.length === 0 ? (
+          <div className="space-y-8">
+            <Card className="glass-card p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <Skeleton className="h-8 w-12 mb-2" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <div className="space-y-6">
+              <Skeleton className="h-10 w-[300px]" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} className="glass-card p-6 space-y-4">
+                    <Skeleton className="h-6 w-3/4" />
+                    <Skeleton className="h-32 w-full" />
+                    <div className="flex gap-2">
+                      <Skeleton className="h-9 w-24" />
+                      <Skeleton className="h-9 w-24" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
         ) : subjects.length === 0 && videoSubjects.length === 0 ? (
           <Card className="glass-card p-12 text-center">
@@ -260,6 +323,11 @@ const Books = () => {
                                     <h3 className="text-lg font-semibold mb-2">{material.title}</h3>
                                     <div className="flex flex-wrap gap-2">
                                       <Badge variant="secondary">{material.type}</Badge>
+                                      {cachedFiles.has(material.id) && (
+                                        <Badge variant="outline" className="text-green-400 border-green-500/50 flex gap-1 items-center">
+                                          <CheckCircle2 className="w-3 h-3" /> Stored
+                                        </Badge>
+                                      )}
                                       <Badge variant="outline">{material.size}</Badge>
                                       <Badge variant="outline">{material.downloads} downloads</Badge>
                                     </div>
@@ -341,6 +409,11 @@ const Books = () => {
                                     <h3 className="text-lg font-semibold mb-2">{video.title}</h3>
                                     <div className="flex flex-wrap gap-2">
                                       <Badge variant="default" className="bg-neon-purple/20 text-neon-purple">Video</Badge>
+                                      {cachedFiles.has(video.id) && (
+                                        <Badge variant="outline" className="text-green-400 border-green-500/50 flex gap-1 items-center">
+                                          <CheckCircle2 className="w-3 h-3" /> Stored
+                                        </Badge>
+                                      )}
                                       <Badge variant="outline">{video.size}</Badge>
                                       <Badge variant="outline">{video.downloads} downloads</Badge>
                                     </div>
@@ -417,6 +490,15 @@ const Books = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {viewingPdf && (
+        <PdfViewer 
+          fileId={viewingPdf.id}
+          fileUrl={viewingPdf.storageUrl}
+          isReadOnly={true}
+          onClose={() => setViewingPdf(null)}
+        />
+      )}
     </div>
   );
 };

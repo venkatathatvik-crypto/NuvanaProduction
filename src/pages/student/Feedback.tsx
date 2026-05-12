@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { logger } from '@/lib/logger';
 
 const StudentFeedback = () => {
     const navigate = useNavigate();
@@ -28,7 +29,7 @@ const StudentFeedback = () => {
         }
 
         // Mock submission
-        console.log({ ratings, comment });
+        logger.log({ ratings, comment });
         setSubmitted(true);
         toast.success("Feedback submitted successfully!");
     };

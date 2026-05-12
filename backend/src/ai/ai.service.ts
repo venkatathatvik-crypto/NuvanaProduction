@@ -10,6 +10,7 @@ import { MasteryService } from './recommender/mastery.service';
 import { RecommendationService } from './recommender/recommendation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QuizDeduplicationService } from './quiz-deduplication.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 // Prompts
 import { SYSTEM_ROOT_PROMPT } from './prompts/system.prompt';
@@ -19,7 +20,7 @@ import { SolvePrompt } from './prompts/solve.prompt';
 import { DoubtPrompt } from './prompts/doubt.prompt';
 import { SummaryPrompt } from './prompts/summary.prompt';
 import { ExpandPrompt } from './prompts/expand.prompt';
-import { StudyPlanPrompt } from './prompts/studyplan.prompt';
+import { StudyPlanPrompt, StudyPlanQuickReply } from './prompts/studyplan.prompt';
 import { PredictPrompt } from './prompts/predict.prompt';
 import { MockTestPrompt } from './prompts/teacher-quiz.prompt';
 import { LifeSkillPrompt } from './prompts/lifeskill.prompt';
@@ -41,21 +42,25 @@ export class AiService {
         private llmProvider: GeminiProvider,
         private prisma: PrismaService,
         private quizDeduplicationService: QuizDeduplicationService, // Phase 3 & 4
+        private analyticsService: AnalyticsService,
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
     async processRequest(dto: AiRequestDto): Promise<AiResponseDto> {
         const requestStartTime = Date.now();
-        console.log(`[AI Service] ========================================`);
-        console.log(`[AI Service] 🚀 New AI Request Received`);
-        console.log(`[AI Service] Task Type: ${dto.taskType}`);
-        console.log(`[AI Service] Query: "${dto.query}"`);
-        console.log(`[AI Service] Subject: ${dto.subject || 'Not provided'}`);
-        console.log(`[AI Service] Student ID: ${dto.studentId || 'Not provided'}`);
-        console.log(`[AI Service] Class Band: ${dto.classBand || 'Not provided'}`);
+        this.logger.log(`[AI Service] ========================================`);
+        this.logger.log(`[AI Service] New AI Request Received`);
+        this.logger.log(`[AI Service] Task Type: ${dto.taskType}`);
+        this.logger.log(`[AI Service] Query: "${dto.query}"`);
+        this.logger.log(`[AI Service] Subject: ${dto.subject || 'Not provided'}`);
+        this.logger.log(`[AI Service] Student ID: ${dto.studentId || 'Not provided'}`);
+        this.logger.log(`[AI Service] Class Band: ${dto.classBand || 'Not provided'}`);
 
         try {
             const { taskType, query, subject, classBand, studentId, additionalContext } = dto;
+            const role = additionalContext?.role;
+            const isTeacher = role === 'teacher';
+            const isStudent = role === 'student';
 
             // Create cache key from request parameters (including quiz params for accurate caching)
             const quizParamsKey = dto.quizParams 
@@ -67,14 +72,14 @@ export class AiService {
             try {
                 const cached = await this.cacheManager.get<AiResponseDto>(cacheKey);
                 if (cached) {
-                    console.log('[AI Service] ✓ Cache hit - returning cached response');
-                    console.log(`[AI Service] ✅ Request completed from cache in ${Date.now() - requestStartTime}ms`);
-                    console.log(`[AI Service] ========================================`);
+                    this.logger.log('[AI Service] Cache hit - returning cached response');
+                    this.logger.log(`[AI Service] Request completed from cache in ${Date.now() - requestStartTime}ms`);
+                    this.logger.log(`[AI Service] ========================================`);
                     return cached;
                 }
-                console.log('[AI Service] Cache miss - generating new response');
+                this.logger.log('[AI Service] Cache miss - generating new response');
             } catch (cacheError) {
-                console.warn('[AI Service] Cache check failed, proceeding without cache:', cacheError.message);
+                this.logger.warn('[AI Service] Cache check failed, proceeding without cache:', cacheError.message);
             }
 
             // 0. Get Class ID for RAG filtering
@@ -82,24 +87,41 @@ export class AiService {
             let studentClassId = dto.classId;
             let autoClassBand: string | undefined;
 
-            // OPTIMIZATION: Check if we can skip RAG/Profile for quick reply turns
-            // We only need RAG and Mastery for the FINAL quiz generation, not for asking "How many questions?"
-            const isTeacher = additionalContext?.role === 'teacher';
+            // OPTIMIZATION: Check if we can skip RAG/Profile for quick reply turns or specific tasks
+            // We only need RAG and Mastery for the FINAL generation, not for asking parameters
             const isQuizTask = taskType === AiTaskType.MOCK_TEST;
-            const needsQuickReplies = isTeacher && isQuizTask && (
-                !dto.quizParams?.questionCount || 
-                !dto.quizParams?.questionTypes || 
+            const isStudyPlanTask = taskType === AiTaskType.STUDY_PLAN;
+            const isLessonPlanTask = taskType === AiTaskType.TEACHER_LESSON_PLAN;
+            const needsQuizQuickReplies = isTeacher && isQuizTask && (
+                !dto.quizParams?.questionCount ||
+                !dto.quizParams?.questionTypes ||
                 !dto.quizParams?.difficulty
             );
+            const needsStudyPlanQuickReplies = isStudyPlanTask && (
+                !dto.studyPlanParams?.days ||
+                !dto.studyPlanParams?.hoursPerDay
+            ) && !this.extractStudyDays(query) && !this.extractStudyHours(query);
+            const needsLessonPlanConfig = isLessonPlanTask && (
+                !dto.lessonPlanParams?.numberOfDays ||
+                !dto.lessonPlanParams?.lessonDuration
+            ) && !this.extractDuration(query);
+            const needsQuickReplies = needsQuizQuickReplies || needsStudyPlanQuickReplies || needsLessonPlanConfig;
+
+            // SPECIAL CASE: No RAG for Email Drafts (per user request)
+            const skipRag = taskType === AiTaskType.TEACHER_EMAIL_DRAFT;
+            const isLifeCoach = taskType === AiTaskType.LIFE_SKILL;
 
             // OPTIMIZATION: Parallelize profile, RAG, and mastery queries
-            console.log(`[AI Service] Step 0-2: Fetching profile, RAG context, and mastery in parallel...`);
+            this.logger.log(`[AI Service] Step 0-2: Fetching profile, RAG context, and mastery in parallel...`);
             if (needsQuickReplies) {
-                console.log(`[AI Service] ⚡ Skipping RAG/Profile fetching for parameter collection turn`);
+                this.logger.log(`[AI Service] Skipping RAG/Profile fetching for parameter collection turn`);
+            }
+            if (skipRag) {
+                this.logger.log(`[AI Service] Skipping RAG retrieval for Email Draft task`);
             }
             const parallelStartTime = Date.now();
 
-            const [profileResult, ragContext, masteryResult] = await Promise.all([
+            const [profileResult, ragContext, masteryResult, studentAnalytics, classAnalytics] = await Promise.all([
                 // 0. Get Profile (if studentId provided AND not skipping)
                 (studentId && !needsQuickReplies) ? (async () => {
                     try {
@@ -124,26 +146,35 @@ export class AiService {
                         });
                         return { success: true, profile };
                     } catch (error) {
-                        console.error(`[AI Service] ❌ Error getting profile context:`, error);
+                        this.logger.error(`[AI Service] Error getting profile context:`, error);
                         return { success: false, profile: null };
                     }
                 })() : Promise.resolve({ success: true, profile: null }),
 
-                // 1. RAG Context Retrieval (skip if needsQuickReplies)
-                (!needsQuickReplies) ? (async () => {
+                // 1. RAG Context Retrieval (skip if needsQuickReplies or skipRag)
+                (!needsQuickReplies && !skipRag) ? (async () => {
                     try {
+                        // Use life coach RAG for life skill tasks
+                        if (isLifeCoach && additionalContext?.schoolId) {
+                            const context = await this.ragService.retrieveLifeCoach(
+                                query,
+                                additionalContext.schoolId,
+                                dto.lifeCoachCategory
+                            );
+                            return context && context.trim() !== '' ? context : '[NO RELEVANT CONTENT FOUND]';
+                        }
                         const context = await this.ragService.retrieve(
                             query,
-                            subject || 'General',
+                            subject,
                             autoClassBand || classBand || 'middle',
                             studentClassId
                         );
                         return context && context.trim() !== '' ? context : '[NO RELEVANT CONTENT FOUND]';
                     } catch (error) {
-                        console.error(`[AI Service] ❌ RAG Retrieval failed:`, error);
+                        this.logger.error(`[AI Service] RAG Retrieval failed:`, error);
                         return '[NO RELEVANT CONTENT FOUND]';
                     }
-                })() : Promise.resolve('[SKIPPED]'),
+                })() : Promise.resolve(skipRag ? '[SKIPPED: EMAIL DRAFT]' : '[SKIPPED]'),
 
                 // 2. Student Mastery Profile (skip if needsQuickReplies)
                 (studentId && subject && !needsQuickReplies) ? (async () => {
@@ -151,50 +182,93 @@ export class AiService {
                         const profile = await this.masteryService.getMasteryProfile(studentId, subject);
                         return { success: true, profile };
                     } catch (error) {
-                        console.error(`[AI Service] ❌ Error getting mastery profile:`, error);
+                        this.logger.error(`[AI Service] Error getting mastery profile:`, error);
                         return { success: false, profile: null };
                     }
                 })() : Promise.resolve({ success: true, profile: null }),
+
+                // 3. Detailed Student Analytics (new) - Only for Students (role_id 4)
+                (studentId && isStudent && !needsQuickReplies) ? (async () => {
+                    try {
+                        const profile = await this.prisma.profiles.findFirst({
+                            where: { id: studentId },
+                            select: { school_id: true }
+                        });
+                        if (profile?.school_id) {
+                            const stats = await this.analyticsService.getStudentStatsSummary(studentId, profile.school_id);
+                            const performance = await this.analyticsService.getStudentSubjectPerformance(studentId, profile.school_id);
+                            const strengthsWeaknesses = await this.analyticsService.getStudentStrengthsWeaknesses(studentId, profile.school_id);
+                            return { success: true, stats, performance, strengthsWeaknesses };
+                        }
+                        return { success: false };
+                    } catch (error) {
+                        if (error?.response?.message === 'Student not found' || error?.status === 404) {
+                            this.logger.warn(`[AI Service] Detailed analytics skipped: Student not found (${studentId})`);
+                        } else {
+                            this.logger.error(`[AI Service] Error getting detailed analytics:`, error);
+                        }
+                        return { success: false };
+                    }
+                })() : Promise.resolve({ success: false }),
+
+                // 4. Class Average Analytics (new - for Teachers)
+                (isTeacher && dto.classId && !needsQuickReplies) ? (async () => {
+                    try {
+                        const profile = await this.prisma.profiles.findFirst({
+                            where: { id: additionalContext.userId }, // Assuming userId is provided for teacher
+                            select: { school_id: true }
+                        });
+                        if (profile?.school_id) {
+                            const subjectAverages = await this.analyticsService.getClassSubjectAverages(dto.classId, profile.school_id);
+                            const chapterTopic = await this.analyticsService.getClassChapterTopicAnalytics(dto.classId, profile.school_id, subject ? undefined : undefined); // Subject filtering can be added
+                            return { success: true, subjectAverages, chapterTopic };
+                        }
+                        return { success: false };
+                    } catch (error) {
+                        this.logger.error(`[AI Service] Error getting class analytics:`, error);
+                        return { success: false };
+                    }
+                })() : Promise.resolve({ success: false }),
             ]);
 
 
             const parallelDuration = Date.now() - parallelStartTime;
-            console.log(`[AI Service] ✓ Parallel queries completed in ${parallelDuration}ms`);
+            this.logger.log(`[AI Service] Parallel queries completed in ${parallelDuration}ms`);
 
             // Process profile result
             if (profileResult.profile) {
                 if (!studentClassId && profileResult.profile.student_details?.class_id) {
                     studentClassId = profileResult.profile.student_details.class_id;
-                    console.log(`[AI Service] ✓ Auto-using student class_id: ${studentClassId}`);
+                    this.logger.log(`[AI Service] Auto-using student class_id: ${studentClassId}`);
                 }
 
                 const gradeLevel = profileResult.profile.student_details?.classes?.grade_levels;
                 if (gradeLevel?.name) {
                     autoClassBand = this.determineClassBandFromGrade(gradeLevel.name);
-                    console.log(`[AI Service] ✓ Auto-determined class band: ${autoClassBand} (from grade: ${gradeLevel.name})`);
+                    this.logger.log(`[AI Service] Auto-determined class band: ${autoClassBand} (from grade: ${gradeLevel.name})`);
                 }
             }
 
             if (dto.classId) {
-                console.log(`[AI Service] ✓ Using explicitly provided class_id (Teacher mode): ${dto.classId}`);
+                this.logger.log(`[AI Service] Using explicitly provided class_id (Teacher mode): ${dto.classId}`);
             }
 
             // Use auto-determined class band, fallback to frontend-provided, then default to 'middle'
             const band = autoClassBand || classBand || 'middle';
             if (autoClassBand) {
-                console.log(`[AI Service] Using auto-determined class band: ${band} (from student's grade)`);
+                this.logger.log(`[AI Service] Using auto-determined class band: ${band} (from student's grade)`);
             } else if (classBand) {
-                console.log(`[AI Service] Using frontend-provided class band: ${band} (fallback)`);
+                this.logger.log(`[AI Service] Using frontend-provided class band: ${band} (fallback)`);
             } else {
-                console.log(`[AI Service] Using default class band: ${band} (no grade/class info available)`);
+                this.logger.log(`[AI Service] Using default class band: ${band} (no grade/class info available)`);
             }
 
             // Process RAG result
-            console.log(`[AI Service] RAG Context: ${ragContext === '[NO RELEVANT CONTENT FOUND]' ? 'empty' : `${ragContext.length} characters`}`);
+            this.logger.log(`[AI Service] RAG Context: ${ragContext === '[NO RELEVANT CONTENT FOUND]' ? 'empty' : `${ragContext.length} characters`}`);
             if (ragContext === '[NO RELEVANT CONTENT FOUND]') {
-                console.log(`[AI Service] ⚠️ No RAG context found - will inform AI to refuse`);
+                this.logger.log(`[AI Service] No RAG context found - will inform AI to refuse`);
             } else {
-                console.log(`[AI Service] ✓ RAG context available (${ragContext.length} chars)`);
+                this.logger.log(`[AI Service] RAG context available (${ragContext.length} chars)`);
             }
 
             // Process mastery result
@@ -202,7 +276,7 @@ export class AiService {
             let difficulty = 'Medium';
             if (masteryResult.profile) {
                 const profile = masteryResult.profile;
-                console.log(`[AI Service] Mastery Profile: Overall=${profile.overallScore}, Topics=${Object.keys(profile.topics || {}).length}`);
+                this.logger.log(`[AI Service] Mastery Profile: Overall=${profile.overallScore}, Topics=${Object.keys(profile.topics || {}).length}`);
 
                 const hasTopics = profile.topics && Object.keys(profile.topics).length > 0;
                 if (hasTopics) {
@@ -214,15 +288,34 @@ export class AiService {
                 if (profile.overallScore >= 0.8) difficulty = 'Hard';
                 else if (profile.overallScore < 0.4) difficulty = 'Easy';
 
-                console.log(`[AI Service] ✓ Mastery profile loaded - Difficulty: ${difficulty}`);
+                this.logger.log(`[AI Service] Mastery profile loaded - Difficulty: ${difficulty}`);
             } else if (studentId && subject) {
-                console.log(`[AI Service] ⚠️ Mastery profile not available, using defaults`);
+                this.logger.log(`[AI Service] Mastery profile not available, using defaults`);
             } else {
-                console.log(`[AI Service] ⚠️ Skipping mastery (studentId or subject missing)`);
+                this.logger.log(`[AI Service] Skipping mastery (studentId or subject missing)`);
             }
 
+            // 2.1 Process Detailed Student Analytics
+            let detailedStudentContext = '';
+            if ((studentAnalytics as any)?.success && (studentAnalytics as any)?.stats) {
+                const sa = studentAnalytics as any;
+                detailedStudentContext = this.formatStudentAnalytics(sa.stats, sa.performance, sa.strengthsWeaknesses);
+                this.logger.log(`[AI Service] Detailed student analytics processed`);
+            }
+
+            // 2.2 Process Class Analytics
+            let classAnalyticsContext = '';
+            if ((classAnalytics as any)?.success) {
+                const ca = classAnalytics as any;
+                classAnalyticsContext = this.formatClassAnalytics(ca.subjectAverages, ca.chapterTopic);
+                this.logger.log(`[AI Service] Class analytics processed for class: ${dto.classId}`);
+            }
+
+            // Combine all analytic context
+            const analyticsContext = `${masteryProfile !== 'Standard' ? `MASTERY PROFILE: ${masteryProfile}\n` : ''}${detailedStudentContext}${classAnalyticsContext}`;
+
             // 3. Prompt Selection
-            console.log(`[AI Service] Step 3: Selecting prompt template for task: ${taskType}...`);
+            this.logger.log(`[AI Service] Step 3: Selecting prompt template for task: ${taskType}...`);
             let userPrompt = '';
             
             // Phase 3: Quiz metadata for saving (declared here for scope)
@@ -247,9 +340,42 @@ export class AiService {
                 case AiTaskType.EXPAND:
                     userPrompt = ExpandPrompt(dto.topic || query, band);
                     break;
-                case AiTaskType.STUDY_PLAN:
-                    userPrompt = StudyPlanPrompt(dto.topic || query, 'Mastery', '1 Week', band);
+                case AiTaskType.STUDY_PLAN: {
+                    // Prioritize explicit studyPlanParams, fallback to text extraction
+                    const studyDays = dto.studyPlanParams?.days || this.extractStudyDays(query) || undefined;
+                    const studyHours = dto.studyPlanParams?.hoursPerDay || this.extractStudyHours(query) || undefined;
+
+                    this.logger.log(`[AI Service] Study Plan Params:`);
+                    this.logger.log(`  - Days: ${studyDays || 'Not specified (will ask student)'}`);
+                    this.logger.log(`  - Hours/Day: ${studyHours || 'Not specified (will ask student)'}`);
+
+                    // Check if we need to show quick reply buttons
+                    const studyPlanQuickReply = StudyPlanQuickReply(
+                        dto.topic || query,
+                        studyDays,
+                        studyHours,
+                        ragContext
+                    );
+
+                    // If quick replies are needed, return them immediately
+                    if (studyPlanQuickReply) {
+                        this.logger.log(`[AI Service] Returning quick reply buttons for: ${studyPlanQuickReply.inputType}`);
+                        return {
+                            title: 'Study Plan',
+                            keyPoints: [],
+                            explanation: studyPlanQuickReply.message,
+                            quickReplies: studyPlanQuickReply.quickReplies,
+                            waitingForInput: studyPlanQuickReply.waitingForInput,
+                            inputType: studyPlanQuickReply.inputType as any
+                        };
+                    }
+
+                    // All parameters collected — build the timeframe string and generate
+                    this.logger.log(`[AI Service] All study plan parameters collected, proceeding with generation`);
+                    const timeframe = `${studyDays} days, ${studyHours} hours per day`;
+                    userPrompt = StudyPlanPrompt(dto.topic || query, 'Mastery', timeframe, band, studyDays, studyHours);
                     break;
+                }
                 case AiTaskType.PREDICT:
                     userPrompt = PredictPrompt(dto.topic || query, 'Key definition focus based on RAG', band);
                     break;
@@ -271,12 +397,12 @@ export class AiService {
                                              this.extractDifficulty(query) ||
                                              undefined;
 
-                        console.log(`[AI Service] 📝 Quiz Generation Params:`);
-                        console.log(`  - Question Count: ${questionCount || 'Not specified (will ask user)'}`);
-                        console.log(`  - Question Types: ${questionTypes}`);
-                        console.log(`  - Difficulty: ${quizDifficulty}`);
-                        console.log(`  - Bloom's Levels: ${dto.quizParams?.bloomLevels?.join(', ') || 'All levels'}`);
-                        console.log(`  - Source: ${dto.quizParams ? 'Explicit params' : 'Text extraction'}`);
+                        this.logger.log(`[AI Service] Quiz Generation Params:`);
+                        this.logger.log(`  - Question Count: ${questionCount || 'Not specified (will ask user)'}`);
+                        this.logger.log(`  - Question Types: ${questionTypes}`);
+                        this.logger.log(`  - Difficulty: ${quizDifficulty}`);
+                        this.logger.log(`  - Bloom's Levels: ${dto.quizParams?.bloomLevels?.join(', ') || 'All levels'}`);
+                        this.logger.log(`  - Source: ${dto.quizParams ? 'Explicit params' : 'Text extraction'}`);
 
                         // Check if we need to show quick reply buttons
                         const quickReplyResult = TeacherQuizQuickReply(
@@ -291,7 +417,7 @@ export class AiService {
 
                         // If quick replies are needed, return them immediately
                         if (quickReplyResult) {
-                            console.log(`[AI Service] ✓ Returning quick reply buttons for: ${quickReplyResult.inputType}`);
+                            this.logger.log(`[AI Service] Returning quick reply buttons for: ${quickReplyResult.inputType}`);
                             return {
                                 title: 'Quiz Creation',
                                 keyPoints: [],
@@ -303,7 +429,7 @@ export class AiService {
                         }
 
                         // All parameters collected - proceed with quiz generation
-                        console.log(`[AI Service] ✓ All parameters collected, proceeding with quiz generation`);
+                        this.logger.log(`[AI Service] All parameters collected, proceeding with quiz generation`);
 
                         // Phase 3: Get previous questions for deduplication
                         let previousQuestions: string[] = [];
@@ -314,14 +440,18 @@ export class AiService {
                                     subject || 'General',
                                     dto.topic || query
                                 );
-                                console.log(`  - Previous Questions: ${previousQuestions.length} found`);
+                                this.logger.log(`  - Previous Questions: ${previousQuestions.length} found`);
                             } catch (error) {
-                                console.warn(`  - Could not fetch previous questions: ${error.message}`);
+                                this.logger.warn(`  - Could not fetch previous questions: ${error.message}`);
                             }
                         }
 
+                        // Use chapter/topic from quizParams if provided
+                        const quizTopic = dto.quizParams?.topic || dto.topic || query;
+                        const quizChapter = dto.quizParams?.chapter;
+
                         userPrompt = TeacherQuizPrompt(
-                            dto.topic || query,
+                            quizChapter ? `${quizChapter} - ${quizTopic}` : quizTopic,
                             subject || 'General',
                             band,
                             questionCount,
@@ -330,13 +460,15 @@ export class AiService {
                             ragContext, // Pass RAG context for PDF-based questions
                             previousQuestions // Phase 3: Pass for deduplication
                         );
-                        
+
                         // Store quiz metadata for saving after generation
                         quizMetadata = {
                             questionCount,
                             quizDifficulty,
                             questionTypes: dto.quizParams?.questionTypes,
-                            bloomLevels: dto.quizParams?.bloomLevels
+                            bloomLevels: dto.quizParams?.bloomLevels,
+                            chapter: quizChapter,
+                            topic: quizTopic,
                         };
                     } else {
                         // Student mock test
@@ -344,19 +476,39 @@ export class AiService {
                     }
                     break;
                 case AiTaskType.LIFE_SKILL:
-                    userPrompt = LifeSkillPrompt(query, 'General Growth');
+                    userPrompt = LifeSkillPrompt(
+                        query,
+                        dto.lifeCoachCategory || 'General Growth',
+                        ragContext !== '[NO RELEVANT CONTENT FOUND]' && ragContext !== '[SKIPPED]' ? ragContext : undefined
+                    );
                     break;
-                case AiTaskType.TEACHER_LESSON_PLAN:
-                    // Extract duration and objectives from query if present
-                    const duration = this.extractDuration(query);
+                case AiTaskType.TEACHER_LESSON_PLAN: {
+                    const lpNumberOfDays = dto.lessonPlanParams?.numberOfDays;
+                    const lpLessonDuration = dto.lessonPlanParams?.lessonDuration;
+                    const lpObjectives = dto.lessonPlanParams?.objectives;
+
+                    // If params missing and not extractable from query, show config form
+                    if (!lpNumberOfDays && !lpLessonDuration && !this.extractDuration(query)) {
+                        return {
+                            title: 'Lesson Plan',
+                            keyPoints: [],
+                            explanation: `📝 **Let's create a lesson plan for "${dto.topic || query}"!**\n\nConfigure your lesson plan below and hit **Generate Lesson Plan**.`,
+                            quickReplies: [],
+                            waitingForInput: true,
+                            inputType: 'lessonPlanConfig' as any,
+                        };
+                    }
+
                     userPrompt = TeacherLessonPlanPrompt(
                         dto.topic || query,
                         subject || 'General',
                         band,
-                        duration,
-                        undefined // Objectives derived from query
+                        lpNumberOfDays || this.extractDuration(query),
+                        lpObjectives,
+                        lpLessonDuration
                     );
                     break;
+                }
                 case AiTaskType.TEACHER_EMAIL_DRAFT:
                     // Extract email purpose and tone from query
                     const tone = this.extractTone(query);
@@ -385,10 +537,10 @@ export class AiService {
                 default:
                     userPrompt = query;
             }
-            console.log(`[AI Service] ✓ Prompt template selected (${userPrompt.length} chars)`);
+            this.logger.log(`[AI Service] Prompt template selected (${userPrompt.length} chars)`);
 
             // 4. LLM Call
-            console.log(`[AI Service] Step 4: Calling Gemini LLM...`);
+            this.logger.log(`[AI Service] Step 4: Calling Gemini LLM...`);
             const llmStartTime = Date.now();
             
             // Determine which model to use based on task complexity
@@ -397,35 +549,54 @@ export class AiService {
             // DISABLED: Hardcoded override causes 404 with v1beta API
             // if (taskType === AiTaskType.TEACHER_GRADE_PAPER || taskType === AiTaskType.STUDY_PLAN) {
             //     targetModel = 'gemini-1.5-pro';
-            //     console.log(`[AI Service] 💎 Complex task detected - Routing to high-reasoning model: ${targetModel}`);
+            //     this.logger.log(`[AI Service] Complex task detected - Routing to high-reasoning model: ${targetModel}`);
             // }
 
             // Combine system prompt and RAG context into single system message
             // (Gemini LangChain provider requires only one system message)
             const systemMessage = `${SYSTEM_ROOT_PROMPT}
+ 
+ ${analyticsContext ? `ANALYTICS CONTEXT:\n${analyticsContext}\n` : ''}
 
-RAG CONTEXT:
-${ragContext}`;
+${!skipRag ? `RAG CONTEXT:
+${ragContext}` : ''}`;
             
             const rawContent = await this.llmProvider.generate([
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: userPrompt }
             ], targetModel);
             const llmDuration = Date.now() - llmStartTime;
-            console.log(`[AI Service] ✓ LLM response received (${llmDuration}ms, ${rawContent.length} chars)`);
+            this.logger.log(`[AI Service] LLM response received (${llmDuration}ms, ${rawContent.length} chars)`);
 
             // 5. Parse Response
-            console.log(`[AI Service] Step 5: Parsing LLM response...`);
+            this.logger.log(`[AI Service] Step 5: Parsing LLM response...`);
             const parsedResponse = this.parseResponse(rawContent);
-            console.log(`[AI Service] ✓ Response parsed successfully`);
+            this.logger.log(`[AI Service] Response parsed successfully`);
 
-            // Phase 3: Save quiz to history (for teacher quiz generation only)
-            if (taskType === AiTaskType.MOCK_TEST && isTeacher && quizMetadata && additionalContext?.userId && additionalContext?.schoolId) {
+            // Phase 3: Extract and save quiz for teacher quiz generation
+            if (taskType === AiTaskType.MOCK_TEST && isTeacher && quizMetadata) {
                 try {
-                    // Extract questions from the raw response
                     const extractedQuestions = this.extractQuestionsFromResponse(rawContent);
-                    
+
+                    // Attach structured questions to response metadata for frontend use
                     if (extractedQuestions.length > 0) {
+                        parsedResponse.metadata = {
+                            ...parsedResponse.metadata,
+                            quizQuestions: extractedQuestions,
+                            quizParams: {
+                                questionCount: quizMetadata.questionCount,
+                                difficulty: quizMetadata.quizDifficulty,
+                                questionTypes: quizMetadata.questionTypes,
+                                subject: subject || 'General',
+                                topic: quizMetadata.topic || dto.topic || query,
+                                chapter: quizMetadata.chapter,
+                            },
+                        };
+                        this.logger.log(`[AI Service] Attached ${extractedQuestions.length} structured questions to response metadata`);
+                    }
+
+                    // Save to history for deduplication
+                    if (extractedQuestions.length > 0 && additionalContext?.userId && additionalContext?.schoolId) {
                         await this.quizDeduplicationService.saveQuiz({
                             school_id: additionalContext.schoolId,
                             teacher_id: additionalContext.userId,
@@ -441,31 +612,30 @@ ${ragContext}`;
                                 duration: quizMetadata.questionCount + (extractedQuestions.filter(q => q.type !== 'MCQ').length * 3)
                             }
                         });
-                        console.log(`[AI Service] ✓ Quiz saved to history (${extractedQuestions.length} questions)`);
+                        this.logger.log(`[AI Service] Quiz saved to history (${extractedQuestions.length} questions)`);
                     }
                 } catch (saveError) {
-                    console.warn(`[AI Service] Failed to save quiz to history: ${saveError.message}`);
-                    // Don't throw - saving is optional, shouldn't block response
+                    this.logger.warn(`[AI Service] Failed to process quiz metadata: ${saveError.message}`);
                 }
             }
 
             // Store in cache for future requests (1 hour TTL)
             try {
                 await this.cacheManager.set(cacheKey, parsedResponse, 3600 * 1000); // 1 hour in milliseconds
-                console.log('[AI Service] ✓ Response cached for future requests');
+                this.logger.log('[AI Service] Response cached for future requests');
             } catch (cacheError) {
-                console.warn('[AI Service] Failed to cache response:', cacheError.message);
+                this.logger.warn('[AI Service] Failed to cache response:', cacheError.message);
                 // Continue even if caching fails
             }
 
             const totalDuration = Date.now() - requestStartTime;
-            console.log(`[AI Service] ✅ Request completed in ${totalDuration}ms`);
-            console.log(`[AI Service] ========================================`);
+            this.logger.log(`[AI Service] Request completed in ${totalDuration}ms`);
+            this.logger.log(`[AI Service] ========================================`);
 
             return parsedResponse;
 
         } catch (error) {
-            console.error('AI Service Error (FULL TRACE):', error);
+            this.logger.error('AI Service Error (FULL TRACE):', error);
             throw new InternalServerErrorException(`Failed to generate AI response: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -604,7 +774,7 @@ ${ragContext}`;
         // Handles: "Grade 10", "10", "Class 10", "10th", etc.
         const gradeMatch = gradeName.match(/\d+/);
         if (!gradeMatch) {
-            console.log(`[AI Service] ⚠️ Could not extract grade number from: "${gradeName}", defaulting to 'middle'`);
+            this.logger.log(`[AI Service] Could not extract grade number from: "${gradeName}", defaulting to 'middle'`);
             return 'middle'; // Default if unable to parse
         }
 
@@ -855,42 +1025,193 @@ ${ragContext}`;
     }
     
     /**
+     * Extract number of study days from query text
+     * Looks for patterns like "7 days", "1 week", "2 weeks", "5-day", etc.
+     */
+    private extractStudyDays(query: string): number | undefined {
+        const lowerQuery = query.toLowerCase();
+        const patterns = [
+            /(\d+)\s*(?:days?|day)/i,
+            /(\d+)\s*(?:weeks?|week)/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match) {
+                const value = parseInt(match[1]);
+                // Convert weeks to days if needed
+                if (pattern.toString().includes('week')) {
+                    return value * 7;
+                }
+                // Reasonable range check (1-30 days)
+                if (value >= 1 && value <= 30) {
+                    return value;
+                }
+            }
+        }
+        
+        return undefined;
+    }
+    
+    /**
+     * Extract hours per day from query text
+     * Looks for patterns like "2 hours", "3 hrs", "1 hour per day", etc.
+     */
+    private extractStudyHours(query: string): number | undefined {
+        const patterns = [
+            /(\d+)\s*(?:hours?|hrs?)\s*(?:per\s*day|daily|a\s*day|each\s*day)?/i,
+        ];
+        
+        for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match) {
+                const value = parseInt(match[1]);
+                // Reasonable range check (1-8 hours per day)
+                if (value >= 1 && value <= 8) {
+                    return value;
+                }
+            }
+        }
+        
+        return undefined;
+    }
+    
+    /**
      * Extract questions from quiz response for saving to history
      * Parses the markdown response to extract question objects
      */
     private extractQuestionsFromResponse(response: string): any[] {
         const questions: any[] = [];
-        
+
         try {
-            // Simple regex-based extraction
             // Match questions like "**1. Question text?** [2 marks]"
             const questionPattern = /\*\*(\d+)\.\s+(.+?)\?\*\*\s*\[(\d+)\s*marks?\]\s*\*?\(?(Remember|Understand|Apply|Analyze|Evaluate|Create)?\)?/gi;
-            
+
+            // Extract answer key section for correct answers
+            const answerKeySection = response.match(/##\s*✅?\s*Answer Key[\s\S]*/i)?.[0] || '';
+
             let match;
             while ((match = questionPattern.exec(response)) !== null) {
-                const [, number, questionText, marks, bloomLevel] = match;
-                
+                const [fullMatch, number, questionText, marks, bloomLevel] = match;
+                const qNum = parseInt(number);
+
                 // Determine question type based on context
                 let type = 'MCQ';
-                if (response.substring(match.index - 200, match.index).includes('Short Answer')) {
+                if (response.substring(Math.max(0, match.index - 300), match.index).includes('Short Answer')) {
                     type = 'Short Answer';
-                } else if (response.substring(match.index - 200, match.index).includes('Essay')) {
+                } else if (response.substring(Math.max(0, match.index - 300), match.index).includes('Essay')) {
                     type = 'Essay';
                 }
-                
-                questions.push({
+
+                const questionObj: any = {
                     question: questionText.trim() + '?',
                     type,
                     bloomLevel: bloomLevel || 'Remember',
                     marks: parseInt(marks) || 2
-                });
+                };
+
+                // Extract MCQ options (A), B), C), D) after the question
+                if (type === 'MCQ') {
+                    const afterQuestion = response.substring(match.index + fullMatch.length, match.index + fullMatch.length + 500);
+                    const optionPattern = /(?:^|\n)\s*([A-D])\)\s*(.+?)(?=\n\s*[A-D]\)|\n\s*\*\*|\n\s*$)/g;
+                    const options: string[] = [];
+                    let optMatch;
+                    while ((optMatch = optionPattern.exec(afterQuestion)) !== null) {
+                        options.push(optMatch[2].trim());
+                    }
+                    if (options.length >= 2) {
+                        questionObj.options = options;
+                    }
+
+                    // Extract correct answer from answer key
+                    // Match patterns like "1. **Answer:** B)" or "1. B)" or "1. **Answer:** B -"
+                    const answerPattern = new RegExp(`(?:^|\\n)\\s*${qNum}\\.\\s*(?:\\*\\*Answer:\\*\\*\\s*)?([A-D])`, 'im');
+                    const answerMatch = answerKeySection.match(answerPattern);
+                    if (answerMatch) {
+                        const correctLetter = answerMatch[1].toUpperCase();
+                        questionObj.correctOptionIndex = correctLetter.charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+                    }
+                }
+
+                questions.push(questionObj);
             }
-            
-            this.logger.log(`Extracted ${questions.length} questions from response`);
+
+            this.logger.log(`Extracted ${questions.length} questions from response (with options: ${questions.filter(q => q.options).length})`);
         } catch (error) {
             this.logger.error(`Error extracting questions: ${error.message}`);
         }
-        
+
         return questions;
+    }
+
+    /**
+     * Format student analytics into a readable string for AI context
+     */
+    private formatStudentAnalytics(stats: any, performance: any[], strengthsWeaknesses: any): string {
+        if (!stats) return '';
+        let context = 'STUDENT PERFORMANCE ANALYTICS:\n';
+        context += `- Overall Percentage: ${stats.overallPercentage}%\n`;
+        context += `- Best Subject: ${stats.bestSubject}\n`;
+        context += `- Total Tests Taken: ${stats.totalTests}\n`;
+        context += `- Attendance: ${stats.attendancePercentage}%\n\n`;
+
+        context += 'SUBJECT PERFORMANCE:\n';
+        performance.forEach(p => {
+            context += `- ${p.subject}: ${p.percentage}%\n`;
+        });
+        context += '\n';
+
+        context += 'STRENGTHS:\n';
+        if (strengthsWeaknesses.strengths?.length > 0) {
+            strengthsWeaknesses.strengths.forEach(s => {
+                context += `- ${s.topic} (${s.subject}): ${s.desc}\n`;
+            });
+        } else {
+            context += '- No specific strengths identified yet.\n';
+        }
+        context += '\n';
+
+        context += 'WEAKNESSES:\n';
+        if (strengthsWeaknesses.weaknesses?.length > 0) {
+            strengthsWeaknesses.weaknesses.forEach(w => {
+                context += `- ${w.topic} (${w.subject}): ${w.desc}\n`;
+            });
+        } else {
+            context += '- No specific weaknesses identified yet.\n';
+        }
+
+        return context + '\n';
+    }
+
+    /**
+     * Format class analytics into a readable string for AI context
+     */
+    private formatClassAnalytics(subjectAverages: any[], chapterTopic: any): string {
+        if (!subjectAverages || !chapterTopic) return '';
+        let context = 'CLASS-WIDE ANALYTICS:\n';
+        
+        context += 'SUBJECT AVERAGES (CLASS):\n';
+        subjectAverages.forEach(s => {
+            context += `- ${s.subject}: ${s.avg}%\n`;
+        });
+        context += '\n';
+
+        context += 'CLASS TOPIC MASTERY:\n';
+        if (chapterTopic.topics?.length > 0) {
+            // Include top 3 and bottom 3 topics
+            const sortedTopics = [...chapterTopic.topics].sort((a, b) => b.mastery - a.mastery);
+            context += 'Strongest Topics:\n';
+            sortedTopics.slice(0, 3).forEach(t => {
+                context += `- ${t.name}: ${t.mastery}%\n`;
+            });
+            context += 'Topics Needing Attention:\n';
+            sortedTopics.slice(-3).forEach(t => {
+                context += `- ${t.name}: ${t.mastery}%\n`;
+            });
+        } else {
+            context += '- No topic mastery data available for the class.\n';
+        }
+
+        return context + '\n';
     }
 }

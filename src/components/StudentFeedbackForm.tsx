@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { feedbackService } from '@/services/feedbackService';
+import { logger } from '@/lib/logger';
 
 export const StudentFeedbackForm = () => {
     const [questions, setQuestions] = useState<string[]>([]);
@@ -23,7 +24,7 @@ export const StudentFeedbackForm = () => {
 
     const handleSubmit = () => {
         // For demo, just log answers
-        console.log('Feedback submitted', { questions, answers });
+        logger.log('Feedback submitted', { questions, answers });
         toast.success('Feedback submitted');
     };
 

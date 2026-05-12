@@ -25,7 +25,11 @@ import {
 } from "@/services/academic";
 import type { FlattenedClass } from "@/schemas/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
+import { ConnectivityGuard } from "@/components/ConnectivityGuard";
 import { useAuth } from "@/auth/AuthContext";
+import { formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { logger } from '@/lib/logger';
 
 const TeacherAnnouncements = () => {
   const navigate = useNavigate();
@@ -125,7 +129,7 @@ const TeacherAnnouncements = () => {
           target_url: "/student",
         });
       } catch (notifError) {
-        console.error("Failed to send notifications:", notifError);
+        logger.error("Failed to send notifications:", notifError);
       }
 
       // Send email notifications
@@ -138,7 +142,7 @@ const TeacherAnnouncements = () => {
         const uniqueEmails = [...new Set(allStudentEmails)];
         await sendAnnouncementEmail(uniqueEmails, title, message, isUrgent);
       } catch (emailError) {
-        console.error("Failed to send emails:", emailError);
+        logger.error("Failed to send emails:", emailError);
       }
 
       setTitle("");
@@ -152,7 +156,7 @@ const TeacherAnnouncements = () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.announcements(profile.id, profile.school_id) });
     } catch (error) {
-      console.error("Announcement send error:", error);
+      logger.error("Announcement send error:", error);
       toast.error(
         error instanceof Error ? error.message : "Failed to send announcement."
       );
@@ -186,7 +190,7 @@ const TeacherAnnouncements = () => {
         queryKey: queryKeys.teacher.announcements(profile?.id ?? '', profile?.school_id ?? '') 
       });
     } catch (error) {
-      console.error("Delete error:", error);
+      logger.error("Delete error:", error);
       const message =
         error instanceof Error
           ? error.message
@@ -196,6 +200,12 @@ const TeacherAnnouncements = () => {
       setAnnouncementToDelete(null);
     }
   };
+
+  const offlineLoading = useOfflineLoading(loadingClasses || announcementsLoading);
+
+  if (offlineLoading) {
+    return <OfflineEmptyState pageName="Announcements" />;
+  }
 
   if (loadingClasses || announcementsLoading) {
     return <LoadingSpinner />;
@@ -251,13 +261,20 @@ const TeacherAnnouncements = () => {
                 <p className="text-sm text-muted-foreground">Urgent</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-secondary">
+                <p className="text-3xl font-bold text-primary">
                   {announcements.reduce((acc, a) => acc + (a.views ?? 0), 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">Total Views</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-accent">Today</p>
+                <p className="text-3xl font-bold text-primary">
+                  {announcements.length > 0 ? (() => {
+                    const lastDate = new Date(Math.max(...announcements.map(a => new Date(a.createdAt).getTime())));
+                    if (isToday(lastDate)) return "Today";
+                    if (isYesterday(lastDate)) return "Yesterday";
+                    return formatDistanceToNow(lastDate, { addSuffix: true });
+                  })() : "N/A"}
+                </p>
                 <p className="text-sm text-muted-foreground">Last Posted</p>
               </div>
             </div>
@@ -364,15 +381,17 @@ const TeacherAnnouncements = () => {
               </div>
 
               <div className="flex justify-end">
-                <Button
-                  size="lg"
-                  className="neon-glow px-8"
-                  onClick={sendAnnouncement}
-                  disabled={sending}
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  {sending ? "Sending..." : "Send Announcement"}
-                </Button>
+                <ConnectivityGuard message="Sending announcements requires an active internet connection.">
+                  <Button
+                    size="lg"
+                    className="neon-glow px-8"
+                    onClick={sendAnnouncement}
+                    disabled={sending}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    {sending ? "Sending..." : "Send Announcement"}
+                  </Button>
+                </ConnectivityGuard>
               </div>
             </div>
           </Card>

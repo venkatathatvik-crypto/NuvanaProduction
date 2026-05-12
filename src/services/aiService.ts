@@ -22,6 +22,11 @@ export interface AiRequestDto {
         difficulty?: string;
         bloomLevels?: string[];
     };
+    studyPlanParams?: {
+        days?: number;
+        hoursPerDay?: number;
+    };
+    lifeCoachCategory?: string;
 }
 
 export interface AiResponseDto {
@@ -33,7 +38,7 @@ export interface AiResponseDto {
     rawResponse?: string;
     quickReplies?: QuickReplyButton[];
     waitingForInput?: boolean;
-    inputType?: 'questionCount' | 'questionTypes' | 'difficulty';
+    inputType?: 'questionCount' | 'questionTypes' | 'difficulty' | 'studyPlanDays' | 'studyPlanHours';
 }
 
 export const aiService = {

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Inter', Arial, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .header { text-align: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px; margin-bottom: 20px; }
+        .logo { max-width: 150px; }
+        .content { font-size: 16px; line-height: 1.6; }
+        .highlight { font-weight: bold; color: #0284c7; }
+        .credentials { background-color: #f8fafc; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0; margin: 20px 0; font-family: monospace; font-size: 15px; }
+        .footer { text-align: center; font-size: 12px; color: #888; margin-top: 30px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img class="logo" src="{{#if schoolLogo}}{{schoolLogo}}{{else}}https://ui-avatars.com/api/?name=Nuvana+School&background=0284c7&color=fff&size=150{{/if}}" alt="School Logo" />
+        </div>
+        <div class="content">
+            <p>Hello <span class="highlight">{{name}}</span>,</p>
+            <p>Welcome to Nuvana! Your account has been officially created. You can now log into the portal to access your dashboard, classes, and materials.</p>
+
+            <p>Here are your initial login credentials. We strongly recommend changing your password after your first login.</p>
+
+            <div class="credentials">
+                <strong>Email:</strong> {{email}}<br>
+                <strong>Password:</strong> {{password}}
+            </div>
+        </div>
+        <div class="footer">
+            <p>If you have any questions or need assistance, please reply to this email.</p>
+            <p>&copy; 2025 Nuvana Education Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

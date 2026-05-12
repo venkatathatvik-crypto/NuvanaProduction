@@ -7,11 +7,9 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Tenant } from '../auth/decorators/tenant.decorator';
 
 @Controller('analytics')
-@UseGuards(JwtAuthGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 

@@ -26,11 +26,13 @@ import {
 } from "@/services/academic";
 import { FlattenedClass } from "@/schemas/academic";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { OfflineEmptyState, useOfflineLoading } from "@/components/OfflineEmptyState";
 import { useAuth } from "@/auth/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { logger } from '@/lib/logger';
 
 const TeacherMarks = () => {
   const navigate = useNavigate();
@@ -132,7 +134,7 @@ const TeacherMarks = () => {
           }
         }
       } catch (error) {
-        console.error("Error fetching students/subjects:", error);
+        logger.error("Error fetching students/subjects:", error);
         toast.error("Failed to load students");
       } finally {
         setStudentsLoading(false);
@@ -164,7 +166,7 @@ const TeacherMarks = () => {
           handleSelectSubmission(subs[0].submissionId, subs);
         }
       } catch (error) {
-        console.error("Error fetching submissions:", error);
+        logger.error("Error fetching submissions:", error);
         toast.error("Failed to load submissions");
       } finally {
         setGradingLoading(false);
@@ -229,7 +231,7 @@ const TeacherMarks = () => {
             target_url: "/student/marks",
           });
         } catch (notifError) {
-          console.error("Failed to send notification:", notifError);
+          logger.error("Failed to send notification:", notifError);
         }
 
         // Send email notification
@@ -238,7 +240,7 @@ const TeacherMarks = () => {
             await sendGradeEmail(gradedSubmission.studentEmail, testTitle);
           }
         } catch (emailError) {
-          console.error("Failed to send email:", emailError);
+          logger.error("Failed to send email:", emailError);
         }
       }
 
@@ -279,7 +281,7 @@ const TeacherMarks = () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.teacher.gradingQueue(profile.id) });
       }
     } catch (error: any) {
-      console.error("Error saving grades:", error);
+      logger.error("Error saving grades:", error);
       toast.error(error.message || "Failed to save grades");
     } finally {
       setGradingLoading(false);
@@ -348,7 +350,7 @@ const TeacherMarks = () => {
       // Refresh grading queue
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.gradingQueue(profile.id) });
     } catch (error: any) {
-      console.error("Error publishing manual marks:", error);
+      logger.error("Error publishing manual marks:", error);
       toast.error(error.message || "Failed to publish marks");
     } finally {
       setManualSaving(false);
@@ -395,6 +397,16 @@ const TeacherMarks = () => {
   };
 
   // --- LOADING STATE ---
+  const offlineLoading = useOfflineLoading(loading);
+
+  if (offlineLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <OfflineEmptyState pageName="Marks" />
+      </div>
+    );
+  }
+
   if (loading || profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">

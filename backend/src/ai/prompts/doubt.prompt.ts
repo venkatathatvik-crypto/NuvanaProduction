@@ -8,11 +8,9 @@ import { ClassBandStyles } from './classband.styles';
 export const DoubtPromptTemplate = ChatPromptTemplate.fromMessages([
     [
         'user',
-        `TASK: Resolve the student's doubt: "{doubt}".
+        `STYLE: {classBandStyle}
 
-CONTEXT: Reference this material: {context}
-
-STYLE: {classBandStyle}
+ANALYTICS: Check "ANALYTICS CONTEXT" in the system prompt for detailed student performance, strengths, and weaknesses. Use this to provide a more personalized resolution to the doubt.
 
 FORMATTING REQUIREMENTS:
 - Use Markdown with ## emoji headers for all major sections
@@ -57,11 +55,11 @@ RESPONSE STRUCTURE:
  */
 export const DoubtPrompt = (doubt: string, context: string, classBand: string) => {
     const classBandStyle = ClassBandStyles[classBand] || ClassBandStyles.middle;
-    return `TASK: Resolve the student's doubt comprehensively: "${doubt}"
+    return `STYLE: ${classBandStyle}
 
-CONTEXT: Reference this material: ${context}
+ANALYTICS: Check "ANALYTICS CONTEXT" in the system prompt for detailed student performance, strengths, and weaknesses. 
 
-STYLE: ${classBandStyle}
+ADJUSTMENT: Tailor your response based on the student's performance data. If they have a "Strength" in a related area, use it to explain this confusion. If they have a "Weakness" in a foundational topic, address it briefly to clear the doubt.
 
 CRITICAL INSTRUCTIONS:
 1. **Use Markdown Sections** - Structure your response using ## headers with emojis for each major section

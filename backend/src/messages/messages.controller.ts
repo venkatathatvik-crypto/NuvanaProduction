@@ -9,12 +9,10 @@ import {
 } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { SendMessageDto, MarkAsReadDto } from './dto/messages.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Tenant } from '../auth/decorators/tenant.decorator';
 
 @Controller('messages')
-@UseGuards(JwtAuthGuard)
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 

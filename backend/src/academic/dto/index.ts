@@ -21,3 +21,6 @@ export * from './timetable.dto';
 
 // Manual Marks DTOs
 export * from './manual-marks.dto';
+
+// Life Coach Category DTOs
+export * from './life-coach-category.dto';

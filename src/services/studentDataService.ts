@@ -1,5 +1,6 @@
 // Student data services - profile, voice notes, basic student info
 import { apiClient } from "@/lib/apiClient";
+import { logger } from '@/lib/logger';
 
 export interface StudentData {
   id: string;
@@ -51,7 +52,7 @@ export const getStudentData = async (
     const studentDetails = data.student_details;
 
     if (!studentDetails) {
-      console.warn("No student_details found for student:", studentId);
+      logger.warn("No student_details found for student:", studentId);
       return null;
     }
 
@@ -67,7 +68,7 @@ export const getStudentData = async (
       roll_number: studentDetails.roll_number || undefined,
     };
   } catch (error: any) {
-    console.error("Error fetching student data:", error);
+    logger.error("Error fetching student data:", error);
     throw new Error(error.message || "Failed to load student data.");
   }
 };
@@ -104,7 +105,7 @@ export const getStudentVoiceNotes = async (
       uploadDate: record.uploadDate || record.createdAt || new Date().toISOString(),
     }));
   } catch (error) {
-    console.error("Error fetching student voice notes:", error);
+    logger.error("Error fetching student voice notes:", error);
     throw new Error("Failed to load voice notes.");
   }
 };

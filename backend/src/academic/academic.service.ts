@@ -2,7 +2,9 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
   Inject,
+  Logger,
 } from "@nestjs/common";
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -18,6 +20,8 @@ import {
   AssignSubjectsToTeacherDto,
   CreateFileCategoryDto,
   UpdateFileCategoryDto,
+  CreateLifeCoachCategoryDto,
+  UpdateLifeCoachCategoryDto,
   CreateExamTypeDto,
   UpdateExamTypeDto,
   CreatePeriodDto,
@@ -27,6 +31,8 @@ import {
 
 @Injectable()
 export class AcademicService {
+  private readonly logger = new Logger(AcademicService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
@@ -790,6 +796,54 @@ export class AcademicService {
     return { message: "File category deleted successfully" };
   }
 
+  // ==================== LIFE COACH CATEGORIES ====================
+  async createLifeCoachCategory(dto: CreateLifeCoachCategoryDto, schoolId: string) {
+    const existing = await this.prisma.life_coach_categories.findFirst({
+      where: { name: { equals: dto.name, mode: 'insensitive' }, school_id: schoolId },
+    });
+    if (existing) throw new ConflictException("A category with this name already exists");
+    return this.prisma.life_coach_categories.create({
+      data: { name: dto.name, school_id: schoolId },
+    });
+  }
+
+  async getLifeCoachCategories(schoolId: string) {
+    return this.prisma.life_coach_categories.findMany({
+      where: { school_id: schoolId },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async updateLifeCoachCategory(id: number, dto: UpdateLifeCoachCategoryDto, schoolId: string) {
+    const category = await this.prisma.life_coach_categories.findFirst({
+      where: { id, school_id: schoolId },
+    });
+    if (!category) throw new NotFoundException("Life coach category not found");
+    const duplicate = await this.prisma.life_coach_categories.findFirst({
+      where: { name: { equals: dto.name, mode: 'insensitive' }, school_id: schoolId, NOT: { id } },
+    });
+    if (duplicate) throw new ConflictException("A category with this name already exists");
+    return this.prisma.life_coach_categories.update({
+      where: { id },
+      data: { name: dto.name },
+    });
+  }
+
+  async deleteLifeCoachCategory(id: number, schoolId: string) {
+    const category = await this.prisma.life_coach_categories.findFirst({
+      where: { id, school_id: schoolId },
+    });
+    if (!category) throw new NotFoundException("Life coach category not found");
+    const booksInCategory = await this.prisma.life_coach_books.findFirst({
+      where: { category_id: id },
+    });
+    if (booksInCategory) {
+      throw new BadRequestException("Cannot delete category that contains books. Please delete all books in this category first.");
+    }
+    await this.prisma.life_coach_categories.delete({ where: { id } });
+    return { message: "Life coach category deleted successfully" };
+  }
+
   // ==================== EXAM TYPES ====================
   async createExamType(dto: CreateExamTypeDto, schoolId: string) {
     const result = await this.prisma.exam_types.create({
@@ -1143,11 +1197,8 @@ export class AcademicService {
     schoolId: string,
   ): Promise<string | null> {
     // Trim and normalize subject name for matching
-    console.log("subjectName", subjectName);
-    console.log("classId", classId);
-    console.log("schoolId", schoolId);
     const normalizedSubjectName = subjectName.trim();
-    console.log("normalizedSubjectName", normalizedSubjectName);
+    this.logger.debug(`getGradeSubjectIdByDetails: subject="${normalizedSubjectName}", classId=${classId}, schoolId=${schoolId}`);
 
     // First get the class to get grade_level_id
     const classData = await this.prisma.classes.findFirst({
@@ -1156,14 +1207,9 @@ export class AcademicService {
     });
 
     if (!classData) {
-      console.error(`[getGradeSubjectIdByDetails] Class not found: classId=${classId}, schoolId=${schoolId}`);
+      this.logger.error(`getGradeSubjectIdByDetails: Class not found: classId=${classId}, schoolId=${schoolId}`);
       return null;
     }
-
-    console.log("classData", classData);
-
-    console.log("classData.grade_level_id", classData.grade_level_id);
-    console.log("schoolId", schoolId);
 
     // Get all grade_subjects for this grade level and school
     // Then filter by case-insensitive subject name match
@@ -1179,26 +1225,20 @@ export class AcademicService {
       },
     });
 
-    console.log("gradeSubjects", gradeSubjects);
-
     // Find matching subject (case-insensitive)
     const gradeSubject = gradeSubjects.find(
       (gs) => gs.subjects_master?.name?.trim().toLowerCase() === normalizedSubjectName.toLowerCase()
     );
-    console.log("gradeSubject", gradeSubject);
     if (!gradeSubject) {
-      console.error(
-        `[getGradeSubjectIdByDetails] Subject not found: subjectName="${normalizedSubjectName}", ` +
+      this.logger.error(
+        `getGradeSubjectIdByDetails: Subject not found: subjectName="${normalizedSubjectName}", ` +
         `classId=${classId}, gradeLevelId=${classData.grade_level_id}, schoolId=${schoolId}. ` +
         `Available subjects: ${gradeSubjects.map(gs => gs.subjects_master?.name).filter(Boolean).join(', ')}`
       );
       return null;
     }
 
-    // Ensure we return just the ID string
-    const gradeSubjectId = gradeSubject.id;
-    console.log(`[getGradeSubjectIdByDetails] Returning gradeSubjectId: ${gradeSubjectId} (type: ${typeof gradeSubjectId})`);
-    return gradeSubjectId;
+    return gradeSubject.id;
   }
 
   async getExamTypeIdByName(
@@ -1222,8 +1262,8 @@ export class AcademicService {
     );
 
     if (!examType) {
-      console.error(
-        `[getExamTypeIdByName] Exam type not found: examTypeName="${normalizedExamTypeName}", ` +
+      this.logger.error(
+        `getExamTypeIdByName: Exam type not found: examTypeName="${normalizedExamTypeName}", ` +
         `schoolId=${schoolId}. Available types: ${examTypes.map(et => et.name).filter(Boolean).join(', ')}`
       );
       return null;

@@ -10,11 +10,9 @@ import {
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Tenant } from '../auth/decorators/tenant.decorator';
 
 @Controller('attendance')
-@UseGuards(JwtAuthGuard)
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 

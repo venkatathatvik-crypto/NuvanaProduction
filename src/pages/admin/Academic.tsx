@@ -12,6 +12,8 @@ import { academicService } from "@/services/academicApiService";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { logger } from '@/lib/logger';
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminAcademic() {
   const navigate = useNavigate();
@@ -259,7 +261,7 @@ export default function AdminAcademic() {
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} class(es). Check details below.`);
       queryClient.invalidateQueries({ queryKey: ['academic-classes'] });
     } catch (error: any) {
-      console.error("Class CSV Import Error:", error);
+      logger.error("Class CSV Import Error:", error);
       toast.error("Failed to process CSV file");
     } finally {
       setIsImportingClasses(false);
@@ -394,7 +396,7 @@ export default function AdminAcademic() {
       if (failedCount > 0) toast.error(`Failed to create ${failedCount} subject(s). Check details below.`);
       queryClient.invalidateQueries({ queryKey: ['academic-subjects'] });
     } catch (error: any) {
-      console.error("Subject CSV Import Error:", error);
+      logger.error("Subject CSV Import Error:", error);
       toast.error("Failed to process CSV file");
     } finally {
       setIsImportingSubjects(false);
@@ -404,8 +406,22 @@ export default function AdminAcademic() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Skeleton className="h-10 w-10 rounded" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-full max-w-md rounded" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-64 rounded-xl" />
+            <Skeleton className="h-64 rounded-xl" />
+          </div>
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
       </div>
     );
   }

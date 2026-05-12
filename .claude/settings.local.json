@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install dexie @tanstack/react-query-persist-client)"
+    ]
+  }
+}

@@ -6,10 +6,17 @@ import {
   AnnouncementResponseDto,
   StudentAnnouncementResponseDto,
 } from './dto';
+import { MailService } from '../mail/mail.service';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AnnouncementsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService
+  ) {}
 
   async createAnnouncement(
     dto: CreateAnnouncementDto,
@@ -33,6 +40,13 @@ export class AnnouncementsService {
           announcement_id: announcement.id,
           class_id: classId,
         })),
+      });
+    }
+
+    // Send Bulk Email if it is marked as urgent
+    if (dto.isUrgent) {
+      this.dispatchUrgentAnnouncementEmails(announcement, dto.classIds, schoolId).catch(e => {
+        this.logger.error(`Error dispatching announcement emails: ${e.message}`, e.stack);
       });
     }
 
@@ -171,5 +185,51 @@ export class AnnouncementsService {
     await this.prisma.announcements.delete({
       where: { id },
     });
+  }
+
+  private async dispatchUrgentAnnouncementEmails(announcement: any, classIds: string[] | undefined, schoolId: string) {
+    try {
+      // Get the creator
+      const creator = await this.prisma.profiles.findUnique({ where: { id: announcement.teacher_id } });
+      const creatorName = creator ? creator.name : 'School Administration';
+
+      const announcementDetails = {
+        title: announcement.title,
+        content: announcement.message,
+        createdBy: creatorName,
+      };
+
+      let audience = [];
+
+      if (classIds && classIds.length > 0) {
+        // Fetch specific students
+        audience = await this.prisma.profiles.findMany({
+          where: {
+            role_id: 4,
+            school_id: schoolId,
+            student_details: { class_id: { in: classIds } }
+          },
+          select: { email: true, name: true }
+        });
+      } else {
+        // School-wide: fetch everyone (students & teachers)
+        audience = await this.prisma.profiles.findMany({
+          where: {
+            school_id: schoolId,
+            role_id: { in: [3, 4] } // Teachers & Students
+          },
+          select: { email: true, name: true }
+        });
+      }
+
+      // Fan out emails asynchronously
+      for (const user of audience) {
+        if (user.email) {
+          await this.mailService.sendAnnouncementEmail(user, announcementDetails);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to dispatch announcement emails`, error.stack);
+    }
   }
 }

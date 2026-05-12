@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { StudentTestWithQuestions, StudentTestQuestion } from "@/services/academic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { logger } from '@/lib/logger';
 
 interface StudentTestPlayerProps {
     test: StudentTestWithQuestions;
@@ -35,13 +36,41 @@ export const StudentTestPlayer = ({ test, onComplete, isSubmitting = false }: St
     const currentQuestion = test.questions[currentQuestionIndex];
     const isMCQ = currentQuestion.questionType === "MCQ";
 
+    const isSubmittedRef = useRef(false);
+
     const handleSubmit = useCallback(() => {
+        isSubmittedRef.current = true;
         const timeTakenSeconds = (test.durationMinutes * 60) - timeLeft;
-        console.log('[StudentTestPlayer] Submitting with answers:', answers);
-        console.log('[StudentTestPlayer] Answers object keys:', Object.keys(answers));
-        console.log('[StudentTestPlayer] Answers entries:', Object.entries(answers));
+        logger.log('[StudentTestPlayer] Submitting with answers:', answers);
+        logger.log('[StudentTestPlayer] Answers object keys:', Object.keys(answers));
+        logger.log('[StudentTestPlayer] Answers entries:', Object.entries(answers));
         onComplete(answers, timeTakenSeconds);
     }, [answers, onComplete, test.durationMinutes, timeLeft]);
+
+    const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+
+    // Lock page — prevent back button/swipe-back during active test
+    useEffect(() => {
+        const url = window.location.href;
+
+        // Flood the history stack so rapid back presses can't escape
+        for (let i = 0; i < 50; i++) {
+            window.history.pushState({ testLock: true }, "", url);
+        }
+
+        const handlePopState = () => {
+            if (!isSubmittedRef.current) {
+                // Re-flood on every back press to stay trapped
+                for (let i = 0; i < 10; i++) {
+                    window.history.pushState({ testLock: true }, "", url);
+                }
+                setShowLeaveWarning(true);
+            }
+        };
+
+        window.addEventListener("popstate", handlePopState);
+        return () => window.removeEventListener("popstate", handlePopState);
+    }, []);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -60,7 +89,7 @@ export const StudentTestPlayer = ({ test, onComplete, isSubmitting = false }: St
 
     const handleOptionSelect = (value: string) => {
         const optionIndex = parseInt(value, 10);
-        console.log('[StudentTestPlayer] Option selected:', {
+        logger.log('[StudentTestPlayer] Option selected:', {
             questionId: currentQuestion.id,
             value,
             parsedIndex: optionIndex,
@@ -71,7 +100,7 @@ export const StudentTestPlayer = ({ test, onComplete, isSubmitting = false }: St
                 ...prev,
                 [currentQuestion.id]: optionIndex
             };
-            console.log('[StudentTestPlayer] Updated answers:', newAnswers);
+            logger.log('[StudentTestPlayer] Updated answers:', newAnswers);
             return newAnswers;
         });
     };
@@ -249,6 +278,23 @@ export const StudentTestPlayer = ({ test, onComplete, isSubmitting = false }: St
                     Next <ChevronRight className="w-4 h-4 ml-2" />
                 </Button>
             </div>
+
+            {/* Back button warning dialog */}
+            <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Test in Progress</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You cannot leave while the test is active. Please complete and submit your test before navigating away.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setShowLeaveWarning(false)}>
+                            Continue Test
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };

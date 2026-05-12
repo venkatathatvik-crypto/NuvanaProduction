@@ -102,7 +102,7 @@ export const getTimetableForClass = async (
     logger.log("📋 Final transformed timetable:", weeklyTimetable);
     return weeklyTimetable;
   } catch (error) {
-    console.error("Error in getTimetableForClass:", error);
+    logger.error("Error in getTimetableForClass:", error);
     return {};
   }
 };
@@ -135,7 +135,7 @@ export const getOrCreateTimetableDay = async (
       school_id: schoolId,
     };
   } catch (error) {
-    console.error("Error in getOrCreateTimetableDay:", error);
+    logger.error("Error in getOrCreateTimetableDay:", error);
     return null;
   }
 };
@@ -175,11 +175,11 @@ export const saveTimetablePeriod = async (
       // Create new period - need to get class_id and day_of_week
       // This is a limitation - we need these from the day
       // For now, return null and let the caller use academicService.createOrUpdatePeriod directly
-      console.warn("saveTimetablePeriod: Use academicService.createOrUpdatePeriod for creating new periods");
+      logger.warn("saveTimetablePeriod: Use academicService.createOrUpdatePeriod for creating new periods");
       return null;
     }
   } catch (error) {
-    console.error("Error in saveTimetablePeriod:", error);
+    logger.error("Error in saveTimetablePeriod:", error);
     return null;
   }
 };
@@ -193,7 +193,7 @@ export const deleteTimetablePeriod = async (periodId: string): Promise<boolean> 
     await academicService.deletePeriod(periodId);
     return true;
   } catch (error) {
-    console.error("Error in deleteTimetablePeriod:", error);
+    logger.error("Error in deleteTimetablePeriod:", error);
     return false;
   }
 };
@@ -242,7 +242,7 @@ export const getStudentTimetable = async (
 
     return formattedTimetable;
   } catch (error) {
-    console.error("Error in getStudentTimetable:", error);
+    logger.error("Error in getStudentTimetable:", error);
     return {};
   }
 };
