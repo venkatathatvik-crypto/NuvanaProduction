@@ -22,6 +22,8 @@ build
 .env.production
 .env.development
 .env.*.local
+backend/.env
+backend/.env.*
 
 # Editor directories and files
 .vscode/*
@@ -39,4 +41,12 @@ Thumbs.db
 
 .vercel
 
+# Sensitive credentials - NEVER commit these!
 backend/service-account.json
+**/service-account.json
+certs/
+**/certs/
+*.pem
+*.key
+*.p12
+*.pfx

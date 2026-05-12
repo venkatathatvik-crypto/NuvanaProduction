@@ -6,3 +6,4 @@ service-account.json
 certs/client-cert.pem
 certs/client-key.pem
 certs/server-ca.pem
+/certs/*
