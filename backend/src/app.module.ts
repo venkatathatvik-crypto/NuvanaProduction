@@ -60,7 +60,18 @@ const logger = new Logger('AppModule');
                         const url = new URL(redisUrl);
                         logger.log(`Redis cache connecting to host: ${url.hostname}:${url.port}...`);
 
-                        const store = createKeyv(redisUrl);
+                        const store = createKeyv({
+                            url: redisUrl,
+                            // Detect a dead connection (idle NAT/firewall drops) in seconds instead
+                            // of waiting on OS-level TCP keepalive probes, which can take minutes.
+                            pingInterval: 30000,
+                            socket: {
+                                keepAlive: true,
+                                keepAliveInitialDelay: 10000,
+                                connectTimeout: 10000,
+                                reconnectStrategy: (retries: number) => Math.min(retries * 100, 3000),
+                            },
+                        });
 
                         logger.log('Redis cache connected successfully');
                         logger.log(`Cache Type: REDIS (@keyv/redis) - ${url.hostname}`);
