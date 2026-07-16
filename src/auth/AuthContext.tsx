@@ -11,6 +11,7 @@ import { getCachedProfile, clearQueryCache } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 // Session type - simplified to just contain user data
+// Session type - simplified to just contain user data
 interface Session {
   user: {
     id: string;
